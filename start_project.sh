@@ -115,7 +115,7 @@ touch tests/__init__.py
 log_step "Создание конфигурации Ruff..."
 cat > pyproject.toml << 'EOF'
 [build-system]
-requires = ["wheel"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
