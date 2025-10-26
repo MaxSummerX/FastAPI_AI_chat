@@ -1,5 +1,5 @@
 [build-system]
-requires = ["wheel"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,7 +9,27 @@ description = "your_description"
 authors = [{ name = "your_name", email = "your_email@example.com" }]
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "asyncpg>=0.30.0",
+    "bcrypt>=5.0.0",
+    "email-validator>=2.3.0",
+    "fastapi>=0.120.0",
+    "pydantic>=2.12.3",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.2.1",
+    "python-multipart>=0.0.20",
+    "sqlalchemy[asyncio]>=2.0.44",
+    "uvicorn[standard]>=0.38.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "mypy>=1.18.2",
+    "ruff>=0.14.0",
+    "pre-commit>=4.3.0",
+]
 
 [tool.ruff]
 line-length = 120
