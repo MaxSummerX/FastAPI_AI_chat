@@ -1,0 +1,76 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+
+class UserRegister(BaseModel):
+    """
+    Модель для регистрации пользователя.
+    Используется в POST-запросах.
+    """
+
+    username: str = Field(..., min_length=3, max_length=50, description="Имя пользователя")
+    email: EmailStr = Field(..., max_length=255, description="Email пользователя")
+    password: str = Field(..., min_length=8, max_length=255, description="Пароль (минимум 8 символов)")
+
+
+class UserUpdateAuth(BaseModel):
+    """
+    Модель для обновления основных данных пользователя.
+    Используется в PUT-запросах.
+    """
+
+    username: str | None = Field(None, min_length=3, max_length=50, description="Имя пользователя")
+    email: EmailStr | None = Field(None, max_length=255, description="Email пользователя")
+    password: str | None = Field(None, min_length=8, max_length=255, description="Пароль (минимум 8 символов)")
+
+
+class UserUpdateProfile(BaseModel):
+    """
+    Модель для обновления дополнительных данных пользователя.
+    Используется в PUT-запросах.
+    """
+
+    first_name: str | None = Field(None, max_length=50, description="Имя")
+    last_name: str | None = Field(None, max_length=50, description="Фамилия")
+    avatar_url: str | None = Field(None, max_length=200, description="URL аватара")
+    bio: str | None = Field(None, description="Биография")
+    phone_number: str | None = Field(None, max_length=20, description="Номер телефона")
+    preferred_language: str | None = Field(None, max_length=10, description="Предпочитаемый язык")
+    timezone: str | None = Field(None, max_length=50, description="Часовой пояс")
+
+
+class UserResponseBase(BaseModel):
+    """
+    Модель для ответа с основными данными пользователя.
+    Используется в GET-запросах.
+    """
+
+    id: str = Field(description="UUID пользователя")
+    username: str = Field(description="Имя пользователя")
+    email: EmailStr = Field(description="Email пользователя")
+    is_active: bool = Field(description="Активность пользователя")
+    is_verified: bool = Field(description="Проверен ли пользователь")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserResponseFull(UserResponseBase):
+    """
+    Модель для ответа с дополнительными данными пользователя.
+    Используется в GET-запросах.
+    """
+
+    first_name: str | None = Field(None, description="Имя")
+    last_name: str | None = Field(None, description="Фамилия")
+    avatar_url: str | None = Field(None, description="URL аватара")
+    bio: str | None = Field(None, description="Биография")
+    phone_number: str | None = Field(None, description="Номер телефона")
+    preferred_language: str = Field(description="Предпочитаемый язык")
+    timezone: str = Field(description="Часовой пояс")
+    settings: dict | None = Field(None, description="Настройки")
+    created_at: datetime = Field(description="Дата создания")
+    updated_at: datetime = Field(description="Дата обновления")
+    last_login: datetime | None = Field(None, description="Последний вход")
+
+    model_config = ConfigDict(from_attributes=True)
