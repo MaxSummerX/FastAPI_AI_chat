@@ -1,6 +1,9 @@
+import re
 from datetime import datetime
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from fastapi import HTTPException, status
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class UserRegister(BaseModel):
@@ -12,6 +15,31 @@ class UserRegister(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, description="Имя пользователя")
     email: EmailStr = Field(..., max_length=255, description="Email пользователя")
     password: str = Field(..., min_length=8, max_length=255, description="Пароль (минимум 8 символов)")
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, value: str) -> str:
+        if not re.search(r"[A-Z]", value):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Пароль должен содержать хотя бы одну заглавную букву",
+            )
+        if not re.search(r"[a-z]", value):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Пароль должен содержать хотя бы одну строчную букву",
+            )
+        if not re.search(r"\d", value):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Пароль должен содержать хотя бы одну цифру"
+            )
+        if not re.search(r"[!@#$%^&*()_}:.<>?]", value):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Пароль должен содержать хотя бы один специальный символ !@#$%^&*()_}:.<>?",
+            )
+
+        return value
 
 
 class UserUpdateAuth(BaseModel):
@@ -46,7 +74,7 @@ class UserResponseBase(BaseModel):
     Используется в GET-запросах.
     """
 
-    id: str = Field(description="UUID пользователя")
+    id: UUID = Field(description="UUID пользователя")
     username: str = Field(description="Имя пользователя")
     email: EmailStr = Field(description="Email пользователя")
     is_active: bool = Field(description="Активность пользователя")
