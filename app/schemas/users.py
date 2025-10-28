@@ -43,6 +43,7 @@ class UserRegister(BaseModel):
 
 
 class UserUpdateAuth(BaseModel):
+    # TODO: Переработать класс для обновления данных авторизации, нужно атомизировать на отдельные параметры и сделать отдельные endpoints для каждого параметра
     """
     Модель для обновления основных данных пользователя.
     Используется в PUT-запросах.
@@ -66,6 +67,7 @@ class UserUpdateProfile(BaseModel):
     phone_number: str | None = Field(None, max_length=20, description="Номер телефона")
     preferred_language: str | None = Field(None, max_length=10, description="Предпочитаемый язык")
     timezone: str | None = Field(None, max_length=50, description="Часовой пояс")
+    settings: dict | None = Field(None, description="Настройки")
 
 
 class UserResponseBase(BaseModel):
