@@ -1,23 +1,47 @@
+from datetime import UTC, datetime
 from typing import cast
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.auth import create_access_token, create_refresh_token, hash_password, verify_password
+from app.auth.dependencies import get_current_user
 from app.config import ALGORITHM, SECRET_KEY
 from app.depends.db_depends import get_async_postgres_db
 from app.models.users import User as UserModel
-from app.schemas.users import UserRegister
-from app.schemas.users import UserResponseBase as UserSchema
+from app.schemas.users import UserRegister, UserUpdateProfile
+from app.schemas.users import UserResponseBase as UserBaseSchema
+from app.schemas.users import UserResponseFull as UserFullSchema
 
 
-router_v1 = APIRouter(prefix="/users", tags=["users"])
+router_v1 = APIRouter(prefix="/user", tags=["user"])
 
 
-@router_v1.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@router_v1.get("/", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+async def get_base_user_info(current_user: UserModel = Depends(get_current_user)) -> UserModel:
+    """
+    Возвращает основную информацию о пользователе
+    """
+    return current_user
+
+
+@router_v1.get("/info", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
+async def get_full_user_info(
+    current_user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_async_postgres_db)
+) -> UserModel:
+    """
+    Возвращает полную информацию о пользователе
+    """
+    user = await db.scalars(
+        select(UserModel).where(UserModel.email == current_user.email, UserModel.is_active.is_(True))
+    )
+    return cast(UserModel, user.first())
+
+
+@router_v1.post("/register", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
 async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async_postgres_db)) -> UserModel:
     """
     Регистрирует нового пользователя.
@@ -33,12 +57,12 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     # Создание объекта пользователя с хешированием пароля
-    db_user = UserModel(username=user.username, email=user.email, password_hash=hash_password(user.password))
+    user = UserModel(username=user.username, email=user.email, password_hash=hash_password(user.password))
 
     # Добавляем в сессию и сохранение в базе
-    db.add(db_user)
+    db.add(user)
     await db.commit()
-    return db_user
+    return user
 
 
 @router_v1.post("/token")
@@ -57,6 +81,11 @@ async def login(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Обновляем информацию о входе пользователя
+    user.last_login = datetime.now(UTC)
+    await db.commit()
+
     access_token = create_access_token(data={"sub": user.username, "id": user.id, "email": user.email})
     refresh_token = create_refresh_token(data={"sub": user.username, "id": user.id, "email": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "access_type": "bearer"}
@@ -86,3 +115,16 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_async
         raise credentials_exception
     access_token = create_access_token(data={"sub": user.username, "id": user.id, "email": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router_v1.put("/update", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
+async def update_user_profile(
+    user_info: UserUpdateProfile,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> UserModel:
+    result = await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
+    user = cast(UserModel, result.first())
+    await db.execute(update(UserModel).where(UserModel.id == current_user.id).values(**user_info.model_dump()))
+    await db.commit()
+    return user
