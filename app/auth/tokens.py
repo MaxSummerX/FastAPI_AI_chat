@@ -4,14 +4,11 @@ from uuid import UUID
 
 import jwt
 
-# from fastapi.security import OAuth2PasswordBearer
 from app.config import ALGORITHM, SECRET_KEY
 
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
-
-# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token")
 
 
 def create_access_token(data: dict) -> str:
