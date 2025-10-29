@@ -99,7 +99,7 @@ async def get_messages(
     current_user: UserModel = Depends(get_current_user),
     limit: int = 50,
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> list[MessageSchemas]:
+) -> list[MessageModel]:
     """Получить историю сообщений"""
     await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
 
@@ -111,6 +111,6 @@ async def get_messages(
     )
 
     result = await db.execute(stmt)
-    messages = result.scalars().all()
+    messages = cast(list[MessageModel], result.scalars().all())
 
     return list(reversed(messages))
