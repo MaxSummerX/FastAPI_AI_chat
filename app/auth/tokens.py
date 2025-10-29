@@ -7,8 +7,8 @@ import jwt
 from app.config import ALGORITHM, SECRET_KEY
 
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
 
 def create_access_token(data: dict) -> str:
