@@ -73,7 +73,7 @@ class UserUpdateProfile(BaseModel):
 class UserResponseBase(BaseModel):
     """
     Модель для ответа с основными данными пользователя.
-    Используется в GET-запросах.
+    Используется в POST, PUT и GET запросах.
     """
 
     id: UUID = Field(description="UUID пользователя")
@@ -88,7 +88,7 @@ class UserResponseBase(BaseModel):
 class UserResponseFull(UserResponseBase):
     """
     Модель для ответа с дополнительными данными пользователя.
-    Используется в GET-запросах.
+    Используется в PUT и GET-запросах.
     """
 
     first_name: str | None = Field(None, description="Имя")
