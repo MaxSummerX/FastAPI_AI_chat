@@ -192,9 +192,17 @@ async def add_message_stream(
     # Получаем историю для контекста
     history = await get_conversation_history(db, conversation_id)
 
-    # Возвращаем стриминговый ответ
+    # Возвращаем streming ответ
     return StreamingResponse(
-        stream_llm_response(message.content, conversation_id, history, background_tasks, db), media_type="text/plain"
+        stream_llm_response(
+            message=message.content,
+            username=current_user.username,
+            conversation_id=conversation_id,
+            history=history,
+            background_tasks=background_tasks,
+            db=db,
+        ),
+        media_type="text/plain",
     )
 
 

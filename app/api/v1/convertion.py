@@ -139,7 +139,7 @@ async def add_message(
 
     background_tasks.add_task(
         memory_local.add, messages, user_id=current_user.username, run_id=str(conversation.id)
-    )  # TODO: Не работает должным образом выдаёт ошибки типизации
+    )  # TODO: Не работает должным образом выдаёт ошибки типизации у mem0ai
 
     return {"user_message": user_message.content, "assistant_message": assistant_response}
 
