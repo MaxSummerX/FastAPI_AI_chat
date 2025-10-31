@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test Page</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.6/purify.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        #app {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .auth-status {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 10px 20px;
+            border-radius: 8px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .container {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            background: #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            color: #2d3748;
+        }
+
+        .tab-btn:hover {
+            background: #cbd5e0;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+            color: white;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #cbd5e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            background: white;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #4a5568;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(45, 55, 72, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-danger {
+            background: #718096;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #4a5568;
+        }
+
+        .response-box {
+            margin-top: 20px;
+            padding: 20px;
+            background: #edf2f7;
+            border-radius: 8px;
+            border-left: 4px solid #4a5568;
+        }
+
+        .response-box h3 {
+            margin-bottom: 10px;
+            color: #2d3748;
+        }
+
+        .response-box pre {
+            background: #2d3748;
+            color: #a0aec0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .error {
+            background: #e2e8f0;
+            border-left-color: #718096;
+        }
+
+        .error pre {
+            color: #718096;
+        }
+
+        .conversations-list {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .conversation-item {
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .conversation-item:hover {
+            background: #cbd5e0;
+            transform: translateX(5px);
+        }
+
+        .conversation-item.selected {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+            color: white;
+        }
+
+        .messages-list {
+            max-height: 500px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+        }
+
+        .message-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .message-item.user {
+            background: #4a5568;
+            color: white;
+            margin-left: 20%;
+        }
+
+        .message-item.assistant {
+            background: #cbd5e0;
+            color: #2d3748;
+            margin-right: 20%;
+        }
+
+        .message-item.system {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .message-content {
+            line-height: 1.5;
+        }
+
+        .message-content h1,
+        .message-content h2,
+        .message-content h3,
+        .message-content h4,
+        .message-content h5,
+        .message-content h6 {
+            margin: 0.5em 0;
+        }
+
+        .message-content p {
+            margin: 0.5em 0;
+        }
+
+        .message-content pre {
+            background: #2d3748;
+            color: #a0aec0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 0.5em 0;
+        }
+
+        .message-content code {
+            background: #2d3748;
+            color: #a0aec0;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .message-content blockquote {
+            border-left: 3px solid #4a5568;
+            padding-left: 10px;
+            margin: 0.5em 0;
+            color: #718096;
+        }
+
+        .message-content ul,
+        .message-content ol {
+            padding-left: 20px;
+            margin: 0.5em 0;
+        }
+
+        .message-content li {
+            margin: 0.2em 0;
+        }
+
+        .message-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0.5em 0;
+        }
+
+        .message-content th,
+        .message-content td {
+            border: 1px solid #4a5568;
+            padding: 8px;
+            text-align: left;
+
+
+        .message-content th {
+            background: #4a5568;
+            color: white;
+        }
+
+        .message-role {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .info-card {
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+            border-left: 4px solid #4a5568;
+        }
+
+        .info-card h4 {
+            margin-bottom: 8px;
+            color: #2d3748;
+        }
+
+        .info-card p {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <h1>API Test Page</h1>
+            <div class="auth-status">
+                <span v-if="isAuthenticated">✅ Авторизован: {{ userEmail }}</span>
+                <span v-else>❌ Не авторизован</span>
+            </div>
+        </div>
+
+        <div class="container">
+            <!-- Навигация по вкладкам -->
+            <div class="tabs">
+                <button class="tab-btn" :class="{ active: activeTab === 'auth' }" @click="activeTab = 'auth'">
+                    🔐 Авторизация
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'user' }" @click="activeTab = 'user'">
+                    👤 Пользователь
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'conversations' }" @click="activeTab = 'conversations'">
+                    💬 Беседы
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'messages' }" @click="activeTab = 'messages'">
+                    📨 Сообщения
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'polygon' }" @click="activeTab = 'polygon'">
+                    🧪 Polygon
+                </button>
+            </div>
+
+            <!-- Секция: Авторизация -->
+            <div class="section" :class="{ active: activeTab === 'auth' }">
+                <h2>🔐 Регистрация и Авторизация</h2>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Регистрация</h3>
+                <div class="form-group">
+                    <label>Username</label>
+                    <input v-model="registerData.username" placeholder="username" />
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input v-model="registerData.email" type="email" placeholder="email@example.com" />
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input v-model="registerData.password" type="password" placeholder="минимум 8 символов" />
+                </div>
+                <button class="btn btn-primary" @click="registerUser">Зарегистрироваться</button>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Вход</h3>
+                <div class="form-group">
+                    <label>Username или Email</label>
+                    <input v-model="loginData.username" placeholder="username или email" />
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input v-model="loginData.password" type="password" placeholder="пароль" />
+                </div>
+                <button class="btn btn-primary" @click="loginUser">Войти</button>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Обновить токен</h3>
+                <button class="btn btn-secondary" @click="refreshToken" :disabled="!refreshTokenValue">
+                    Обновить Access Token
+                </button>
+                <button class="btn btn-danger" @click="logout">Выйти</button>
+
+                <div v-if="response" class="response-box" :class="{ error: response.error }">
+                    <h3>{{ response.error ? '❌ Ошибка' : '✅ Ответ' }}</h3>
+                    <pre>{{ JSON.stringify(response, null, 2) }}</pre>
+                </div>
+            </div>
+
+            <!-- Секция: Пользователь -->
+            <div class="section" :class="{ active: activeTab === 'user' }">
+                <h2>👤 Информация о пользователе</h2>
+
+                <div style="margin-bottom: 20px;">
+                    <button class="btn btn-primary" @click="getUserBase">Получить базовую информацию</button>
+                    <button class="btn btn-primary" @click="getUserFull">Получить полную информацию</button>
+                </div>
+
+                <div v-if="userInfo" class="grid">
+                    <div class="info-card">
+                        <h4>ID</h4>
+                        <p>{{ userInfo.id }}</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>Username</h4>
+                        <p>{{ userInfo.username }}</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>Email</h4>
+                        <p>{{ userInfo.email }}</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>Активен</h4>
+                        <p>{{ userInfo.is_active ? 'Да' : 'Нет' }}</p>
+                    </div>
+                    <div class="info-card" v-if="userInfo.first_name">
+                        <h4>Имя</h4>
+                        <p>{{ userInfo.first_name }}</p>
+                    </div>
+                    <div class="info-card" v-if="userInfo.last_name">
+                        <h4>Фамилия</h4>
+                        <p>{{ userInfo.last_name }}</p>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Обновить профиль</h3>
+                <div class="form-group">
+                    <label>Имя</label>
+                    <input v-model="updateProfile.first_name" placeholder="Имя" />
+                </div>
+                <div class="form-group">
+                    <label>Фамилия</label>
+                    <input v-model="updateProfile.last_name" placeholder="Фамилия" />
+                </div>
+                <div class="form-group">
+                    <label>Биография</label>
+                    <textarea v-model="updateProfile.bio" placeholder="Расскажите о себе..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Телефон</label>
+                    <input v-model="updateProfile.phone_number" placeholder="+7 (999) 123-45-67" />
+                </div>
+                <div class="form-group">
+                    <label>Язык</label>
+                    <select v-model="updateProfile.preferred_language">
+                        <option value="ru">Русский</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Часовой пояс</label>
+                    <input v-model="updateProfile.timezone" placeholder="Europe/Moscow" />
+                </div>
+                <button class="btn btn-primary" @click="updateUserProfile">Обновить профиль</button>
+
+                <div v-if="response" class="response-box" :class="{ error: response.error }">
+                    <h3>{{ response.error ? '❌ Ошибка' : '✅ Ответ' }}</h3>
+                    <pre>{{ JSON.stringify(response, null, 2) }}</pre>
+                </div>
+            </div>
+
+            <!-- Секция: Беседы -->
+            <div class="section" :class="{ active: activeTab === 'conversations' }">
+                <h2>💬 Управление беседами</h2>
+
+                <h3 style="margin-bottom: 15px;">Создать новую беседу</h3>
+                <div class="form-group">
+                    <label>Название беседы</label>
+                    <input v-model="conversationTitle" placeholder="Моя первая беседа" />
+                </div>
+                <button class="btn btn-primary" @click="createConversation">Создать беседу</button>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Список бесед</h3>
+                <div class="conversations-list" v-if="conversations.length > 0">
+                    <div
+                        v-for="conv in conversations"
+                        :key="conv.id"
+                        class="conversation-item"
+                        :class="{ selected: selectedConversation?.id === conv.id }"
+                        @click="selectConversation(conv)"
+                    >
+                        <strong>{{ conv.title || 'Без названия' }}</strong>
+                        <div style="font-size: 12px; opacity: 0.7; margin-top: 5px;">
+                            {{ new Date(conv.created_at).toLocaleString('ru-RU') }}
+                        </div>
+                    </div>
+                </div>
+                <p v-else style="color: #666; padding: 20px; text-align: center;">
+                    Нет созданных бесед. Создайте первую!
+                </p>
+
+                <div v-if="response" class="response-box" :class="{ error: response.error }">
+                    <h3>{{ response.error ? '❌ Ошибка' : '✅ Ответ' }}</h3>
+                    <pre>{{ JSON.stringify(response, null, 2) }}</pre>
+                </div>
+            </div>
+
+            <!-- Секция: Сообщения -->
+            <div class="section" :class="{ active: activeTab === 'messages' }">
+                <h2>📨 Сообщения в беседе</h2>
+
+                <div v-if="selectedConversation">
+                    <div class="info-card" style="margin-bottom: 20px;">
+                        <h4>Выбранная беседа</h4>
+                        <p><strong>{{ selectedConversation.title || 'Без названия' }}</strong></p>
+                        <p style="font-size: 12px; opacity: 0.7;">ID: {{ selectedConversation.id }}</p>
+                    </div>
+
+                    <div class="messages-list" v-if="messages.length > 0">
+                        <div
+                            v-for="msg in messages"
+                            :key="msg.id"
+                            class="message-item"
+                            :class="msg.role"
+                        >
+                            <div class="message-role">{{ msg.role }}</div>
+                            <div class="message-content" v-html="renderMarkdown(msg.content)"></div>
+                            <div class="message-time">
+                                {{ new Date(msg.timestamp).toLocaleString('ru-RU') }}
+                            </div>
+                        </div>
+                    </div>
+                    <p v-else style="color: #666; padding: 20px; text-align: center; background: #f8f9fa; border-radius: 8px;">
+                        Нет сообщений. Отправьте первое!
+                    </p>
+
+                    <h3 style="margin-top: 20px; margin-bottom: 15px;">Отправить сообщение</h3>
+                    <div class="form-group">
+                        <label>Роль</label>
+                        <select v-model="messageData.role">
+                            <option value="user">User</option>
+                            <option value="assistant">Assistant</option>
+                            <option value="system">System</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Сообщение (поддерживает Markdown)</label>
+                        <textarea v-model="messageData.content" placeholder="Введите сообщение с поддержкой Markdown..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" @click="sendMessage">Отправить</button>
+                    <button class="btn btn-secondary" @click="loadMessages">Обновить сообщения</button>
+                </div>
+                <div v-else class="info-card">
+                    <h4>ℹ️ Выберите беседу</h4>
+                    <p>Перейдите на вкладку "Беседы" и выберите беседу для работы с сообщениями</p>
+                </div>
+
+                <div v-if="response" class="response-box" :class="{ error: response.error }">
+                    <h3>{{ response.error ? '❌ Ошибка' : '✅ Ответ' }}</h3>
+                    <pre>{{ JSON.stringify(response, null, 2) }}</pre>
+                </div>
+            </div>
+
+            <!-- Секция: Polygon -->
+            <div class="section" :class="{ active: activeTab === 'polygon' }">
+                <h2>🧪 Polygon Chat</h2>
+                <p style="color: #666; margin-bottom: 20px;">
+                    Тестовый эндпоинт для быстрой проверки чата без авторизации
+                </p>
+
+                <div class="form-group">
+                    <label>Сообщение</label>
+                    <textarea v-model="polygonMessage" placeholder="Введите тестовое сообщение..."></textarea>
+                </div>
+                <button class="btn btn-primary" @click="sendPolygonMessage">Отправить</button>
+
+                <div v-if="response" class="response-box" :class="{ error: response.error }">
+                    <h3>{{ response.error ? '❌ Ошибка' : '✅ Ответ' }}</h3>
+                    <pre>{{ JSON.stringify(response, null, 2) }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    // Базовая конфигурация - ИЗМЕНИ URL на адрес твоего backend
+                    apiBaseUrl: 'http://localhost:8000',
+
+                    // Активная вкладка UI
+                    activeTab: 'auth',
+
+                    // Токены аутентификации
+                    accessToken: localStorage.getItem('accessToken') || null,
+                    refreshTokenValue: localStorage.getItem('refreshToken') || null,
+                    userEmail: localStorage.getItem('userEmail') || null,
+
+                    // Данные для регистрации
+                    registerData: {
+                        username: '',
+                        email: '',
+                        password: ''
+                    },
+
+                    // Данные для входа
+                    loginData: {
+                        username: '',
+                        password: ''
+                    },
+
+                    // Данные пользователя
+                    userInfo: null,
+
+                    // Данные для обновления профиля
+                    updateProfile: {
+                        first_name: '',
+                        last_name: '',
+                        bio: '',
+                        phone_number: '',
+                        preferred_language: 'ru',
+                        timezone: 'Europe/Moscow'
+                    },
+
+                    // Беседы
+                    conversationTitle: '',
+                    conversations: [],
+                    selectedConversation: null,
+
+                    // Сообщения
+                    messageData: {
+                        role: 'user',
+                        content: ''
+                    },
+                    messages: [],
+
+                    // Polygon
+                    polygonMessage: '',
+
+                    // Ответ от API (для отображения)
+                    response: null
+                };
+            },
+
+            computed: {
+                // Проверка авторизации пользователя
+                isAuthenticated() {
+                    return !!this.accessToken;
+                }
+            },
+
+            methods: {
+                /**
+                 * Универсальный метод для API запросов
+                 * @param {string} endpoint - путь эндпоинта (например, '/user/register')
+                 * @param {Object} options - опции fetch (method, body, headers)
+                 * @param {boolean} requireAuth - требуется ли авторизация
+                 */
+                async apiRequest(endpoint, options = {}, requireAuth = false) {
+                    try {
+                        // Формируем полный URL
+                        const url = `${this.apiBaseUrl}${endpoint}`;
+
+                        // Базовые заголовки
+                        const headers = {
+                            'Content-Type': 'application/json',
+                            ...options.headers
+                        };
+
+                        // Добавляем токен если требуется авторизация
+                        if (requireAuth && this.accessToken) {
+                            headers['Authorization'] = `Bearer ${this.accessToken}`;
+                        }
+
+                        // Выполняем запрос
+                        const response = await fetch(url, {
+                            ...options,
+                            headers
+                        });
+
+                        // Парсим ответ
+                        const data = await response.json();
+
+                        // Обрабатываем ошибки
+                        if (!response.ok) {
+                            throw new Error(JSON.stringify(data, null, 2));
+                        }
+
+                        this.response = data;
+                        return data;
+
+                    } catch (error) {
+                        this.response = {
+                            error: true,
+                            message: error.message
+                        };
+                        console.error('API Error:', error);
+                        throw error;
+                    }
+                },
+
+                // ========== МЕТОДЫ АВТОРИЗАЦИИ ==========
+
+                /**
+                 * Регистрация нового пользователя
+                 * POST /user/register
+                 */
+                async registerUser() {
+                    try {
+                        const data = await this.apiRequest('/user/register', {
+                            method: 'POST',
+                            body: JSON.stringify(this.registerData)
+                        });
+
+                        alert('✅ Регистрация успешна! Теперь войдите в систему.');
+
+                        // Очищаем форму
+                        this.registerData = { username: '', email: '', password: '' };
+                    } catch (error) {
+                        alert('❌ Ошибка регистрации: ' + error.message);
+                    }
+                },
+
+                /**
+                 * Вход пользователя
+                 * POST /user/token
+                 * Возвращает access_token и refresh_token
+                 */
+                async loginUser() {
+                    try {
+                        // FastAPI OAuth2 требует form-data, а не JSON
+                        const formData = new URLSearchParams();
+                        formData.append('username', this.loginData.username);
+                        formData.append('password', this.loginData.password);
+
+                        const data = await this.apiRequest('/user/token', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: formData.toString()
+                        });
+
+                        // Сохраняем токены
+                        this.accessToken = data.access_token;
+                        this.refreshTokenValue = data.refresh_token;
+                        this.userEmail = this.loginData.username;
+
+                        // Сохраняем в localStorage для персистентности
+                        localStorage.setItem('accessToken', data.access_token);
+                        localStorage.setItem('refreshToken', data.refresh_token);
+                        localStorage.setItem('userEmail', this.loginData.username);
+
+                        alert('✅ Успешный вход!');
+
+                        // Загружаем информацию о пользователе
+                        this.getUserBase();
+                    } catch (error) {
+                        alert('❌ Ошибка входа: ' + error.message);
+                    }
+                },
+
+                /**
+                 * Обновление access_token с помощью refresh_token
+                 * POST /user/refresh-token
+                 */
+                async refreshToken() {
+                    try {
+                        const data = await this.apiRequest(
+                            `/user/refresh-token?refresh_token=${this.refreshTokenValue}`,
+                            { method: 'POST' }
+                        );
+
+                        this.accessToken = data.access_token;
+                        localStorage.setItem('accessToken', data.access_token);
+
+                        alert('✅ Токен обновлен!');
+                    } catch (error) {
+                        alert('❌ Ошибка обновления токена: ' + error.message);
+                    }
+                },
+
+                /**
+                 * Выход из системы
+                 * Очищает все токены и данные
+                 */
+                logout() {
+                    this.accessToken = null;
+                    this.refreshTokenValue = null;
+                    this.userEmail = null;
+                    this.userInfo = null;
+
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                    localStorage.removeItem('userEmail');
+
+                    alert('✅ Вы вышли из системы');
+                },
+
+                // ========== МЕТОДЫ РАБОТЫ С ПОЛЬЗОВАТЕЛЕМ ==========
+
+                /**
+                 * Получить базовую информацию о пользователе
+                 * GET /user/
+                 */
+                async getUserBase() {
+                    try {
+                        const data = await this.apiRequest('/user/', {}, true);
+                        this.userInfo = data;
+                    } catch (error) {
+                        alert('❌ Ошибка получения информации: ' + error.message);
+                    }
+                },
+
+                /**
+                 * Получить полную информацию о пользователе
+                 * GET /user/info
+                 */
+                async getUserFull() {
+                    try {
+                        const data = await this.apiRequest('/user/info', {}, true);
+                        this.userInfo = data;
+
+                        // Заполняем форму обновления профиля
+                        this.updateProfile = {
+                            first_name: data.first_name || '',
+                            last_name: data.last_name || '',
+                            bio: data.bio || '',
+                            phone_number: data.phone_number || '',
+                            preferred_language: data.preferred_language || 'ru',
+                            timezone: data.timezone || 'Europe/Moscow'
+                        };
+                    } catch (error) {
+                        alert('❌ Ошибка получения информации: ' + error.message);
+                    }
+                },
+
+                /**
+                 * Обновить профиль пользователя
+                 * PUT /user/update
+                 */
+                async updateUserProfile() {
+                    try {
+                        // Отправляем только заполненные поля
+                        const dataToUpdate = {};
+                        for (let key in this.updateProfile) {
+                            if (this.updateProfile[key] !== '') {
+                                dataToUpdate[key] = this.updateProfile[key];
+                            }
+                        }
+
+                        const data = await this.apiRequest('/user/update', {
+                            method: 'PUT',
+                            body: JSON.stringify(dataToUpdate)
+                        }, true);
+
+                        this.userInfo = data;
+                        alert('✅ Профиль успешно обновлён!');
+                    } catch (error) {
+                        alert('❌ Ошибка обновления профиля: ' + error.message);
+                    }
+                },
+
+                // ========== МЕТОДЫ РАБОТЫ С БЕСЕДАМИ ==========
+
+                /**
+                 * Создать новую беседу
+                 * POST /conversations/
+                 */
+                async createConversation() {
+                    try {
+                        const conversationData = {
+                            title: this.conversationTitle || null
+                        };
+
+                        const data = await this.apiRequest('/conversations/', {
+                            method: 'POST',
+                            body: JSON.stringify(conversationData)
+                        }, true);
+
+                        // Добавляем созданную беседу в список
+                        this.conversations.push(data);
+                        this.selectConversation(data);
+
+                        // Очищаем поле названия
+                        this.conversationTitle = '';
+
+                        alert('✅ Беседа создана!');
+                    } catch (error) {
+                        alert('❌ Ошибка создания беседы: ' + error.message);
+                    }
+                },
+
+                /**
+                 * Выбрать беседу
+                 */
+                selectConversation(conversation) {
+                    this.selectedConversation = conversation;
+                    this.loadMessages();
+                },
+
+                /**
+                 * Загрузить сообщения из выбранной беседы
+                 * GET /conversations/{conversation_id}/messages
+                 */
+                async loadMessages() {
+                    if (!this.selectedConversation) {
+                        alert('❌ Сначала выберите беседу');
+                        return;
+                    }
+
+                    try {
+                        const data = await this.apiRequest(
+                            `/conversations/${this.selectedConversation.id}/messages`,
+                            {},
+                            true
+                        );
+
+                        this.messages = data;
+                    } catch (error) {
+                        alert('❌ Ошибка загрузки сообщений: ' + error.message);
+                    }
+                },
+
+                /**
+                 * Отправить сообщение в выбранную беседу
+                 * POST /conversations/{conversation_id}/messages
+                 */
+                async sendMessage() {
+                    if (!this.selectedConversation) {
+                        alert('❌ Сначала выберите беседу');
+                        return;
+                    }
+
+                    if (!this.messageData.content.trim()) {
+                        alert('❌ Сообщение не может быть пустым');
+                        return;
+                    }
+
+                    try {
+                        const messageData = {
+                            role: this.messageData.role,
+                            content: this.messageData.content
+                        };
+
+                        await this.apiRequest(
+                            `/conversations/${this.selectedConversation.id}/messages`,
+                            {
+                                method: 'POST',
+                                body: JSON.stringify(messageData)
+                            },
+                            true
+                        );
+
+                        // Очищаем поле сообщения
+                        this.messageData.content = '';
+
+                        // Обновляем список сообщений
+                        this.loadMessages();
+                    } catch (error) {
+                        alert('❌ Ошибка отправки сообщения: ' + error.message);
+                    }
+                },
+
+                // ========== МЕТОДЫ РАБОТЫ С POLYGON ==========
+
+                /**
+                 * Тестировать Polygon Chat
+                 * POST /polygon/chat
+                 */
+                async sendPolygonMessage() {
+                    if (!this.polygonMessage.trim()) {
+                        alert('❌ Сообщение не может быть пустым');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`${this.apiBaseUrl}/polygon/chat?message=${encodeURIComponent(this.polygonMessage)}`, {
+                            method: 'POST'
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(JSON.stringify(data, null, 2));
+                        }
+
+                        this.response = data;
+                        alert('✅ Сообщение отправлено!');
+                    } catch (error) {
+                        this.response = {
+                            error: true,
+                            message: error.message
+                        };
+                        alert('❌ Ошибка отправки сообщения: ' + error.message);
+                    }
+                },
+
+                // ========== МЕТОДЫ РАБОТЫ С MARKDOWN ==========
+
+                /**
+                 * Рендерит Markdown-контент в безопасный HTML
+                 * @param {string} content - Markdown текст
+                 * @returns {string} - Безопасный HTML
+                 */
+                renderMarkdown(content) {
+                    if (!content) return '';
+
+                    // Устанавливаем опции для Marked.js
+                    marked.setOptions({
+                        breaks: true, // Преобразовывать разрывы строк в теги <br>
+                        gfm: true,    // Использовать GitHub Flavored Markdown
+                        sanitize: false, // Отключаем встроенную очистку, используем DOMPurify
+                        smartypants: true
+                    });
+
+                    // Рендерим Markdown в HTML
+                    const renderedHtml = marked.parse(content);
+
+                    // Очищаем HTML от потенциально опасных тегов и атрибутов
+                    const safeHtml = DOMPurify.sanitize(renderedHtml);
+
+                    return safeHtml;
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

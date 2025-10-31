@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI LLM Streaming Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        label {
+            display: block;
+            margin: 10px 0 5px 0;
+            font-weight: bold;
+        }
+
+        input, textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .chat-messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #fafafa;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .user-message {
+            background-color: #d4edda;
+            text-align: right;
+        }
+
+        .assistant-message {
+            background-color: #cce5ff;
+        }
+
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #streamOutput {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .controls > div {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .token-display {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FastAPI LLM Streaming Test</h1>
+
+        <!-- Login Section -->
+        <div id="loginSection" class="section">
+            <h2>Login</h2>
+            <div id="loginStatus"></div>
+            <label for="username">Username or Email:</label>
+            <input type="text" id="username" placeholder="Enter username or email">
+
+            <label for="password">Password:</label>
+            <input type="password" id="password" placeholder="Enter password">
+
+            <button id="loginBtn">Login</button>
+
+            <div style="margin-top: 15px;">
+                <label for="tokenInput">Or paste JWT token:</label>
+                <input type="text" id="tokenInput" placeholder="Paste your JWT token here">
+                <button id="useTokenBtn">Use Token</button>
+            </div>
+        </div>
+
+        <!-- Chat Section (Initially Hidden) -->
+        <div id="chatSection" class="section hidden">
+            <h2>Chat Interface</h2>
+
+            <div class="controls">
+                <div>
+                    <label for="newChatTitle">Create New Chat:</label>
+                    <input type="text" id="newChatTitle" placeholder="Enter chat title">
+                    <button id="createChatBtn">Create Chat</button>
+                </div>
+
+                <div>
+                    <label for="selectedChat">Select Chat:</label>
+                    <select id="selectedChat">
+                        <option value="">Select a chat...</option>
+                    </select>
+                    <button id="refreshChatsBtn">Refresh Chats</button>
+                </div>
+            </div>
+
+            <div id="chatMessages" class="chat-messages">
+                <div class="message assistant-message">Welcome! Please create a chat or select an existing one to start.</div>
+            </div>
+
+            <div class="input-area">
+                <label for="messageInput">Your Message:</label>
+                <textarea id="messageInput" rows="3" placeholder="Type your message here..."></textarea>
+                <button id="sendBtn" disabled>Send Message</button>
+            </div>
+
+            <div class="status" id="chatStatus"></div>
+        </div>
+
+        <!-- Streaming Test Section -->
+        <div id="streamingSection" class="section hidden">
+            <h2>Streaming Test</h2>
+            <p>This section tests the direct streaming functionality using the /conversations_v2/{conversation_id}/messages/stream endpoint.</p>
+
+            <div class="controls">
+                <div>
+                    <label for="testConversationId">Conversation ID:</label>
+                    <input type="text" id="testConversationId" placeholder="Enter conversation ID">
+                </div>
+
+                <div>
+                    <label for="testMessage">Message:</label>
+                    <input type="text" id="testMessage" placeholder="Enter test message">
+                </div>
+            </div>
+
+            <button id="testStreamBtn">Test Streaming</button>
+
+            <div id="streamOutput">Streaming output will appear here...</div>
+
+            <div class="status" id="streamStatus"></div>
+        </div>
+
+        <!-- Token Display -->
+        <div class="section">
+            <div class="token-display">
+                <strong>Current Token:</strong> <span id="currentTokenDisplay">Not logged in</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = 'http://localhost:8000'; // Change this to match your API endpoint
+
+        // State management
+        let authToken = null;
+        let chats = [];
+        let currentChatId = null;
+
+        // DOM Elements
+        const loginSection = document.getElementById('loginSection');
+        const chatSection = document.getElementById('chatSection');
+        const streamingSection = document.getElementById('streamingSection');
+        const loginStatus = document.getElementById('loginStatus');
+        const chatStatus = document.getElementById('chatStatus');
+        const streamStatus = document.getElementById('streamStatus');
+        const chatMessages = document.getElementById('chatMessages');
+        const selectedChat = document.getElementById('selectedChat');
+        const currentTokenDisplay = document.getElementById('currentTokenDisplay');
+
+        // Event Listeners
+        document.getElementById('loginBtn').addEventListener('click', login);
+        document.getElementById('useTokenBtn').addEventListener('click', useToken);
+        document.getElementById('createChatBtn').addEventListener('click', createChat);
+        document.getElementById('refreshChatsBtn').addEventListener('click', loadChats);
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        document.getElementById('testStreamBtn').addEventListener('click', testStreaming);
+
+        // Event listeners for dropdown and input changes
+        selectedChat.addEventListener('change', function() {
+            currentChatId = this.value;
+            document.getElementById('sendBtn').disabled = !currentChatId;
+            if (currentChatId) {
+                loadChatHistory(currentChatId);
+            }
+        });
+
+        // Login function
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                showStatus(loginStatus, 'Please enter username and password', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/user/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const token = data.access_token || data.token;
+
+                    if (token) {
+                        authToken = token;
+                        currentTokenDisplay.textContent = token.substring(0, 20) + '...';
+                        showStatus(loginStatus, 'Login successful!', 'success');
+                        loginSection.classList.add('hidden');
+                        chatSection.classList.remove('hidden');
+                        streamingSection.classList.remove('hidden');
+
+                        // Load chats after successful login
+                        await loadChats();
+                    } else {
+                        throw new Error('No token returned from API');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Login failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showStatus(loginStatus, `Login failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Use existing token
+        function useToken() {
+            const token = document.getElementById('tokenInput').value.trim();
+
+            if (!token) {
+                showStatus(loginStatus, 'Please enter a JWT token', 'error');
+                return;
+            }
+
+            authToken = token;
+            currentTokenDisplay.textContent = token.substring(0, 20) + '...';
+            showStatus(loginStatus, 'Token set successfully!', 'success');
+            loginSection.classList.add('hidden');
+            chatSection.classList.remove('hidden');
+            streamingSection.classList.remove('hidden');
+
+            // Load chats after setting token
+            loadChats();
+        }
+
+        // Create new chat
+        async function createChat() {
+            const title = document.getElementById('newChatTitle').value.trim();
+
+            if (!title) {
+                showStatus(chatStatus, 'Please enter a chat title', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/conversations/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        title: title
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus(chatStatus, 'Chat created successfully!', 'success');
+                    document.getElementById('newChatTitle').value = '';
+
+                    // Reload chats to include the new one
+                    await loadChats();
+
+                    // Select the newly created chat
+                    if (data.id) {
+                        selectedChat.value = data.id;
+                        currentChatId = data.id;
+                        document.getElementById('sendBtn').disabled = false;
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to create chat');
+                }
+            } catch (error) {
+                console.error('Create chat error:', error);
+                showStatus(chatStatus, `Failed to create chat: ${error.message}`, 'error');
+            }
+        }
+
+        // Load list of chats
+        async function loadChats() {
+            try {
+                const response = await fetch(`${API_BASE}/conversations/`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    chats = await response.json();
+
+                    // Update dropdown
+                    selectedChat.innerHTML = '<option value="">Select a chat...</option>';
+                    chats.forEach(chat => {
+                        const option = document.createElement('option');
+                        option.value = chat.id;
+                        option.textContent = chat.title || `Chat ${chat.id}`;
+                        selectedChat.appendChild(option);
+                    });
+
+                    showStatus(chatStatus, 'Chats loaded successfully', 'success');
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to load chats');
+                }
+            } catch (error) {
+                console.error('Load chats error:', error);
+                showStatus(chatStatus, `Failed to load chats: ${error.message}`, 'error');
+            }
+        }
+
+        // Load chat history
+        async function loadChatHistory(chatId) {
+            try {
+                // Clear current messages
+                chatMessages.innerHTML = '';
+
+                // In a real app, you would fetch the chat history from the API
+                // For this example, we'll just show a placeholder message
+                addMessage('assistant', 'Chat history loaded. Start typing to send a message.');
+            } catch (error) {
+                console.error('Load chat history error:', error);
+                addMessage('assistant', `Error loading chat history: ${error.message}`);
+            }
+        }
+
+        // Send message
+        async function sendMessage() {
+            const message = document.getElementById('messageInput').value.trim();
+
+            if (!message) {
+                showStatus(chatStatus, 'Please enter a message', 'error');
+                return;
+            }
+
+            if (!currentChatId) {
+                showStatus(chatStatus, 'Please select a chat first', 'error');
+                return;
+            }
+
+            // Add user message to UI
+            addMessage('user', message);
+            document.getElementById('messageInput').value = '';
+
+            try {
+                // First, add the message to the conversation (non-streaming endpoint from the API spec)
+                const addMessageResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        content: message,
+                        role: 'user'
+                    })
+                });
+
+                if (!addMessageResponse.ok) {
+                    const errorData = await addMessageResponse.json();
+                    throw new Error(errorData.detail || `Failed to add message: HTTP ${addMessageResponse.status}`);
+                }
+
+                // Then try to stream the response using the v2 endpoint mentioned in the original request
+                // If this endpoint doesn't exist, we'll handle the error gracefully
+                const streamUrl = `${API_BASE}/conversations_v2/${currentChatId}/messages/stream`;
+
+                const response = await fetch(streamUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        content: message,
+                        // Add other required fields as per your API
+                    })
+                });
+
+                if (!response.ok) {
+                    // If the v2 streaming endpoint doesn't exist, try the standard messages endpoint
+                    if (response.status === 404 || response.status === 405) {
+                        console.warn('Streaming endpoint not found, attempting to use standard endpoint');
+
+                        // For now, just add a simple response message
+                        addMessage('assistant', 'Streaming endpoint not available. Using standard endpoint.');
+                        return;
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                    }
+                }
+
+                if (!response.body) {
+                    throw new Error('ReadableStream not supported in this browser');
+                }
+
+                // Read the stream
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let assistantMessage = '';
+
+                // Add a placeholder for the assistant's response
+                const messageElement = addMessage('assistant', '');
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        break;
+                    }
+
+                    const chunk = decoder.decode(value, { stream: true });
+
+                    // Process the stream data (this depends on your API format)
+                    // For SSE format: data: {json}
+                    // For line-delimited JSON: {json}\n{json}\n
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6); // Remove 'data: ' prefix
+                            try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.content) {
+                                    assistantMessage += parsed.content;
+                                    messageElement.textContent = assistantMessage;
+
+                                    // Scroll to bottom of chat
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                } else if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                                    // Handle OpenAI-style streaming response
+                                    assistantMessage += parsed.choices[0].delta.content;
+                                    messageElement.textContent = assistantMessage;
+
+                                    // Scroll to bottom of chat
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
+                            } catch (e) {
+                                console.warn('Could not parse stream data:', data);
+                            }
+                        } else if (line.trim() !== '') {
+                            // If not in SSE format, assume it's JSON lines
+                            try {
+                                const parsed = JSON.parse(line);
+                                if (parsed.content) {
+                                    assistantMessage += parsed.content;
+                                    messageElement.textContent = assistantMessage;
+
+                                    // Scroll to bottom of chat
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                } else if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                                    // Handle OpenAI-style streaming response
+                                    assistantMessage += parsed.choices[0].delta.content;
+                                    messageElement.textContent = assistantMessage;
+
+                                    // Scroll to bottom of chat
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
+                            } catch (e) {
+                                // Ignore if not valid JSON
+                            }
+                        }
+                    }
+                }
+
+                reader.releaseLock();
+            } catch (error) {
+                console.error('Send message error:', error);
+                addMessage('assistant', `Error: ${error.message}`);
+                showStatus(chatStatus, `Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Test streaming functionality directly
+        async function testStreaming() {
+            const conversationId = document.getElementById('testConversationId').value.trim();
+            const message = document.getElementById('testMessage').value.trim();
+
+            if (!conversationId) {
+                showStatus(streamStatus, 'Please enter a conversation ID', 'error');
+                return;
+            }
+
+            if (!message) {
+                showStatus(streamStatus, 'Please enter a test message', 'error');
+                return;
+            }
+
+            const streamOutput = document.getElementById('streamOutput');
+            streamOutput.textContent = 'Streaming in progress...\n';
+
+            try {
+                // Try the v2 streaming endpoint first
+                let streamUrl = `${API_BASE}/conversations_v2/${conversationId}/messages/stream`;
+                let response;
+
+                try {
+                    response = await fetch(streamUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            content: message
+                        })
+                    });
+                } catch (initialError) {
+                    // If v2 endpoint fails, try a standard endpoint that might stream
+                    console.log('V2 endpoint failed, trying default endpoint', initialError);
+                    streamUrl = `${API_BASE}/conversations/${conversationId}/messages`;
+                    response = await fetch(streamUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            content: message,
+                            role: 'user'
+                        })
+                    });
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                if (!response.body) {
+                    throw new Error('ReadableStream not supported in this browser');
+                }
+
+                // Read the stream
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        streamOutput.textContent += '\n[Stream finished]';
+                        break;
+                    }
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    streamOutput.textContent += chunk;
+
+                    // Scroll to bottom
+                    streamOutput.scrollTop = streamOutput.scrollHeight;
+                }
+
+                reader.releaseLock();
+                showStatus(streamStatus, 'Streaming test completed successfully', 'success');
+            } catch (error) {
+                console.error('Streaming test error:', error);
+                streamOutput.textContent += `\nError: ${error.message}`;
+                showStatus(streamStatus, `Streaming test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Helper function to add messages to the chat
+        function addMessage(sender, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+
+            if (sender === 'user') {
+                messageDiv.classList.add('user-message');
+                messageDiv.textContent = `You: ${content}`;
+            } else {
+                messageDiv.classList.add('assistant-message');
+                messageDiv.textContent = `Assistant: ${content}`;
+            }
+
+            chatMessages.appendChild(messageDiv);
+
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            return messageDiv;
+        }
+
+        // Helper function to show status messages
+        function showStatus(element, message, type) {
+            element.textContent = message;
+            element.className = 'status ' + type;
+
+            // Clear status after 5 seconds for success messages
+            if (type === 'success') {
+                setTimeout(() => {
+                    element.textContent = '';
+                    element.className = 'status';
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>
