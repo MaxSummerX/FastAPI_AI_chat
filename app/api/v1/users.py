@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.auth import create_access_token, create_refresh_token, hash_password, verify_password
 from app.auth.dependencies import get_current_user
-from app.config import ALGORITHM, SECRET_KEY
+from app.auth.jwt_config import ALGORITHM, SECRET_KEY
 from app.depends.db_depends import get_async_postgres_db
 from app.models.users import User as UserModel
 from app.schemas.users import UserRegister, UserUpdateProfile
@@ -123,6 +123,9 @@ async def update_user_profile(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> UserModel:
+    """
+    Обновляет профиль пользователя
+    """
     result = await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
     user = cast(UserModel, result.first())
     await db.execute(update(UserModel).where(UserModel.id == current_user.id).values(**user_info.model_dump()))
