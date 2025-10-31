@@ -3,12 +3,14 @@ from typing import cast
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from mem0 import AsyncMemory
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.configs.llms.openai import OpenAIConfig
+from app.configs.memory import custom_config
 from app.depends.db_depends import get_async_postgres_db
 from app.llms.openai import AsyncOpenAILLM
 from app.models import Conversation as ConversationModel
@@ -20,6 +22,8 @@ from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
 from app.utils.utils import get_conversation_history
 
+
+memory_local = AsyncMemory(config=custom_config)
 
 router_v1 = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -36,7 +40,24 @@ config = OpenAIConfig(
 llm = AsyncOpenAILLM(config)
 
 
-@router_v1.post("/", response_model=ConversationSchemas, status_code=status.HTTP_200_OK)
+@router_v1.get("/", response_model=list[ConversationSchemas], status_code=status.HTTP_200_OK)
+async def get_conversations(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> list[ConversationModel]:
+    """Получить все беседы пользователя"""
+    result = await db.scalars(
+        select(ConversationModel)
+        .where(ConversationModel.user_id == current_user.id, ConversationModel.is_archived.is_(False))
+        .order_by(ConversationModel.created_at.desc())
+    )
+
+    conversations = cast(list[ConversationModel], result.all())
+
+    return conversations
+
+
+@router_v1.post("/", response_model=ConversationSchemas, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     conv_data: ConversationCreate,
     current_user: UserModel = Depends(get_current_user),
@@ -52,19 +73,43 @@ async def create_conversation(
     return cast(ConversationModel, conversation)
 
 
-# Добавление сообщения в беседу
-@router_v1.post("/{conversation_id}/messages")
+@router_v1.get("/{conversation_id}/messages", response_model=list[MessageSchemas], status_code=status.HTTP_200_OK)
+async def get_messages(
+    conversation_id: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    limit: int = 50,
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> list[MessageModel]:  # TODO: Добавить пагинацию
+    """Получить историю сообщений отдельной беседы"""
+    await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
+
+    result = await db.scalars(
+        select(MessageModel)
+        .where(MessageModel.conversation_id == conversation_id, ConversationModel.is_archived.is_(False))
+        .order_by(MessageModel.timestamp.desc())
+        .limit(limit)
+    )
+
+    messages = cast(list[MessageModel], result.all())
+
+    return list(reversed(messages))
+
+
+@router_v1.post("/{conversation_id}/messages", status_code=status.HTTP_201_CREATED)
 async def add_message(
     conversation_id: UUID,
     message: MessageCreate,
+    background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> dict:
+) -> dict:  # TODO: Нужно реализовать streaming для ответа от модели
     """Добавить сообщение в беседу"""
 
     # Проверка доступа
     stmt = select(ConversationModel).where(
-        ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
+        ConversationModel.id == conversation_id,
+        ConversationModel.user_id == current_user.id,
+        ConversationModel.is_archived.is_(False),
     )
     result = await db.scalars(stmt)
     conversation = result.first()
@@ -90,27 +135,31 @@ async def add_message(
 
     await db.commit()
 
+    messages = [{"role": "assistant", "content": user_message.content}, {"role": "user", "content": assistant_response}]
+
+    background_tasks.add_task(
+        memory_local.add, messages, user_id=current_user.username, run_id=str(conversation.id)
+    )  # TODO: Не работает должным образом выдаёт ошибки типизации
+
     return {"user_message": user_message.content, "assistant_message": assistant_response}
 
 
-@router_v1.get("/{conversation_id}/messages", response_model=list[MessageSchemas])
-async def get_messages(
+@router_v1.delete("/{conversation_id}", status_code=status.HTTP_200_OK)
+async def delete_conversation(
     conversation_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    limit: int = 50,
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> list[MessageModel]:
-    """Получить историю сообщений"""
-    await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
+) -> dict:
+    """
+    Выполняет мягкое удаление беседы по UUID
+    """
 
-    stmt = (
-        select(MessageModel)
-        .where(MessageModel.conversation_id == conversation_id)
-        .order_by(MessageModel.timestamp.desc())
-        .limit(limit)
-    )
+    conversation = await db.get(ConversationModel, conversation_id)
 
-    result = await db.execute(stmt)
-    messages = cast(list[MessageModel], result.scalars().all())
+    if not conversation or conversation.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    return list(reversed(messages))
+    conversation.is_archived = True
+    await db.commit()
+
+    return {"message": "Conversation deleted"}
