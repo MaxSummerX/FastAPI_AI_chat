@@ -37,7 +37,6 @@ pytest
 │     ├── schemas/
 │     ├── utils/
 │     ├── init.py
-│     ├── config.py
 │     └── main.py
 ├── tests/            # Тесты
 │     └── init.py
