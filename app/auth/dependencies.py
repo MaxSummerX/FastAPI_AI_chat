@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import ALGORITHM, SECRET_KEY
+from app.auth.jwt_config import ALGORITHM, SECRET_KEY
 from app.depends.db_depends import get_async_postgres_db
 from app.models.users import User as UserModel
 

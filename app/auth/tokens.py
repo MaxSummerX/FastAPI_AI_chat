@@ -4,7 +4,7 @@ from uuid import UUID
 
 import jwt
 
-from app.config import ALGORITHM, SECRET_KEY
+from app.auth.jwt_config import ALGORITHM, SECRET_KEY
 
 
 ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
