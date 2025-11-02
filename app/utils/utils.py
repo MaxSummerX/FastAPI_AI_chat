@@ -17,22 +17,29 @@ def extract_json(text: str) -> str:
     if match:
         json_str = match.group(1)
     else:
-        json_str = text  # предположим, что это необработанный JSON
+        json_str = text
+
     return json_str
 
 
 async def get_conversation_history(db: AsyncSession, conversation_id: UUID, limit: int = 10) -> list[dict]:
     """Получить историю в формате для LLM"""
 
-    stmt = (
+    result = await db.scalars(
         select(MessageModel)
         .where(MessageModel.conversation_id == conversation_id)
         .order_by(MessageModel.timestamp.desc())
         .limit(limit)
     )
 
-    result = await db.execute(stmt)
-    messages = result.scalars().all()
+    messages = result.all()
 
     # Преобразуем в формат для LLM
     return [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
+
+
+async def save_message_to_db(db: AsyncSession, conversation_id: UUID, content: str, model: str) -> None:
+    """Сохранение сообщения от llm в БД"""
+    assistant_message = MessageModel(conversation_id=conversation_id, role="assistant", content=content, model=model)
+    db.add(assistant_message)
+    await db.commit()
