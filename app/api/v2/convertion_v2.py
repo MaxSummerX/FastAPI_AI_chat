@@ -189,7 +189,8 @@ async def add_message_stream(
 
     async def save_after_stream() -> None:
         full_response = await result_awaitable
-        await save_message_to_db(db, conversation_id, full_response, model=os.getenv("MODEL"))
+        model = os.getenv("MODEL") or ""
+        await save_message_to_db(db, conversation_id, full_response, model=model)
 
     background_tasks.add_task(save_after_stream)
 

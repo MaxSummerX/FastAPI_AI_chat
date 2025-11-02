@@ -38,11 +38,8 @@ async def get_conversation_history(db: AsyncSession, conversation_id: UUID, limi
     return [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
 
 
-async def save_message_to_db(db: AsyncSession, conversation_id: UUID, content: str, model: str | None) -> None:
+async def save_message_to_db(db: AsyncSession, conversation_id: UUID, content: str, model: str) -> None:
     """Сохранение сообщения от llm в БД"""
-    if not model:
-        model = ""
-
     assistant_message = MessageModel(conversation_id=conversation_id, role="assistant", content=content, model=model)
     db.add(assistant_message)
     await db.commit()
