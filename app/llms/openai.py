@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import AsyncIterator, Awaitable
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -59,14 +60,25 @@ class AsyncOpenAILLM(LLMBase):
         Returns:
             str or dict: Обработанный ответ.
         """
+        if response is None:
+            raise ValueError("Received None response from LLM API")
+
+        if not hasattr(response, "choices") or not response.choices:
+            raise ValueError("LM response missing 'choices' or empty choices list")
+
+        first_choice = response.choices[0]
+
+        if not hasattr(first_choice, "message") or first_choice.message is None:
+            raise ValueError("LLM response first choice missing 'message'")
+
         if tools:
-            processed_response = {
-                "content": response.choices[0].message.content,
+            processed_response: dict[str, Any] = {
+                "content": response.choices[0].message.content or "",
                 "tool_calls": [],
             }
 
-            if response.choices[0].message.tool_calls:
-                for tool_call in response.choices[0].message.tool_calls:
+            if hasattr(first_choice.message, "tool_calls") and first_choice.message.tool_calls:
+                for tool_call in first_choice.message.tool_calls:
                     processed_response["tool_calls"].append(
                         {
                             "name": tool_call.function.name,
@@ -77,7 +89,7 @@ class AsyncOpenAILLM(LLMBase):
             return processed_response
         else:
             # Возвращаем content из ответа модели
-            content: str = response.choices[0].message.content or ""
+            content: str = first_choice.message.content or ""
             return content
 
     async def generate_response(
@@ -151,3 +163,74 @@ class AsyncOpenAILLM(LLMBase):
                 logging.error(f"Error due to callback: {e}")
 
         return parsed_response
+
+    async def generate_stream_response(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> tuple[AsyncIterator[str], Awaitable[str]]:
+        """
+        Сгенерировать ответ JSON на основе предоставленных сообщений с помощью OpenAI.
+
+        Args:
+            messages (list): Список(list) содержащий словари(dict) 'role' и 'content'.
+            **kwargs: Дополнительные параметры, специфичные для OpenAI.
+
+        Returns:
+            json: Сгенерированный ответ.
+        """
+        params = self._get_supported_params(messages=messages, **kwargs)
+
+        params.update(
+            {
+                "model": self.config.model,
+                "messages": messages,
+                "stream": True,
+            }
+        )
+
+        if os.getenv("OPENROUTER_API_KEY"):
+            openrouter_params = {}
+            if self.config.models:
+                openrouter_params["models"] = self.config.models
+                openrouter_params["route"] = self.config.route
+                params.pop("model")
+
+            if self.config.site_url and self.config.app_name:
+                extra_headers = {
+                    "HTTP-Referer": self.config.site_url,
+                    "X-Title": self.config.app_name,
+                }
+                openrouter_params["extra_headers"] = extra_headers
+
+            params.update(**openrouter_params)
+
+        else:
+            openai_specific_generation_params = ["store"]
+            for param in openai_specific_generation_params:
+                if hasattr(self.config, param):
+                    params[param] = getattr(self.config, param)
+
+        response = await self.client.chat.completions.create(**params)
+
+        chunks: list[str] = []
+        stream_completed = asyncio.Event()
+
+        async def stream_generator() -> AsyncIterator[str]:
+            """
+            Генератор для стрима, собирает chunks и устанавливает флаг завершения.
+            """
+            try:
+                async for chunk in response:
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        chunks.append(content)
+                        yield content
+            finally:
+                # Сигнализируем о завершении стрима
+                stream_completed.set()
+
+        async def get_result() -> str:
+            """Ожидает завершения стрима и возвращает полный ответ."""
+            await stream_completed.wait()
+            return "".join(chunks)
+
+        return stream_generator(), get_result()
