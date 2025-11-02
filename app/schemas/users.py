@@ -2,7 +2,6 @@ import re
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
@@ -19,25 +18,32 @@ class UserRegister(BaseModel):
     @field_validator("password")
     @classmethod
     def password_complexity(cls, value: str) -> str:
+        """
+        Валидация сложности пароля.
+
+        Требования:
+        - Минимум 1 заглавная буква
+        - Минимум 1 строчная буква
+        - Минимум 1 цифра
+        - Минимум 1 спецсимвол
+        """
+        requirements = []
+
         if not re.search(r"[A-Z]", value):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Пароль должен содержать хотя бы одну заглавную букву",
-            )
+            requirements.append("one uppercase letter")
+
         if not re.search(r"[a-z]", value):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Пароль должен содержать хотя бы одну строчную букву",
-            )
+            requirements.append("one lowercase letter")
+
         if not re.search(r"\d", value):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Пароль должен содержать хотя бы одну цифру"
-            )
-        if not re.search(r"[!@#$%^&*()_}:.<>?]", value):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Пароль должен содержать хотя бы один специальный символ !@#$%^&*()_}:.<>?",
-            )
+            requirements.append("one digit")
+
+        if not re.search(r"[!@#$%^&*()_{}:.<>?]", value):
+            requirements.append("one special character (!@#$%^&*()_{}:.<>?)")
+
+        if requirements:
+            missing = ", ".join(requirements)
+            raise ValueError(f"Password must contain at least: {missing}")
 
         return value
 
