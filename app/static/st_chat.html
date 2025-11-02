@@ -196,7 +196,7 @@
         <!-- Streaming Test Section -->
         <div id="streamingSection" class="section hidden">
             <h2>Streaming Test</h2>
-            <p>This section tests the direct streaming functionality using the /conversations_v2/{conversation_id}/messages/stream endpoint.</p>
+            <p>This section tests the direct streaming functionality using the /conversations_v2/{conversation_id}/message/stream endpoint.</p>
 
             <div class="controls">
                 <div>
@@ -440,7 +440,7 @@
 
             try {
                 // First, add the message to the conversation (non-streaming endpoint from the API spec)
-                const addMessageResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/messages`, {
+                const addMessageResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/message`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -459,7 +459,7 @@
 
                 // Then try to stream the response using the v2 endpoint mentioned in the original request
                 // If this endpoint doesn't exist, we'll handle the error gracefully
-                const streamUrl = `${API_BASE}/conversations_v2/${currentChatId}/messages/stream`;
+                const streamUrl = `${API_BASE}/conversations_v2/${currentChatId}/message/stream`;
 
                 const response = await fetch(streamUrl, {
                     method: 'POST',
@@ -587,7 +587,7 @@
 
             try {
                 // Try the v2 streaming endpoint first
-                let streamUrl = `${API_BASE}/conversations_v2/${conversationId}/messages/stream`;
+                let streamUrl = `${API_BASE}/conversations_v2/${conversationId}/message/stream`;
                 let response;
 
                 try {
@@ -604,7 +604,7 @@
                 } catch (initialError) {
                     // If v2 endpoint fails, try a standard endpoint that might stream
                     console.log('V2 endpoint failed, trying default endpoint', initialError);
-                    streamUrl = `${API_BASE}/conversations/${conversationId}/messages`;
+                    streamUrl = `${API_BASE}/conversations/${conversationId}/message`;
                     response = await fetch(streamUrl, {
                         method: 'POST',
                         headers: {
