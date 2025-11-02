@@ -4,8 +4,6 @@ from uuid import UUID
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-
-# Зависимости для stream
 from fastapi.responses import StreamingResponse
 from mem0 import AsyncMemory
 from sqlalchemy import select
@@ -23,8 +21,7 @@ from app.schemas.coversations import ConversationCreate
 from app.schemas.coversations import ConversationResponse as ConversationSchemas
 from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
-from app.utils.stream import stream_llm_response
-from app.utils.utils import get_conversation_history
+from app.utils.utils import get_conversation_history, save_message_to_db
 
 
 memory_local = AsyncMemory(config=custom_config)
@@ -99,21 +96,23 @@ async def get_messages(
     return list(reversed(messages))
 
 
-@router_v2.post("/{conversation_id}/messages", response_model=list[MessageSchemas], status_code=status.HTTP_201_CREATED)
+@router_v2.post("/{conversation_id}/message", response_model=MessageSchemas, status_code=status.HTTP_201_CREATED)
 async def add_message(
     conversation_id: UUID,
     message: MessageCreate,
     background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> list[MessageModel]:
+) -> MessageModel:
     """Добавить сообщение в беседу"""
 
     # Проверка доступа
-    stmt = select(ConversationModel).where(
-        ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
+    result = await db.scalars(
+        select(ConversationModel).where(
+            ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
+        )
     )
-    result = await db.scalars(stmt)
+
     conversation = result.first()
 
     if not conversation:
@@ -125,8 +124,10 @@ async def add_message(
     )
     db.add(user_message)
 
+    # Получаем историю беседы
     history = await get_conversation_history(db, conversation_id)
 
+    # Отправляем запрос к llm
     assistant_response = await llm.generate_response(history)
 
     # Сохраняем ответ ассистента
@@ -137,30 +138,15 @@ async def add_message(
 
     await db.commit()
 
-    await db.refresh(conversation)
-
-    messages_for_mem0ai = [
-        {"role": "assistant", "content": user_message.content},
-        {"role": "user", "content": assistant_response},
-    ]
-
+    # Передаём сообщение пользователя в mem0ai
     background_tasks.add_task(
-        memory_local.add, messages_for_mem0ai, user_id=current_user.username, run_id=str(conversation.id)
+        memory_local.add, messages=[message.model_dump()], user_id=current_user.username, run_id=str(conversation.id)
     )
 
-    result = await db.scalars(
-        select(MessageModel)
-        .where(MessageModel.conversation_id == conversation.id)
-        .order_by(MessageModel.timestamp.desc())
-    )
-
-    messages = cast(list[MessageModel], result.all())
-
-    # отправляем всю историю сообщений
-    return list(reversed(messages))
+    return assistant_message
 
 
-@router_v2.post("/{conversation_id}/messages/stream", status_code=status.HTTP_200_OK)
+@router_v2.post("/{conversation_id}/message/stream", status_code=status.HTTP_200_OK)
 async def add_message_stream(
     conversation_id: UUID,
     message: MessageCreate,
@@ -170,13 +156,15 @@ async def add_message_stream(
 ) -> StreamingResponse:
     """Добавить сообщение и получить стриминговый ответ"""
 
-    # Проверка доступа
-    stmt = select(ConversationModel).where(
-        ConversationModel.id == conversation_id,
-        ConversationModel.user_id == current_user.id,
-        ConversationModel.is_archived.is_(False),
+    # Проверка доступа и что беседа существует
+    result = await db.scalars(
+        select(ConversationModel).where(
+            ConversationModel.id == conversation_id,
+            ConversationModel.user_id == current_user.id,
+            ConversationModel.is_archived.is_(False),
+        )
     )
-    result = await db.scalars(stmt)
+
     conversation = cast(ConversationModel, result.first())
 
     if not conversation:
@@ -189,21 +177,24 @@ async def add_message_stream(
     db.add(user_message)
     await db.commit()
 
+    # Передаём сообщение на извлечение фактов в mem0ai
+    background_tasks.add_task(
+        memory_local.add, messages=[message.model_dump()], user_id=current_user.username, run_id=str(conversation_id)
+    )
+
     # Получаем историю для контекста
     history = await get_conversation_history(db, conversation_id)
 
+    stream, result_awaitable = await llm.generate_stream_response(messages=history)
+
+    async def save_after_stream() -> None:
+        full_response = await result_awaitable
+        await save_message_to_db(db, conversation_id, full_response, model=os.getenv("MODEL"))
+
+    background_tasks.add_task(save_after_stream)
+
     # Возвращаем streming ответ
-    return StreamingResponse(
-        stream_llm_response(
-            message=message.content,
-            username=current_user.username,
-            conversation_id=conversation_id,
-            history=history,
-            background_tasks=background_tasks,
-            db=db,
-        ),
-        media_type="text/plain",
-    )
+    return StreamingResponse(stream, media_type="text/event-stream")
 
 
 @router_v2.delete("/{conversation_id}", status_code=status.HTTP_200_OK)
