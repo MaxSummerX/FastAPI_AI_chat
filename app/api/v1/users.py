@@ -4,7 +4,7 @@ from typing import cast
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.auth import create_access_token, create_refresh_token, hash_password, verify_password
@@ -65,6 +65,36 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async
     return user
 
 
+@router_v1.post("/register_v2", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
+async def register_with_invite(
+    invite: str, user: UserRegister, db: AsyncSession = Depends(get_async_postgres_db)
+) -> UserModel:
+    """
+    Регистрирует нового пользователя с использованием приглашения.
+    """
+
+    if invite != "0001":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid invitation code")
+
+    # Проверяем уникальность username
+    result_username = await db.scalars(select(UserModel).where(UserModel.username == user.username))
+    if result_username.first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already registered")
+
+    # Проверяем уникальность email
+    result_email = await db.scalars(select(UserModel).where(UserModel.email == user.email))
+    if result_email.first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    # Создание объекта пользователя с хешированием пароля
+    user = UserModel(username=user.username, email=user.email, password_hash=hash_password(user.password))
+
+    # Добавляем в сессию и сохранение в базе
+    db.add(user)
+    await db.commit()
+    return user
+
+
 @router_v1.post("/token")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_async_postgres_db)
@@ -72,7 +102,12 @@ async def login(
     """
     Аутентифицирует пользователя и возвращает JWT с email, id.
     """
-    result = await db.scalars(select(UserModel).where(UserModel.username == form_data.username, UserModel.is_active))
+    result = await db.scalars(
+        select(UserModel).where(
+            or_(UserModel.username == form_data.username, UserModel.email == form_data.username), UserModel.is_active
+        )
+    )
+
     user = cast(UserModel, result.first())
 
     if not user or not verify_password(form_data.password, user.password_hash):
