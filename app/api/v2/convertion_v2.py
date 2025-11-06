@@ -1,44 +1,40 @@
-import os
 from typing import cast
 from uuid import UUID
 
-from dotenv import load_dotenv
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from loguru import logger
 from mem0 import AsyncMemory
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.configs.llms.openai import OpenAIConfig
+from app.configs.llm_config import base_config_for_llm
 from app.configs.memory import custom_config
 from app.depends.db_depends import get_async_postgres_db
 from app.llms.openai import AsyncOpenAILLM
 from app.models import Conversation as ConversationModel
 from app.models import Message as MessageModel
 from app.models import User as UserModel
+from app.prompts.prompts_base import START_PROMPT
 from app.schemas.coversations import ConversationCreate
 from app.schemas.coversations import ConversationResponse as ConversationSchemas
 from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
-from app.utils.utils import get_conversation_history, save_message_to_db
+from app.utils.utils import (
+    get_conversation_history,
+    get_conversation_history_with_mem0,
+    save_message_to_db_after_stream,
+)
 
 
-memory_local = AsyncMemory(config=custom_config)
+logger.add("log_info.log")
 
 router_v2 = APIRouter(prefix="/conversations_v2", tags=["conversations_v2"])
 
-load_dotenv()
+memory_local = AsyncMemory(config=custom_config)
 
-
-config = OpenAIConfig(
-    model=os.getenv("MODEL"),
-    temperature=0.6,
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    max_tokens=1000,
-)
-
-llm = AsyncOpenAILLM(config)
+llm = AsyncOpenAILLM(base_config_for_llm)
 
 
 @router_v2.get("/", response_model=list[ConversationSchemas], status_code=status.HTTP_200_OK)
@@ -47,6 +43,7 @@ async def get_conversation(
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> list[ConversationModel]:
     """Получить все беседы пользователя"""
+    logger.info("Запрос на получение истории бесед")
     result = await db.scalars(
         select(ConversationModel)
         .where(ConversationModel.user_id == current_user.id)
@@ -65,7 +62,7 @@ async def create_conversation(
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> ConversationModel:
     """Создать новую беседу"""
-
+    logger.info("Запрос на создание новой беседы")
     conversation = ConversationModel(user_id=current_user.id, title=conv_data.title or "New conversation")
     db.add(conversation)
     await db.commit()
@@ -82,6 +79,7 @@ async def get_messages(
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> list[MessageModel]:
     """Получить историю сообщений отдельной беседы"""
+    logger.info("Запрос на получение истории отдельной беседы")
     await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
 
     result = await db.scalars(
@@ -105,7 +103,7 @@ async def add_message(
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> MessageModel:
     """Добавить сообщение в беседу"""
-
+    logger.info("Запрос на добавление сообщения в беседу")
     # Проверка доступа
     result = await db.scalars(
         select(ConversationModel).where(
@@ -120,19 +118,19 @@ async def add_message(
 
     # Сохраняем сообщение пользователя
     user_message = MessageModel(
-        conversation_id=conversation_id, role=message.role, content=message.content, model=os.getenv("MODEL")
+        conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
     )
     db.add(user_message)
 
     # Получаем историю беседы
-    history = await get_conversation_history(db, conversation_id)
+    history = await get_conversation_history(db, conversation_id, limit=10)
 
     # Отправляем запрос к llm
     assistant_response = await llm.generate_response(history)
 
     # Сохраняем ответ ассистента
     assistant_message = MessageModel(
-        conversation_id=conversation_id, role="assistant", content=assistant_response, model=os.getenv("MODEL")
+        conversation_id=conversation_id, role="assistant", content=assistant_response, model=llm.config.model
     )
     db.add(assistant_message)
 
@@ -154,8 +152,10 @@ async def add_message_stream(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> StreamingResponse:
-    """Добавить сообщение и получить стриминговый ответ"""
-
+    """
+    Добавить сообщение в беседу и получить стриминговый ответ
+    """
+    logger.info("Запрос на добавление сообщения в стриминговый ответ")
     # Проверка доступа и что беседа существует
     result = await db.scalars(
         select(ConversationModel).where(
@@ -172,7 +172,7 @@ async def add_message_stream(
 
     # Сохраняем сообщение пользователя
     user_message = MessageModel(
-        conversation_id=conversation_id, role=message.role, content=message.content, model=os.getenv("MODEL")
+        conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
     )
     db.add(user_message)
     await db.commit()
@@ -182,17 +182,20 @@ async def add_message_stream(
         memory_local.add, messages=[message.model_dump()], user_id=current_user.username, run_id=str(conversation_id)
     )
 
-    # Получаем историю для контекста
-    history = await get_conversation_history(db, conversation_id)
+    # Получаем историю с системным промтом и релевантными фактами для контекста
+    history = await get_conversation_history_with_mem0(
+        message=message.content,
+        user_name=current_user.username,
+        prompt=START_PROMPT,
+        db=db,
+        conversation_id=conversation_id,
+        limit=10,
+    )
 
+    # Передаём историю для генерации ответа
     stream, result_awaitable = await llm.generate_stream_response(messages=history)
 
-    async def save_after_stream() -> None:
-        full_response = await result_awaitable
-        model = os.getenv("MODEL") or ""
-        await save_message_to_db(db, conversation_id, full_response, model=model)
-
-    background_tasks.add_task(save_after_stream)
+    background_tasks.add_task(save_message_to_db_after_stream, result_awaitable, db, conversation_id, llm.config.model)
 
     # Возвращаем streming ответ
     return StreamingResponse(stream, media_type="text/event-stream")
@@ -207,7 +210,7 @@ async def delete_conversation(
     """
     Полное удаление беседы по UUID из БД (Включая сообщения)
     """
-
+    logger.info("Запрос на удаление беседы")
     conversation = await db.get(ConversationModel, conversation_id)
 
     if not conversation or conversation.user_id != current_user.id:
