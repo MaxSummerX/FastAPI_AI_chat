@@ -227,7 +227,7 @@
 
     <script>
         // API Configuration
-        const API_BASE = 'http://localhost:8000'; // Change this to match your API endpoint
+        const API_BASE = 'http://192.168.3.27:8000'; // Change this to match your API endpoint
 
         // State management
         let authToken = null;
@@ -338,7 +338,7 @@
             }
 
             try {
-                const response = await fetch(`${API_BASE}/conversations/`, {
+                const response = await fetch(`${API_BASE}/conversations_v2/`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -376,7 +376,7 @@
         // Load list of chats
         async function loadChats() {
             try {
-                const response = await fetch(`${API_BASE}/conversations/`, {
+                const response = await fetch(`${API_BASE}/conversations_v2/`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`
                     }
@@ -440,7 +440,7 @@
 
             try {
                 // First, add the message to the conversation (non-streaming endpoint from the API spec)
-                const addMessageResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/message`, {
+                const addMessageResponse = await fetch(`${API_BASE}/conversations_v2/${currentChatId}/message`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -604,7 +604,7 @@
                 } catch (initialError) {
                     // If v2 endpoint fails, try a standard endpoint that might stream
                     console.log('V2 endpoint failed, trying default endpoint', initialError);
-                    streamUrl = `${API_BASE}/conversations/${conversationId}/message`;
+                    streamUrl = `${API_BASE}/conversations_v2/${conversationId}/message`;
                     response = await fetch(streamUrl, {
                         method: 'POST',
                         headers: {
