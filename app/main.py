@@ -6,6 +6,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import convertion, users
 from app.api.v2 import convertion_v2
+from app.middleware.logging import log_middleware
+from app.middleware.timing_middleware import TimingMiddleware
 
 
 # Статические файлы
@@ -22,6 +24,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(TimingMiddleware)  # Замер времени
+app.middleware("http")(log_middleware)
 
 # Подключаем маршруты категорий
 app.include_router(users.router_v1)
