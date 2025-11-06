@@ -221,5 +221,6 @@ app/storage/
 # Config with sensitive data
 config.json
 
-#
+# Other
 app/polygon/
+/log_timing.txt

@@ -17,6 +17,7 @@ dependencies = [
     "fastapi>=0.120.0",
     "greenlet>=3.2.4",
     "langchain-neo4j>=0.6.0",
+    "loguru>=0.7.3",
     "mem0ai>=1.0.0",
     "ollama>=0.6.0",
     "openai>=2.6.1",
