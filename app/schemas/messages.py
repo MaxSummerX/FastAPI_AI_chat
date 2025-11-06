@@ -28,3 +28,14 @@ class MessageResponse(BaseModel):
     timestamp: datetime = Field(description="Временная метка")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class HistoryMessage(BaseModel):
+    """
+    Схема для LLM с автоматическим извлечением значений Enum
+    """
+
+    role: str = Field(description="Роль")
+    content: str = Field(description="Сообщение")
+
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
