@@ -3,10 +3,10 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "my-project"
+name = "FastAPI_AI_chat"
 version = "0.1.0"
-description = "your_description"
-authors = [{ name = "your_name", email = "your_email@example.com" }]
+description = "Учебный проект асинхронного чата с AI, извлекающего и использующего факты о пользователе для персонализированного контекста беседы"
+authors = [{ name = "MaxSummerX" }]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
