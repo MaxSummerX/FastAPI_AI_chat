@@ -27,7 +27,9 @@ def extract_json(text: str) -> str:
 
 
 def parse_facts_from_mem0(memory: dict) -> str:
-    data = []
+    data = [
+        "Факты\n",
+    ]
     for item in memory["results"]:
         if item["score"] >= 0.75:
             data.append(" -" + item["memory"] + " - " + item["created_at"][:16])

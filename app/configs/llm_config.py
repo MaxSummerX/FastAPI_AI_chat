@@ -13,3 +13,10 @@ base_config_for_llm = OpenAIConfig(
     api_key=os.getenv("OPENROUTER_API_KEY"),
     max_tokens=2000,
 )
+
+parse_llm_config = OpenAIConfig(
+    model=os.getenv("MODEL"),
+    temperature=0.1,
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    max_tokens=500,
+)
