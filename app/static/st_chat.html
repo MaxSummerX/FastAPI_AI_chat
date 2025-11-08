@@ -196,7 +196,7 @@
         <!-- Streaming Test Section -->
         <div id="streamingSection" class="section hidden">
             <h2>Streaming Test</h2>
-            <p>This section tests the direct streaming functionality using the /conversations_v2/{conversation_id}/message/stream endpoint.</p>
+            <p>This section tests the direct streaming functionality using the /conversations/{conversation_id}/message/stream endpoint.</p>
 
             <div class="controls">
                 <div>
@@ -338,7 +338,7 @@
             }
 
             try {
-                const response = await fetch(`${API_BASE}/conversations_v2/`, {
+                const response = await fetch(`${API_BASE}/conversations/`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -376,7 +376,7 @@
         // Load list of chats
         async function loadChats() {
             try {
-                const response = await fetch(`${API_BASE}/conversations_v2/`, {
+                const response = await fetch(`${API_BASE}/conversations/`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`
                     }
@@ -440,7 +440,7 @@
 
             try {
                 // First, add the message to the conversation (non-streaming endpoint from the API spec)
-                const addMessageResponse = await fetch(`${API_BASE}/conversations_v2/${currentChatId}/message`, {
+                const addMessageResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/message`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -457,9 +457,9 @@
                     throw new Error(errorData.detail || `Failed to add message: HTTP ${addMessageResponse.status}`);
                 }
 
-                // Then try to stream the response using the v2 endpoint mentioned in the original request
+                // Then try to stream the response using the endpoint mentioned in the original request
                 // If this endpoint doesn't exist, we'll handle the error gracefully
-                const streamUrl = `${API_BASE}/conversations_v2/${currentChatId}/message/stream`;
+                const streamUrl = `${API_BASE}/conversations/${currentChatId}/message/stream`;
 
                 const response = await fetch(streamUrl, {
                     method: 'POST',
@@ -474,7 +474,7 @@
                 });
 
                 if (!response.ok) {
-                    // If the v2 streaming endpoint doesn't exist, try the standard messages endpoint
+                    // If the streaming endpoint doesn't exist, try the standard messages endpoint
                     if (response.status === 404 || response.status === 405) {
                         console.warn('Streaming endpoint not found, attempting to use standard endpoint');
 
@@ -586,8 +586,8 @@
             streamOutput.textContent = 'Streaming in progress...\n';
 
             try {
-                // Try the v2 streaming endpoint first
-                let streamUrl = `${API_BASE}/conversations_v2/${conversationId}/message/stream`;
+                // Try the streaming endpoint first
+                let streamUrl = `${API_BASE}/conversations/${conversationId}/message/stream`;
                 let response;
 
                 try {
@@ -602,9 +602,9 @@
                         })
                     });
                 } catch (initialError) {
-                    // If v2 endpoint fails, try a standard endpoint that might stream
-                    console.log('V2 endpoint failed, trying default endpoint', initialError);
-                    streamUrl = `${API_BASE}/conversations_v2/${conversationId}/message`;
+                    // If endpoint fails, try a standard endpoint that might stream
+                    console.log(' endpoint failed, trying default endpoint', initialError);
+                    streamUrl = `${API_BASE}/conversations/${conversationId}/message`;
                     response = await fetch(streamUrl, {
                         method: 'POST',
                         headers: {

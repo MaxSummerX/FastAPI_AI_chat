@@ -224,3 +224,4 @@ config.json
 # Other
 app/polygon/
 /log_timing.txt
+legacy/
