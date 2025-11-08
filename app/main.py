@@ -4,8 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1 import convertion, users
-from app.api.v2 import convertion_v2
+from app.api.v1 import convertion, fact, users
 from app.middleware.logging import log_middleware
 from app.middleware.timing_middleware import TimingMiddleware
 
@@ -29,8 +28,8 @@ app.middleware("http")(log_middleware)
 
 # Подключаем маршруты категорий
 app.include_router(users.router_v1)
+app.include_router(fact.router_v1)
 app.include_router(convertion.router_v1)
-app.include_router(convertion_v2.router_v2)
 
 # Монтируем статики
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

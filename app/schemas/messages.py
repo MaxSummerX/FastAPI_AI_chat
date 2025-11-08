@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class MessageCreate(BaseModel):
     """
-    Модель для создания нового сообщения в беседе.
+    Схема для создания нового сообщения в беседе.
     Используется в POST-запросах.
     """
 
@@ -18,7 +18,7 @@ class MessageCreate(BaseModel):
 
 class MessageResponse(BaseModel):
     """
-    Модель для ответа с данными сообщения из беседы.
+    Схема для ответа с данными сообщения из беседы.
     Используется в POST и GET-запросах.
     """
 

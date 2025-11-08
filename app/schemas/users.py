@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 class UserRegister(BaseModel):
     """
-    Модель для регистрации пользователя.
+    Схема для регистрации пользователя.
     Используется в POST-запросах.
     """
 
@@ -51,8 +51,8 @@ class UserRegister(BaseModel):
 class UserUpdateAuth(BaseModel):
     # TODO: Переработать класс для обновления данных авторизации, нужно атомизировать на отдельные параметры и сделать отдельные endpoints для каждого параметра
     """
-    Модель для обновления основных данных пользователя.
-    Используется в PUT-запросах.
+    Схема для обновления основных данных пользователя.
+    Используется в PATCH-запросах.
     """
 
     username: str | None = Field(None, min_length=3, max_length=50, description="Имя пользователя")
@@ -62,8 +62,8 @@ class UserUpdateAuth(BaseModel):
 
 class UserUpdateProfile(BaseModel):
     """
-    Модель для обновления дополнительных данных пользователя.
-    Используется в PUT-запросах.
+    Схема для обновления дополнительных данных пользователя.
+    Используется в PATCH-запросах.
     """
 
     first_name: str | None = Field(None, max_length=50, description="Имя")
@@ -78,8 +78,8 @@ class UserUpdateProfile(BaseModel):
 
 class UserResponseBase(BaseModel):
     """
-    Модель для ответа с основными данными пользователя.
-    Используется в POST, PUT и GET запросах.
+    Схема для ответа с основными данными пользователя.
+    Используется в POST, PATCH и GET запросах.
     """
 
     id: UUID = Field(description="UUID пользователя")
@@ -93,8 +93,8 @@ class UserResponseBase(BaseModel):
 
 class UserResponseFull(UserResponseBase):
     """
-    Модель для ответа с дополнительными данными пользователя.
-    Используется в PUT и GET-запросах.
+    Схема для ответа с дополнительными данными пользователя.
+    Используется в PATCH и GET-запросах.
     """
 
     first_name: str | None = Field(None, description="Имя")

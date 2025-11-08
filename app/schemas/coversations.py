@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ConversationCreate(BaseModel):
     """
-    Модель для создания новой беседы.
+    Схема для создания новой беседы.
     Используется в POST-запросах.
     """
 
@@ -15,7 +15,7 @@ class ConversationCreate(BaseModel):
 
 class ConversationResponse(BaseModel):
     """
-    Модель для ответа с основными данными беседы.
+    Схема для ответа с основными данными беседы.
     Используется в POST-запросах.
     """
 
