@@ -17,7 +17,7 @@ from app.schemas.users import UserResponseBase as UserBaseSchema
 from app.schemas.users import UserResponseFull as UserFullSchema
 
 
-router_v1 = APIRouter(prefix="/user", tags=["user"])
+router_v1 = APIRouter(prefix="/user", tags=["User"])
 
 
 @router_v1.get("/", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
@@ -152,17 +152,26 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_async
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router_v1.put("/update", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
+@router_v1.patch("/update", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
 async def update_user_profile(
     user_info: UserUpdateProfile,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> UserModel:
-    """
-    Обновляет профиль пользователя
-    """
-    result = await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
-    user = cast(UserModel, result.first())
-    await db.execute(update(UserModel).where(UserModel.id == current_user.id).values(**user_info.model_dump()))
+    """Обновляет профиль пользователя"""
+
+    result = await db.execute(
+        update(UserModel)
+        .where(UserModel.id == current_user.id)
+        .values(**user_info.model_dump(exclude_unset=True, by_alias=False))
+        .returning(UserModel)
+    )
+
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     await db.commit()
-    return user
+
+    return cast(UserModel, user)
