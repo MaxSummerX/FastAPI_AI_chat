@@ -14,7 +14,7 @@ from app.models.facts import FactCategory, FactSource
 from app.schemas.facts import FactCreate, FactResponse, FactUpdate
 
 
-router_v1 = APIRouter(prefix="/facts", tags=["Facts"])
+router_v1 = APIRouter(prefix="/facts", tags=["facts"])
 
 
 @router_v1.get("/", response_model=list[FactResponse], status_code=status.HTTP_200_OK)
@@ -44,19 +44,19 @@ async def get_all_facts(
     return facts
 
 
-@router_v1.get("/{memory_id}", response_model=FactResponse, status_code=status.HTTP_200_OK)
+@router_v1.get("/{fact_id}", response_model=FactResponse, status_code=status.HTTP_200_OK)
 async def get_fact(
-    memory_id: UUID,
+    fact_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> FactModel:
     """
     Получить один факт о пользователе
     """
-    logger.info(f"Запрос на получение факта {memory_id} пользователя {current_user.id}")
+    logger.info(f"Запрос на получение факта {fact_id} пользователя {current_user.id}")
     result = await db.scalars(
         select(FactModel).where(
-            FactModel.id == memory_id, FactModel.user_id == current_user.id, FactModel.is_active.is_(True)
+            FactModel.id == fact_id, FactModel.user_id == current_user.id, FactModel.is_active.is_(True)
         )
     )
 
@@ -100,9 +100,9 @@ async def create_fact(
     return cast(FactModel, new_fact)
 
 
-@router_v1.patch("/{memory_id}", response_model=FactResponse, status_code=status.HTTP_200_OK)
+@router_v1.patch("/{fact_id}", response_model=FactResponse, status_code=status.HTTP_200_OK)
 async def update_fact(
-    memory_id: UUID,
+    fact_id: UUID,
     fact_data: FactUpdate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
@@ -110,10 +110,10 @@ async def update_fact(
     """
     Обновить факт о пользователе
     """
-    logger.info(f"Запрос на обновление факта {memory_id} пользователя {current_user.id}")
+    logger.info(f"Запрос на обновление факта {fact_id} пользователя {current_user.id}")
     result = await db.execute(
         update(FactModel)
-        .where(FactModel.id == memory_id, FactModel.user_id == current_user.id, FactModel.is_active.is_(True))
+        .where(FactModel.id == fact_id, FactModel.user_id == current_user.id, FactModel.is_active.is_(True))
         .values(**fact_data.model_dump(exclude_unset=True, by_alias=False))
         .returning(FactModel)
     )
@@ -125,24 +125,24 @@ async def update_fact(
 
     await db.commit()
 
-    logger.info(f"Обновлён факт {memory_id}")
+    logger.info(f"Обновлён факт {fact_id}")
 
     return cast(FactModel, fact)
 
 
-@router_v1.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router_v1.delete("/{fact_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_fact(
-    memory_id: UUID,
+    fact_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> None:
     """
     Мягкое удаление факта
     """
-    logger.info(f"Запрос на удаление факта {memory_id} пользователя {current_user.id}")
+    logger.info(f"Запрос на удаление факта {fact_id} пользователя {current_user.id}")
     result = await db.execute(
         update(FactModel)
-        .where(FactModel.id == memory_id, FactModel.user_id == current_user.id, FactModel.is_active.is_(True))
+        .where(FactModel.id == fact_id, FactModel.user_id == current_user.id, FactModel.is_active.is_(True))
         .values(is_active=False)
         .returning(FactModel.id)
     )
@@ -154,4 +154,4 @@ async def delete_fact(
 
     await db.commit()
 
-    logger.info(f"Удалён факт {memory_id}")
+    logger.info(f"Удалён факт {fact_id}")

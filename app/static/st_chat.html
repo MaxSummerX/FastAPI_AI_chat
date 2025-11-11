@@ -211,7 +211,7 @@
         <!-- Streaming Test Section -->
         <div id="streamingSection" class="section hidden">
             <h2>Streaming Test</h2>
-            <p>This section tests the direct streaming functionality using the /conversations/{conversation_id}/message/stream endpoint.</p>
+            <p>This section tests the direct streaming functionality using the /conversations/{conversation_id}/messages/stream endpoint.</p>
 
             <div class="controls">
                 <div>
@@ -432,7 +432,7 @@
                 chatMessages.innerHTML = '';
 
                 // Fetch the chat history from the API
-                const response = await fetch(`${API_BASE}/conversations/${chatId}/messages`, {
+                const response = await fetch(`${API_BASE}/conversations/${chatId}/messages/`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`
                     }
@@ -488,7 +488,7 @@
                 const typingIndicator = addTypingIndicator();
 
                 // First, add the message to the conversation
-                const addMessageResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/message`, {
+                const addMessageResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/messages/`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -506,7 +506,7 @@
                 }
 
                 // Then stream the response using the streaming endpoint
-                const streamUrl = `${API_BASE}/conversations/${currentChatId}/message/stream`;
+                const streamUrl = `${API_BASE}/conversations/${currentChatId}/messages/stream`;
 
                 const response = await fetch(streamUrl, {
                     method: 'POST',
@@ -526,7 +526,7 @@
                         console.warn('Streaming endpoint not found, attempting to use standard endpoint');
 
                         // Try to get response from non-streaming endpoint
-                        const standardResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/message`, {
+                        const standardResponse = await fetch(`${API_BASE}/conversations/${currentChatId}/messages/`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -658,7 +658,7 @@
 
             try {
                 // Try the streaming endpoint first
-                const streamUrl = `${API_BASE}/conversations/${conversationId}/message/stream`;
+                const streamUrl = `${API_BASE}/conversations/${conversationId}/messages/stream`;
 
                 const response = await fetch(streamUrl, {
                     method: 'POST',
