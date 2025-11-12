@@ -56,3 +56,12 @@ class FactResponse(BaseModel):
     metadata_: dict | None = Field(default=None, description="Дополнительные метаданные факта")
 
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class FactListResponse(BaseModel):
+    """Схема для списка фактов"""
+
+    facts: list[FactResponse] = Field(..., description="Список фактов")
+    total: int = Field(..., description="Общее количество фактов")
+    page: int = Field(..., description="Номер страницы")
+    size: int = Field(..., description="Размер страницы")
