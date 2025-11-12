@@ -17,8 +17,6 @@ from app.schemas.coversations import ConversationResponse as ConversationSchemas
 
 router_v1 = APIRouter(prefix="/conversations")
 
-router_v1.include_router(message.router_v1)
-
 
 @router_v1.get("/", response_model=list[ConversationSchemas], status_code=status.HTTP_200_OK, tags=["Conversations"])
 async def get_conversation(
@@ -77,3 +75,7 @@ async def delete_conversation(
     logger.info(f"Удалён беседа {conversation_id}")
 
     return {"message": "Conversation deleted"}
+
+
+# Подключаем пути для работы с сообщениями
+router_v1.include_router(message.router_v1)

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -11,37 +11,47 @@ from app.depends.db_depends import get_async_postgres_db
 from app.models import Fact as FactModel
 from app.models import User as UserModel
 from app.models.facts import FactCategory, FactSource
-from app.schemas.facts import FactCreate, FactResponse, FactUpdate
+from app.schemas.facts import FactCreate, FactListResponse, FactResponse, FactUpdate
 
 
 router_v1 = APIRouter(prefix="/facts", tags=["Facts"])
 
 
-@router_v1.get("/", response_model=list[FactResponse], status_code=status.HTTP_200_OK)
+@router_v1.get("/", response_model=FactListResponse, status_code=status.HTTP_200_OK)
 async def get_all_facts(
     category: FactCategory | None = None,
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    page: int = Query(1, ge=1, description="Номер страницы"),
+    size: int = Query(10, ge=1, le=100, description="Размер страницы"),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> list[FactModel]:
+    include_inactive: bool = Query(False, description="Включать неактивные промпты"),
+) -> FactListResponse:
     """
     Получить все факты о пользователе
     """
-    logger.info(f"Запрос на получение фактов пользователя {current_user.id} (category={category}, limit={limit})")
+    logger.info(f"Запрос на получение фактов пользователя {current_user.id} (category={category})")
 
-    query = select(FactModel).where(FactModel.user_id == current_user.id, FactModel.is_active.is_(True))
+    conditions = [FactModel.user_id == current_user.id]
 
     if category:
-        query = query.where(FactModel.category == category)
+        conditions.append(FactModel.category == category)
 
-    query = query.order_by(FactModel.created_at.desc())
-    query = query.limit(limit).offset(offset)
+    if not include_inactive:
+        conditions.append(FactModel.is_active.is_(True))
 
-    result = await db.execute(query)
+    count_result = await db.scalar(select(func.count()).select_from(FactModel).where(*conditions))
 
-    facts = cast(list[FactModel], result.scalars().all())
-    return facts
+    total = count_result or 0
+
+    result = await db.scalars(
+        select(FactModel).where(*conditions).order_by(FactModel.created_at.desc()).offset((page - 1) * size).limit(size)
+    )
+
+    facts = cast(list[FactModel], result.all())
+
+    return FactListResponse(
+        facts=[FactResponse.model_validate(fact) for fact in facts], total=total, page=page, size=size
+    )
 
 
 @router_v1.get("/{fact_id}", response_model=FactResponse, status_code=status.HTTP_200_OK)
