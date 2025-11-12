@@ -14,7 +14,7 @@ from app.models.facts import FactCategory, FactSource
 from app.schemas.facts import FactCreate, FactResponse, FactUpdate
 
 
-router_v1 = APIRouter(prefix="/facts", tags=["facts"])
+router_v1 = APIRouter(prefix="/facts", tags=["Facts"])
 
 
 @router_v1.get("/", response_model=list[FactResponse], status_code=status.HTTP_200_OK)

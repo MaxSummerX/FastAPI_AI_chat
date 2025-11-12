@@ -11,7 +11,7 @@ from app.depends.db_depends import get_async_postgres_db
 from app.models.users import User as UserModel
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="user/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/user/token")
 
 
 async def get_current_user(

@@ -20,7 +20,7 @@ router_v1 = APIRouter(prefix="/conversations")
 router_v1.include_router(message.router_v1)
 
 
-@router_v1.get("/", response_model=list[ConversationSchemas], status_code=status.HTTP_200_OK, tags=["conversations"])
+@router_v1.get("/", response_model=list[ConversationSchemas], status_code=status.HTTP_200_OK, tags=["Conversations"])
 async def get_conversation(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
@@ -38,7 +38,7 @@ async def get_conversation(
     return conversations
 
 
-@router_v1.post("/", response_model=ConversationSchemas, status_code=status.HTTP_201_CREATED, tags=["conversations"])
+@router_v1.post("/", response_model=ConversationSchemas, status_code=status.HTTP_201_CREATED, tags=["Conversations"])
 async def create_conversation(
     conv_data: ConversationCreate,
     current_user: UserModel = Depends(get_current_user),
@@ -56,7 +56,7 @@ async def create_conversation(
     return cast(ConversationModel, conversation)
 
 
-@router_v1.delete("/{conversation_id}", status_code=status.HTTP_200_OK, tags=["conversations"])
+@router_v1.delete("/{conversation_id}", status_code=status.HTTP_200_OK, tags=["Conversations"])
 async def delete_conversation(
     conversation_id: UUID,
     current_user: UserModel = Depends(get_current_user),

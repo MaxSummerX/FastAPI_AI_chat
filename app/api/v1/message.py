@@ -33,7 +33,7 @@ memory_local = AsyncMemory(config=custom_config)
 llm = AsyncOpenAILLM(base_config_for_llm)
 
 
-@router_v1.get("/", response_model=list[MessageSchemas], status_code=status.HTTP_200_OK, tags=["messages"])
+@router_v1.get("/", response_model=list[MessageSchemas], status_code=status.HTTP_200_OK, tags=["Messages"])
 async def get_messages(
     conversation_id: UUID,
     current_user: UserModel = Depends(get_current_user),
@@ -56,7 +56,7 @@ async def get_messages(
     return list(messages)
 
 
-@router_v1.post("/", response_model=MessageSchemas, status_code=status.HTTP_201_CREATED, tags=["messages"])
+@router_v1.post("/", response_model=MessageSchemas, status_code=status.HTTP_201_CREATED, tags=["Messages"])
 async def add_message(
     conversation_id: UUID,
     message: MessageCreate,
@@ -108,7 +108,7 @@ async def add_message(
     return assistant_message
 
 
-@router_v1.post("/stream", status_code=status.HTTP_200_OK, tags=["messages"])
+@router_v1.post("/stream", status_code=status.HTTP_200_OK, tags=["Messages"])
 async def add_message_stream(
     conversation_id: UUID,
     message: MessageCreate,
