@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1 import conversation, fact, users
+from app.api.v1 import conversation, fact, prompts, users
 from app.middleware.logging import log_middleware
 from app.middleware.timing_middleware import TimingMiddleware
 
@@ -29,8 +29,9 @@ app.middleware("http")(log_middleware)
 
 # Подключаем маршруты категорий
 app.include_router(users.router_v1, prefix="/api/v1")
-app.include_router(fact.router_v1, prefix="/api/v1")
 app.include_router(conversation.router_v1, prefix="/api/v1")
+app.include_router(fact.router_v1, prefix="/api/v1")
+app.include_router(prompts.router_v1, prefix="/api/v1")
 
 
 # Главная страница
