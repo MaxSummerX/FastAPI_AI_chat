@@ -12,6 +12,7 @@ from app.models.base_model import Base
 if TYPE_CHECKING:
     from app.models.conversations import Conversation
     from app.models.facts import Fact
+    from app.models.prompts import Prompts
 
 
 class User(Base):
@@ -66,6 +67,8 @@ class User(Base):
     )
 
     facts: Mapped[list["Fact"]] = relationship("Fact", back_populates="user", cascade="all, delete-orphan")
+
+    prompts: Mapped[list["Prompts"]] = relationship("Prompts", back_populates="user", cascade="all, delete-orphan")
 
     # Индексы
     __table_args__ = (
