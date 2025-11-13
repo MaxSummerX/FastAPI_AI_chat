@@ -6,7 +6,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import conversation, fact, prompts, users
+from app.configs.settings import settings
 from app.middleware.logging import log_middleware
+from app.middleware.security_middleware import add_security_headers
 from app.middleware.timing_middleware import TimingMiddleware
 
 
@@ -19,13 +21,14 @@ app = FastAPI(title="AI chat", version="0.1.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене укажи конкретные домены
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=False,  # False для JWT аутентификации
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 app.add_middleware(TimingMiddleware)  # Замер времени
 app.middleware("http")(log_middleware)
+app.middleware("http")(add_security_headers)  # Security headers
 
 # Подключаем маршруты категорий
 app.include_router(users.router_v1, prefix="/api/v1")
