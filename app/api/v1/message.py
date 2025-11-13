@@ -16,13 +16,15 @@ from app.llms.openai import AsyncOpenAILLM
 from app.models import Conversation as ConversationModel
 from app.models import Message as MessageModel
 from app.models import User as UserModel
-from app.prompts.prompts_base import START_PROMPT
+from app.models.prompts import Prompts as PromptModel
+from app.prompts.prompts_base import BASE_PROMPT, START_PROMPT
 from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
 from app.utils.utils import (
     get_conversation_history,
     get_conversation_history_with_mem0,
     save_message_to_db_after_stream,
+    save_user_message,
 )
 
 
@@ -36,17 +38,29 @@ llm = AsyncOpenAILLM(base_config_for_llm)
 @router_v1.get("/", response_model=list[MessageSchemas], status_code=status.HTTP_200_OK, tags=["Messages"])
 async def get_messages(
     conversation_id: UUID,
-    current_user: UserModel = Depends(get_current_user),
     limit: int = 50,
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> list[MessageModel]:
     """Получить историю сообщений отдельной беседы"""
     logger.info(f"Запрос на получение беседы {conversation_id} пользователем {current_user.id}")
-    await db.scalars(select(UserModel).where(UserModel.id == current_user.id))
+
+    # Проверяем существование беседы и права доступа
+    conversation_result = await db.scalars(
+        select(ConversationModel).where(
+            ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
+        )
+    )
+    conversation = conversation_result.first()
+
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     result = await db.scalars(
         select(MessageModel)
-        .where(MessageModel.conversation_id == conversation_id)
+        .where(
+            MessageModel.conversation_id == conversation_id,
+        )
         .order_by(MessageModel.timestamp)
         .limit(limit)
     )
@@ -61,31 +75,51 @@ async def add_message(
     conversation_id: UUID,
     message: MessageCreate,
     background_tasks: BackgroundTasks,
+    prompt_id: UUID | None = None,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> MessageModel:
     """Добавить сообщение в беседу"""
     logger.info(f"Запрос на добавление сообщения в беседу {conversation_id} пользователем {current_user.id}")
-    # Проверка доступа
-    result = await db.scalars(
+
+    # Проверка доступа и существования беседы
+    conversation_result = await db.scalars(
         select(ConversationModel).where(
             ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
         )
     )
 
-    conversation = result.first()
+    conversation = conversation_result.first()
 
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    # Получаем промпт с дополнительными проверками
+    if not prompt_id:
+        prompt = BASE_PROMPT
+    else:
+        prompt_result = await db.scalars(
+            select(PromptModel).where(
+                PromptModel.id == prompt_id,
+                PromptModel.user_id == current_user.id,
+                PromptModel.is_active.is_(True),
+            )
+        )
+
+        if not prompt_result:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+
+        prompt = cast(PromptModel, prompt_result.first()).content
 
     # Сохраняем сообщение пользователя
     user_message = MessageModel(
         conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
     )
     db.add(user_message)
+    await db.flush()  # Получаем ID сообщения для background task
 
     # Получаем историю беседы
-    history = await get_conversation_history(db, conversation_id, limit=10)
+    history = await get_conversation_history(prompt, db, conversation_id, limit=10)
 
     # Отправляем запрос к llm
     assistant_response = await llm.generate_response(history)
@@ -117,9 +151,10 @@ async def add_message_stream(
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> StreamingResponse:
     """
-    Добавить сообщение в беседу и получить стриминговый
+    Добавить сообщение в беседу и получить стриминговый ответ
     """
     logger.info(f"Запрос на добавления стримингового ответа в беседу {conversation_id} пользователем {current_user.id}")
+
     # Проверка доступа и что беседа существует
     result = await db.scalars(
         select(ConversationModel).where(
@@ -139,6 +174,7 @@ async def add_message_stream(
         conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
     )
     db.add(user_message)
+    await db.flush()  # Получаем ID сообщения для background task
     await db.commit()
 
     # Передаём сообщение на извлечение фактов в mem0ai
@@ -164,6 +200,95 @@ async def add_message_stream(
 
     background_tasks.add_task(save_message_to_db_after_stream, result_awaitable, db, conversation_id, llm.config.model)
 
-    logger.info(f"Сообщение добавлено в беседу {conversation_id}")
-    # Возвращаем streming ответ
+    logger.info(f"Стриминговый ответ запущен для беседы {conversation_id}")
+    # Возвращаем streaming ответ
+    return StreamingResponse(stream, media_type="text/event-stream")
+
+
+@router_v1.post("/stream_v2", status_code=status.HTTP_200_OK, tags=["Messages"])
+async def add_message_stream_v2(
+    conversation_id: UUID,
+    message: MessageCreate,
+    background_tasks: BackgroundTasks,
+    mem0ai_on: bool = False,
+    prompt_id: UUID | None = None,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> StreamingResponse:
+    """
+    Добавить сообщение в беседу и получить стриминговый ответ
+    """
+    logger.info(f"Запрос на добавления стримингового ответа в беседу {conversation_id} пользователем {current_user.id}")
+
+    # Валидация входных данных
+    if not conversation_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    if not message.content or not message.content.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message content cannot be empty")
+
+    # Получаем промпт с улучшенными проверками
+    if not prompt_id:
+        prompt = START_PROMPT
+    else:
+        prompt_result = await db.scalars(
+            select(PromptModel).where(
+                PromptModel.id == prompt_id,
+                PromptModel.user_id == current_user.id,
+                PromptModel.is_active.is_(True),
+            )
+        )
+
+        if not prompt_result:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+
+        prompt = cast(PromptModel, prompt_result.first()).content
+
+    if mem0ai_on:
+        # Получаем историю с системным промтом и релевантными фактами для контекста
+        history = await get_conversation_history_with_mem0(
+            message=message.content,
+            user_name=current_user.username,
+            prompt=prompt,
+            db=db,
+            conversation_id=conversation_id,
+            limit=9,
+        )
+    else:
+        history = await get_conversation_history(prompt=prompt, db=db, conversation_id=conversation_id, limit=9)
+
+    # Формируем полное сообщение
+    current_msg_dict = {
+        "role": message.role,
+        "content": message.content,
+    }
+
+    full_history = history + [current_msg_dict]
+
+    # Передаём историю для генерации ответа
+    try:
+        stream, result_awaitable = await llm.generate_stream_response(messages=full_history)
+    except Exception as e:
+        logger.error(f"Ошибка при генерации стримингового ответа: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate response"
+        ) from e
+
+    # Сохраняем сообщение пользователя в фоне
+    background_tasks.add_task(
+        save_user_message,
+        db=db,
+        mem=memory_local,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+        role=message.role,
+        content=message.content,
+        model=llm.config.model,
+    )
+
+    # Сохраняем сообщение от llm в фоне
+    background_tasks.add_task(save_message_to_db_after_stream, result_awaitable, db, conversation_id, llm.config.model)
+
+    logger.info(f"Сообщение добавлено в беседу {conversation_id}, стриминг запущен")
+    # Возвращаем streaming ответ
     return StreamingResponse(stream, media_type="text/event-stream")
