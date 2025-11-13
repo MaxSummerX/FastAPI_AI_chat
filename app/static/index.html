@@ -208,15 +208,15 @@
     </div>
 
     <script>
-        // API Configuration
-        const API_BASE = 'http://192.168.3.27:8000'; // Change this to match your API endpoint
+        // API Конфигурация
+        const API_BASE = window.location.origin; // Автоматически определяет текущий домен
 
-        // State management
+        // Управление состоянием
         let authToken = null;
         let chats = [];
         let currentChatId = null;
 
-        // DOM Elements
+        // DOM Элементы
         const loginSection = document.getElementById('loginSection');
         const chatSection = document.getElementById('chatSection');
         const loginStatus = document.getElementById('loginStatus');
@@ -225,26 +225,26 @@
         const selectedChat = document.getElementById('selectedChat');
         const currentTokenDisplay = document.getElementById('currentTokenDisplay');
 
-        // Event Listeners
+        // Обработчики событий
         document.getElementById('loginBtn').addEventListener('click', login);
         document.getElementById('useTokenBtn').addEventListener('click', useToken);
         document.getElementById('createChatBtn').addEventListener('click', createChat);
         document.getElementById('refreshChatsBtn').addEventListener('click', loadChats);
         document.getElementById('sendBtn').addEventListener('click', sendMessage);
 
-        // Event listeners for dropdown and input changes
+        // Обработчики событий для выпадающего списка и изменений ввода
         selectedChat.addEventListener('change', function() {
             currentChatId = this.value;
             document.getElementById('sendBtn').disabled = !currentChatId;
             if (currentChatId) {
                 loadChatHistory(currentChatId);
             } else {
-                // Clear chat when no chat is selected
+                // Очистить чат когда ни один чат не выбран
                 chatMessages.innerHTML = '<div class="message assistant-message">Welcome! Please create a chat or select an existing one to start.</div>';
             }
         });
 
-        // Login function
+        // Функция входа в систему
         async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -290,7 +290,7 @@
             }
         }
 
-        // Use existing token
+        // Использовать существующий токен
         function useToken() {
             const token = document.getElementById('tokenInput').value.trim();
 
@@ -304,13 +304,12 @@
             showStatus(loginStatus, 'Token set successfully!', 'success');
             loginSection.classList.add('hidden');
             chatSection.classList.remove('hidden');
-            streamingSection.classList.remove('hidden');
 
             // Load chats after setting token
             loadChats();
         }
 
-        // Create new chat
+        // Создать новый чат
         async function createChat() {
             const title = document.getElementById('newChatTitle').value.trim();
 
@@ -357,7 +356,7 @@
             }
         }
 
-        // Load list of chats
+        // Загрузить список чатов
         async function loadChats() {
             try {
                 const response = await fetch(`${API_BASE}/api/v1/conversations/`, {
