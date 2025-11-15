@@ -12,7 +12,6 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
-from typing import cast
 
 from sqlalchemy import select
 
@@ -45,13 +44,13 @@ async def generate_invite_codes(count: int = 1) -> list[str]:
         return codes
 
 
-async def list_unused_codes() -> list[InviteModel]:
+async def list_unused_codes() -> list[str]:
     """Показывает все неиспользованные коды"""
 
     async with async_session_maker() as session:
         result = await session.scalars(select(InviteModel.code).where(InviteModel.is_used.is_(False)))
 
-        codes = result.all()
+        codes: list[str] = result.all()
 
         if codes:
             print(f"📋 Неиспользованные коды ({len(codes)}):")
@@ -60,7 +59,7 @@ async def list_unused_codes() -> list[InviteModel]:
         else:
             print("❌ Нет неиспользованных кодов")
 
-        return cast(list[InviteModel], codes)
+        return codes
 
 
 async def main() -> None:
