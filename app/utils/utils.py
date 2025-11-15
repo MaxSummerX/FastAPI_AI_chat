@@ -4,7 +4,6 @@ from collections.abc import Awaitable
 from uuid import UUID
 
 from loguru import logger
-from mem0 import AsyncMemory
 from sqlalchemy import select
 
 from app.database.postgres_db import AsyncSession
@@ -30,10 +29,10 @@ def extract_json(text: str) -> str:
 
 def parse_facts_from_mem0(memory: dict) -> str:
     data = [
-        "Факты\n",
+        "\nФакты о пользователе:",
     ]
     for item in memory["results"]:
-        if item["score"] >= 0.75:
+        if item["score"] >= 0.65:  # TODO: Лучше продумать работу системы со score
             data.append(" -" + item["memory"] + " - " + item["created_at"][:16])
 
     new_data = "\n".join(data)
@@ -60,7 +59,7 @@ async def get_conversation_history(prompt: str, db: AsyncSession, conversation_i
 
 
 async def get_conversation_history_with_mem0(
-    message: str, user_name: str, prompt: str, db: AsyncSession, conversation_id: UUID, limit: int = 10
+    message: str, user_id: UUID, prompt: str, db: AsyncSession, conversation_id: UUID, limit: int = 10
 ) -> list[dict]:
     """Получить историю в формате для LLM"""
     start = time.time()
@@ -78,12 +77,14 @@ async def get_conversation_history_with_mem0(
 
     mem_start = time.time()
     async with get_memory() as memory:
-        memory = await memory.search(message, user_id=str(user_name), limit=10)
+        facts = await memory.search(message, user_id=user_id, limit=10)
     mem_time = time.time() - mem_start
 
     total_time = time.time() - start
-    logger.info(f"БД: {db_time:.3f}s, Mem0: {mem_time:.3f}s, Всего: {total_time:.3f}s")
-    new_prompt = prompt + parse_facts_from_mem0(memory)
+    logger.info(
+        f"Кол-во Фактов: {len(facts['results'])}, БД: {db_time:.3f}s, Mem0: {mem_time:.3f}s, Всего: {total_time:.3f}s"
+    )
+    new_prompt = prompt + parse_facts_from_mem0(facts)
 
     # Нормализуем через Pydantic
     history = [HistoryMessage.model_validate(msg).model_dump(mode="json") for msg in reversed(messages)]
@@ -92,10 +93,10 @@ async def get_conversation_history_with_mem0(
     return [{"role": "system", "content": new_prompt}] + history
 
 
-async def save_message_to_db(db: AsyncSession, conversation_id: UUID, content: str, model: str) -> None:
-    """Сохранение сообщения от llm в БД"""
-    assistant_message = MessageModel(conversation_id=conversation_id, role="assistant", content=content, model=model)
-    db.add(assistant_message)
+async def save_message_to_db(db: AsyncSession, role: str, conversation_id: UUID, content: str, model: str) -> None:
+    """Сохранение сообщения в БД"""
+    message = MessageModel(conversation_id=conversation_id, role=role, content=content, model=model)
+    db.add(message)
     await db.commit()
 
 
@@ -113,23 +114,3 @@ async def save_message_to_db_after_stream(
     db.add(assistant_message)
 
     await db.commit()
-
-
-async def save_user_message(
-    db: AsyncSession, mem: AsyncMemory, conversation_id: UUID, user_id: UUID, role: str, content: str, model: str
-) -> None:
-    """
-    Сохранение сообщения от пользователя в БД и передача в mem0ai для извлечения фактов
-    """
-    # Создаем и сохраняем сообщение пользователя
-    user_message = MessageModel(conversation_id=conversation_id, role=role, content=content, model=model)
-    db.add(user_message)
-    await db.commit()
-    await db.refresh(user_message)
-
-    # Передаем сообщение в mem0ai для извлечения фактов
-    await mem.add(
-        messages=[{"role": role, "content": content}],
-        user_id=str(user_id),
-        run_id=str(user_message.id),
-    )
