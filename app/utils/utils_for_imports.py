@@ -1,5 +1,6 @@
 import asyncio
 import json
+import uuid
 from typing import Any, cast
 
 from mem0 import AsyncMemory
@@ -11,6 +12,7 @@ from app.database.postgres_db import async_session_maker
 from app.llms.openai import AsyncOpenAILLM
 from app.models import Conversation as ConversationModel
 from app.models import Fact as FactModel
+from app.models import Message as MessageModel
 from app.prompts.prompts_for_parse import PARSE_CATEGORY
 
 
@@ -28,20 +30,22 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
     facts = await memory_local.get_all(user_id=user_id)
 
     # Через цикл проверяем все факты
-    for fact in facts["results"][:10]:
+    for fact in facts["results"]:
         # Выделяем из факта id беседы
-        conversation_id = fact["run_id"]
+        message_id = uuid.UUID(fact["run_id"])
 
         # Подключаем асинхронную сессию
         async with async_session_maker() as session:
-            # Подгружаем из бд соответсвующую беседу
+            # Подгружаем из бд соответсвующую сообщение
+            message_db = await session.scalar(select(MessageModel).where(MessageModel.id == message_id))
+
             conversation = await session.scalar(
-                select(ConversationModel).where(ConversationModel.id == conversation_id)
+                select(ConversationModel).where(ConversationModel.id == message_db.conversation_id)
             )
 
             # Проверяем что беседа существует
-            if not conversation:
-                print(f"Conversation не найдена: {conversation_id}")
+            if not message_db:
+                print(f"Conversation не найдена: {message_id}")
                 continue
 
             # Подгружаем из бд соответсвующую факт
@@ -87,6 +91,7 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
                     category=category_value,
                     source_type="imported",
                     source_conversation_id=conversation.id,
+                    source_message_id=message_db.id,
                 )
                 # Добавляем в сессию
                 session.add(new_fact)
@@ -95,4 +100,4 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
                 print(f"✓ Факт создан: {new_fact.id}")
 
 
-asyncio.run(import_from_mem0ai_to_postgres_db("maxsummer"))
+asyncio.run(import_from_mem0ai_to_postgres_db("test_user"))
