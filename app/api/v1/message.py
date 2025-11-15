@@ -17,14 +17,13 @@ from app.models import Conversation as ConversationModel
 from app.models import Message as MessageModel
 from app.models import User as UserModel
 from app.models.prompts import Prompts as PromptModel
-from app.prompts.prompts_base import BASE_PROMPT, START_PROMPT
+from app.prompts.prompts_base import START_PROMPT
 from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
 from app.utils.utils import (
     get_conversation_history,
     get_conversation_history_with_mem0,
     save_message_to_db_after_stream,
-    save_user_message,
 )
 
 
@@ -96,7 +95,7 @@ async def add_message(
 
     # Получаем промпт с дополнительными проверками
     if not prompt_id:
-        prompt = BASE_PROMPT
+        prompt = START_PROMPT
     else:
         prompt_result = await db.scalars(
             select(PromptModel).where(
@@ -181,14 +180,14 @@ async def add_message_stream(
     background_tasks.add_task(
         memory_local.add,
         messages=[message.model_dump()],
-        user_id=current_user.username,
+        user_id=str(current_user.id),
         run_id=str(user_message.id),
     )
 
     # Получаем историю с системным промтом и релевантными фактами для контекста
     history = await get_conversation_history_with_mem0(
         message=message.content,
-        user_name=current_user.username,
+        user_id=current_user.id,
         prompt=START_PROMPT,
         db=db,
         conversation_id=conversation_id,
@@ -227,10 +226,16 @@ async def add_message_stream_v2(
     if not message.content or not message.content.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message content cannot be empty")
 
+    # Сохраняем сообщение пользователя
+    user_message = MessageModel(
+        conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
+    )
+    db.add(user_message)
+    await db.flush()  # Получаем ID сообщения для background task
+    await db.commit()
+
     # Получаем промпт с улучшенными проверками
-    if not prompt_id:
-        prompt = START_PROMPT
-    else:
+    if prompt_id:
         prompt_result = await db.scalars(
             select(PromptModel).where(
                 PromptModel.id == prompt_id,
@@ -243,47 +248,37 @@ async def add_message_stream_v2(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
 
         prompt = cast(PromptModel, prompt_result.first()).content
+    else:
+        prompt = START_PROMPT
 
     if mem0ai_on:
         # Получаем историю с системным промтом и релевантными фактами для контекста
         history = await get_conversation_history_with_mem0(
             message=message.content,
-            user_name=current_user.username,
+            user_id=current_user.id,
             prompt=prompt,
             db=db,
             conversation_id=conversation_id,
-            limit=9,
+            limit=10,
         )
     else:
-        history = await get_conversation_history(prompt=prompt, db=db, conversation_id=conversation_id, limit=9)
-
-    # Формируем полное сообщение
-    current_msg_dict = {
-        "role": message.role,
-        "content": message.content,
-    }
-
-    full_history = history + [current_msg_dict]
+        history = await get_conversation_history(prompt=prompt, db=db, conversation_id=conversation_id, limit=10)
 
     # Передаём историю для генерации ответа
     try:
-        stream, result_awaitable = await llm.generate_stream_response(messages=full_history)
+        stream, result_awaitable = await llm.generate_stream_response(messages=history)
     except Exception as e:
         logger.error(f"Ошибка при генерации стримингового ответа: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate response"
         ) from e
 
-    # Сохраняем сообщение пользователя в фоне
+    # Создаём фоновую задачу для работы mem0ai
     background_tasks.add_task(
-        save_user_message,
-        db=db,
-        mem=memory_local,
-        conversation_id=conversation_id,
-        user_id=current_user.id,
-        role=message.role,
-        content=message.content,
-        model=llm.config.model,
+        memory_local.add,
+        messages=[message.model_dump()],
+        user_id=str(current_user.id),
+        run_id=str(user_message.id),
     )
 
     # Сохраняем сообщение от llm в фоне
