@@ -43,6 +43,11 @@ async def root() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/chat", include_in_schema=False)
+async def chat() -> FileResponse:
+    return FileResponse(STATIC_DIR / "chat.html")
+
+
 # Статические ресурсы
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
