@@ -4,6 +4,7 @@ from typing import cast
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from loguru import logger
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,7 @@ from app.auth.auth import create_access_token, create_refresh_token, hash_passwo
 from app.auth.dependencies import get_current_user
 from app.auth.jwt_config import ALGORITHM, SECRET_KEY
 from app.depends.db_depends import get_async_postgres_db
+from app.models.invites import Invite as InviteModel
 from app.models.users import User as UserModel
 from app.schemas.users import UserRegister, UserUpdateProfile
 from app.schemas.users import UserResponseBase as UserBaseSchema
@@ -65,16 +67,22 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async
     return user
 
 
-@router_v1.post("/register_v2", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
+@router_v1.post("/register_with_invite", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
 async def register_with_invite(
-    invite: str, user: UserRegister, db: AsyncSession = Depends(get_async_postgres_db)
+    invite_code: str, user: UserRegister, db: AsyncSession = Depends(get_async_postgres_db)
 ) -> UserModel:
     """
-    Регистрирует нового пользователя с использованием приглашения.
+    Регистрирует нового пользователя с использованием invite кода.
     """
 
-    if invite != "0001":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid invitation code")
+    # Проверяем валидность invite кода
+    invite = await db.scalars(
+        select(InviteModel).where(InviteModel.code == invite_code, InviteModel.is_used.is_(False))
+    )
+    invite = invite.first()
+
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or used invitation code")
 
     # Проверяем уникальность username
     result_username = await db.scalars(select(UserModel).where(UserModel.username == user.username))
@@ -91,7 +99,16 @@ async def register_with_invite(
 
     # Добавляем в сессию и сохранение в базе
     db.add(user)
+    await db.flush()  # Получаем ID пользователя без коммита
+
+    # Помечаем invite как использованный
+    invite.is_used = True
+    invite.used_by_user_id = user.id
+    invite.used_at = datetime.now(UTC)
+
     await db.commit()
+
+    logger.info(f"Invite {invite_code} used by user {user.email}")
     return user
 
 
