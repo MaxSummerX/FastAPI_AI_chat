@@ -251,7 +251,9 @@ async def add_message_stream_v2(
     else:
         prompt = START_PROMPT
 
-    if mem0ai_on:
+    if not mem0ai_on:
+        history = await get_conversation_history(prompt=prompt, db=db, conversation_id=conversation_id, limit=10)
+    else:
         # Получаем историю с системным промтом и релевантными фактами для контекста
         history = await get_conversation_history_with_mem0(
             message=message.content,
@@ -261,9 +263,6 @@ async def add_message_stream_v2(
             conversation_id=conversation_id,
             limit=10,
         )
-    else:
-        history = await get_conversation_history(prompt=prompt, db=db, conversation_id=conversation_id, limit=10)
-
     # Передаём историю для генерации ответа
     try:
         stream, result_awaitable = await llm.generate_stream_response(messages=history)
