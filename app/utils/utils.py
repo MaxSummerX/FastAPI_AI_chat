@@ -77,7 +77,7 @@ async def get_conversation_history_with_mem0(
 
     mem_start = time.time()
     async with get_memory() as memory:
-        facts = await memory.search(message, user_id=user_id, limit=10)
+        facts = await memory.search(message, user_id=str(user_id), limit=10)
     mem_time = time.time() - mem_start
 
     total_time = time.time() - start
