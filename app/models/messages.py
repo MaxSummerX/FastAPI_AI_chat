@@ -36,6 +36,11 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
+    # import
+    source: Mapped[str | None] = mapped_column(String(20), default=None)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(types.Uuid, default=None)
+    is_imported: Mapped[bool] = mapped_column(default=False, nullable=True)
+
     tokens_used: Mapped[int | None] = mapped_column()
     model: Mapped[str] = mapped_column(String(50))
 

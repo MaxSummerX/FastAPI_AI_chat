@@ -29,6 +29,11 @@ class Conversation(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
 
+    # import
+    source: Mapped[str | None] = mapped_column(String(20), default=None)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(types.Uuid, default=None)
+    is_imported: Mapped[bool] = mapped_column(default=False, nullable=True)
+
     user: Mapped["User"] = relationship("User", back_populates="conversations")
 
     messages: Mapped[list["Message"]] = relationship(
