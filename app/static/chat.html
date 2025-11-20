@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastAPI AI Чат - Раздельный интерфейс с Refresh Token</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <title>FastAPI AI Чат</title>
+    <link rel="icon" type="image/x-icon" href="static/favicon.ico">
     <style>
         :root {
             --primary-color: #2563eb;
@@ -1078,14 +1078,11 @@
             refreshIndicator.classList.remove('hidden');
 
             try {
-                const response = await fetch(`${API_BASE}/api/v1/user/refresh`, {
+                const response = await fetch(`${API_BASE}/api/v1/user/refresh-token?refresh_token=${encodeURIComponent(refreshToken)}`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        refresh_token: refreshToken
-                    })
+                        'Content-Type': 'application/json'
+                    }
                 });
 
                 if (response.ok) {
