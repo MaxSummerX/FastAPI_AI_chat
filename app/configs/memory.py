@@ -19,7 +19,7 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Создаём путь к директории для db mem0ai
-STORAGE_DIR = PROJECT_ROOT / "app" / "storage" / "mem0ai"
+STORAGE_DIR = PROJECT_ROOT / "storage" / "mem0ai"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Путь к конкретному файлу БД
