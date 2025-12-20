@@ -11,7 +11,7 @@ from app.database.postgres_db import async_session_maker
 from app.models.conversations import Conversation as ConversationModel
 from app.models.messages import Message as MessageModel
 from app.models.messages import MessageRole
-from app.utils.split_conversations_async import split_conversations_async
+from app.utils.claude_split_conversations_async import split_conversations_async
 
 
 async def convert(user_id: UUID, provider: str, path: Path, input_file: str, output_dir: str) -> None:
