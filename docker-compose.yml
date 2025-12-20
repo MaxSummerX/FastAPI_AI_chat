@@ -77,7 +77,6 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./init-auth-user.sh:/docker-entrypoint-initdb.d/init-auth-user.sh
       - ./storage/postgres/data:/var/lib/postgresql/data
     env_file:
       - .env
