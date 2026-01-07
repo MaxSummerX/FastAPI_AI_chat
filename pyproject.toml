@@ -2,6 +2,9 @@
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["app"]
+
 [project]
 name = "FastAPI_AI_chat"
 version = "0.1.0"
@@ -28,6 +31,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "python-multipart>=0.0.20",
     "rank-bm25>=0.2.2",
+    "redis>=7.1.0",
     "sqlalchemy[asyncio]>=2.0.44",
     "uvicorn[standard]>=0.38.0",
 ]
