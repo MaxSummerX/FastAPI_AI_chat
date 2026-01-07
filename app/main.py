@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1 import conversation, fact, prompts, upload, users
+from app.api.v1 import conversation, fact, prompts, tools, upload, users
 from app.configs.settings import settings
 from app.middleware.logging import log_middleware
 from app.middleware.security_middleware import add_security_headers
@@ -36,6 +36,7 @@ app.include_router(conversation.router_v1, prefix="/api/v1")
 app.include_router(fact.router_v1, prefix="/api/v1")
 app.include_router(prompts.router_v1, prefix="/api/v1")
 app.include_router(upload.router_v1, prefix="/api/v1")
+app.include_router(tools.router_V1, prefix="/api/v1")
 
 
 # Главная страница
