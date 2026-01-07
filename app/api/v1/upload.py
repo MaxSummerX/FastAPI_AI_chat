@@ -6,8 +6,10 @@ import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 
 from app.auth.dependencies import get_current_user
+from app.enum.providers import ImportedProvider
 from app.models.users import User as UserModel
 from app.utils.claude_history_converter import convert
+from app.utils.gpt_converter import convert_gtp
 
 
 router_v1 = APIRouter(prefix="/upload", tags=["Imports"])
@@ -30,7 +32,7 @@ ALLOWED_FILE_EXTENSIONS = [".json"]
 
 @router_v1.post("/conversations_import/")
 async def conversations_import(
-    provider: str,
+    provider: ImportedProvider,
     background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     file: UploadFile = File(...),
@@ -78,15 +80,25 @@ async def conversations_import(
         split_dialogs_dir = f"dialogs_user_{current_user.id}"
         split_dialogs_location = CONVERSATION_DIR / split_dialogs_dir
 
-        # Создаём фоновую задачу для выделения диалогов и их записи в бд
-        background_tasks.add_task(
-            convert,
-            user_id=current_user.id,
-            provider=provider,
-            path=split_dialogs_location,
-            input_file=str(original_filename_location),
-            output_dir=str(split_dialogs_location),
-        )
+        if provider == ImportedProvider.GPT:
+            background_tasks.add_task(
+                convert_gtp,
+                user_id=current_user.id,
+                provider=provider,
+                path=split_dialogs_location,
+                input_file=str(original_filename_location),
+                output_dir=str(split_dialogs_location),
+            )
+        elif provider == ImportedProvider.CLAUDE:
+            # Создаём фоновую задачу для выделения диалогов и их записи в бд
+            background_tasks.add_task(
+                convert,
+                user_id=current_user.id,
+                provider=provider,
+                path=split_dialogs_location,
+                input_file=str(original_filename_location),
+                output_dir=str(split_dialogs_location),
+            )
 
         return {
             "filename": file.filename,
