@@ -27,6 +27,7 @@ async def get_base_user_info(current_user: UserModel = Depends(get_current_user)
     """
     Возвращает основную информацию о пользователе
     """
+    logger.info(f"Запрос базовой информации пользователя: {current_user.id}")
     return current_user
 
 
@@ -58,13 +59,15 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async
     if result_email.first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
+    # Хэшируем пароль
+    hashed_password = hash_password(user.password)
     # Создание объекта пользователя с хешированием пароля
-    user = UserModel(username=user.username, email=user.email, password_hash=hash_password(user.password))
+    new_user = UserModel(username=user.username, email=user.email, password_hash=hashed_password)
 
     # Добавляем в сессию и сохранение в базе
-    db.add(user)
+    db.add(new_user)
     await db.commit()
-    return user
+    return new_user
 
 
 @router_v1.post("/register_with_invite", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
