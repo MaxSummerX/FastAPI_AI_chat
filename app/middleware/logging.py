@@ -6,7 +6,14 @@ from fastapi.responses import JSONResponse, Response
 from loguru import logger
 
 
-logger.add("log_info.log", format="Log: [{extra[log_id]}:{time} - {level} - {message}]", level="INFO", enqueue=True)
+logger.add(
+    "log_info.log",
+    format="Log: [{extra[log_id]}:{time} - {level} - {message}]",
+    level="INFO",
+    enqueue=True,
+    backtrace=True,
+    diagnose=True,
+)
 
 
 async def log_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
