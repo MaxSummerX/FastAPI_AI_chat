@@ -1,37 +1,66 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from loguru import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.depends.db_depends import get_async_postgres_db
+from app.enum.experience import Experience
+from app.models import Vacancy as VacancyModel
 from app.models.users import User as UserModel
-from app.tools.headhunter.find_vacancies import fetch_all_hh_vacancies, fetch_full_vacancy
+from app.tools.headhunter.find_vacancies import import_vacancies
 from app.tools.invite.invite_tools import generate_invite_codes, list_unused_codes
 
 
 router_V1 = APIRouter(prefix="/tools", tags=["Tools"])
 
 
-@router_V1.get("/vacancies/{id_vacancies}", status_code=status.HTTP_200_OK)
-async def vacancies(id_vacancies: str, current_user: UserModel = Depends(get_current_user)) -> dict[str, Any]:
+@router_V1.get("/vacancies/{id_vacancy}", status_code=status.HTTP_200_OK)
+async def vacancies(
+    id_vacancy: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> dict[str, Any] | None:
     """
-    Получается информацию о вакансии по id
+    Получается raw_data о вакансии по hh_id из базы данных сервиса
     """
-    logger.info(f"Получен запрос на выгрузку информации о вакансии id: {id_vacancies}")
-    result = await fetch_full_vacancy(id_vacancies)
+    result = await db.scalars(
+        select(VacancyModel.raw_data).where(VacancyModel.user_id == current_user.id, VacancyModel.hh_id == id_vacancy)
+    )
+    logger.info(f"Пользователь {current_user.email} запросил raw_data о вакансии hh_id: {id_vacancy}")
+    raw_data: dict[str, Any] | None = result.one_or_none()
+    return raw_data
 
-    return result
 
+@router_V1.get("/import_vacancies", status_code=status.HTTP_200_OK)
+async def save_all_vacancies(
+    query: str,
+    background_tasks: BackgroundTasks,
+    tiers: list[Experience] | None = Query(
+        None,
+        description="Фильтрация по уровню опыта. Можно выбрать несколько значений. Если не указано - возвращаются все вакансии.",
+    ),
+    db: AsyncSession = Depends(get_async_postgres_db),
+    current_user: UserModel = Depends(get_current_user),
+) -> dict[str, str]:
+    """
+    Выгружает с hh.ru вакансии по поисковому запросу в бд.
+    запрос -> django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado
 
-@router_V1.get("/vacancies", status_code=status.HTTP_200_OK)
-async def fetch_vacancies(query: str, current_user: UserModel = Depends(get_current_user)) -> dict:
+    Фильтрация сохранения вакансий по уровню опыта.
+
+    Доступные значения tier:
+    - noExperience: Без опыта
+    - between1And3: От 1 до 3 лет
+    - between3And6: От 3 до 6 лет
+    - moreThan6: Более 6 лет
     """
-    Выгружает вакансии по поисковому запросу в json файл.
-    запрос -> django OR fastapi OR aiohttp OR litestar OR flask
-    """
-    logger.info(f"Получен запрос с параметром st: '{query}'")
-    result = await fetch_all_hh_vacancies(query)
-    return result
+
+    background_tasks.add_task(import_vacancies, query=query, tiers=tiers, user_id=current_user.id, session=db)
+
+    return {"message": f"Импорт вакансий по запросу '{query}' запущен в фоновом режиме"}
 
 
 @router_V1.get("/generate_code", status_code=status.HTTP_200_OK)
