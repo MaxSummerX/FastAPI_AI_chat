@@ -11,8 +11,8 @@ from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
 from app.models import Conversation as ConversationModel
 from app.models import User as UserModel
-from app.schemas.coversations import ConversationCreate
-from app.schemas.coversations import ConversationResponse as ConversationSchemas
+from app.schemas.conversations import ConversationCreate
+from app.schemas.conversations import ConversationResponse as ConversationSchemas
 
 
 router_v1 = APIRouter(prefix="/conversations")

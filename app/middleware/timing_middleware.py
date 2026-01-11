@@ -24,7 +24,7 @@ class TimingMiddleware:
                 log_line = (
                     f"Endpoint {scope['raw_path']}. Date {timestamp}. Request duration: {duration:.10f} seconds\n"
                 )
-                async with aiofiles.open("log_timing.txt", "a", encoding="utf-8") as file:
+                async with aiofiles.open("log_timing.log", "a", encoding="utf-8") as file:
                     await file.write(log_line)
             await send(message)
 
