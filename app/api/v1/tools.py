@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, cast
+from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from app.depends.db_depends import get_async_postgres_db
 from app.enum.experience import Experience
 from app.models import Vacancy as VacancyModel
 from app.models.users import User as UserModel
+from app.schemas.vacancies import VacancyResponse
 from app.tools.headhunter.find_vacancies import import_vacancies
 from app.tools.invite.invite_tools import generate_invite_codes, list_unused_codes
 
@@ -17,9 +19,9 @@ from app.tools.invite.invite_tools import generate_invite_codes, list_unused_cod
 router_V1 = APIRouter(prefix="/tools", tags=["Tools"])
 
 
-@router_V1.get("/vacancies/{id_vacancy}", status_code=status.HTTP_200_OK)
-async def vacancies(
-    id_vacancy: str,
+@router_V1.get("/vacancies_hh/{hh_id_vacancy}", status_code=status.HTTP_200_OK)
+async def hh_vacancy(
+    hh_id_vacancy: str,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> dict[str, Any] | None:
@@ -27,11 +29,32 @@ async def vacancies(
     Получается raw_data о вакансии по hh_id из базы данных сервиса
     """
     result = await db.scalars(
-        select(VacancyModel.raw_data).where(VacancyModel.user_id == current_user.id, VacancyModel.hh_id == id_vacancy)
+        select(VacancyModel.raw_data).where(
+            VacancyModel.user_id == current_user.id, VacancyModel.hh_id == hh_id_vacancy
+        )
     )
-    logger.info(f"Пользователь {current_user.email} запросил raw_data о вакансии hh_id: {id_vacancy}")
+    logger.info(f"Пользователь {current_user.email} запросил raw_data о вакансии hh_id: {hh_id_vacancy}")
     raw_data: dict[str, Any] | None = result.one_or_none()
     return raw_data
+
+
+@router_V1.get("/vacancies/{id_vacancy}", status_code=status.HTTP_200_OK)
+async def get_vacancy(
+    id_vacancy: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> VacancyResponse:
+    logger.info(f"Запрос на получение вакансии {id_vacancy} пользователя {current_user.id}")
+    result = await db.execute(
+        select(VacancyModel).where(VacancyModel.user_id == current_user.id, VacancyModel.id == id_vacancy)
+    )
+
+    vacancy = cast(VacancyModel, result.scalar_one_or_none())
+
+    if not vacancy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Вакансия не найдена")
+
+    return cast(VacancyResponse, VacancyResponse.model_validate(vacancy))
 
 
 @router_V1.get("/import_vacancies", status_code=status.HTTP_200_OK)
