@@ -17,14 +17,15 @@ from app.models.vacancies import Vacancy
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+TEMP_DIR = BASE_DIR / "temp_files"
 
 HH_API_URL = "https://api.hh.ru/vacancies"
 HH_MAX_PAGES = 20  # Максимальное количество страниц для пагинации
 HH_REQUEST_DELAY = 0.4  # Задержка между запросами в секундах (rate limiting)
 HH_CONCURRENT_REQUESTS = 5  # Количество одновременных запросов
 
-DEFAULT_VACANCIES_FILE = BASE_DIR / "vacancies.json"
-DEFAULT_FILTERED_VACANCIES_FILE = BASE_DIR / "filtered_vacancies.json"
+DEFAULT_VACANCIES_FILE = TEMP_DIR / "vacancies.json"
+DEFAULT_FILTERED_VACANCIES_FILE = TEMP_DIR / "filtered_vacancies.json"
 
 
 async def fetch_full_vacancy(vacancy_id: str, url: str = HH_API_URL) -> dict[str, Any]:
