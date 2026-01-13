@@ -12,11 +12,21 @@ from app.enum.experience import Experience
 from app.models import Vacancy as VacancyModel
 from app.models.users import User as UserModel
 from app.schemas.vacancies import VacancyResponse
+from app.tools.ai_research.ai_scan import analyze_vacancy_from_db
 from app.tools.headhunter.find_vacancies import import_vacancies
 from app.tools.invite.invite_tools import generate_invite_codes, list_unused_codes
 
 
 router_V1 = APIRouter(prefix="/tools", tags=["Tools"])
+
+
+@router_V1.get("/ai_analysis", status_code=status.HTTP_200_OK)
+async def ai_analysis(
+    id_vacancy: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> str | dict[str, Any] | None:
+    return await analyze_vacancy_from_db(vacancy_id=id_vacancy, user_id=current_user.id, session=db)
 
 
 @router_V1.get("/vacancies_hh/{hh_id_vacancy}", status_code=status.HTTP_200_OK)
