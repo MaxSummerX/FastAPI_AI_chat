@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1 import message
@@ -11,7 +11,7 @@ from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
 from app.models import Conversation as ConversationModel
 from app.models import User as UserModel
-from app.schemas.conversations import ConversationCreate
+from app.schemas.conversations import ConversationCreate, ConversationUpdate
 from app.schemas.conversations import ConversationResponse as ConversationSchemas
 
 
@@ -51,6 +51,36 @@ async def create_conversation(
 
     logger.info(f"Создана беседа {conversation.id} для пользователя {current_user.id}")
 
+    return cast(ConversationModel, conversation)
+
+
+@router_v1.patch(
+    "/{conversation_id}", response_model=ConversationSchemas, status_code=status.HTTP_200_OK, tags=["Conversations"]
+)
+async def update_conversation(
+    conversation_id: UUID,
+    conversation_data: ConversationUpdate,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> ConversationModel:
+    """Переименовать беседу или отправить её в архив"""
+    logger.info(f"Запрос на обновление беседы {conversation_id} пользователя {current_user.id}")
+
+    result = await db.execute(
+        update(ConversationModel)
+        .where(ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id)
+        .values(**conversation_data.model_dump(exclude_unset=True, by_alias=False))
+        .returning(ConversationModel)
+    )
+
+    conversation = result.scalar_one_or_none()
+
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fact not found")
+
+    await db.commit()
+    await db.refresh(conversation)
+    logger.info(f"Изменены данные беседы {conversation.id} для пользователя {current_user.id}")
     return cast(ConversationModel, conversation)
 
 

@@ -13,6 +13,16 @@ class ConversationCreate(BaseModel):
     title: str | None = Field(None, min_length=3, max_length=50, description="Название беседы")
 
 
+class ConversationUpdate(BaseModel):
+    """
+    Схема для обновления беседы.
+    Используется в PATCH-запросах.
+    """
+
+    title: str | None = Field(None, description="Название беседы")
+    is_archived: bool = Field(False, description="Архивная беседа")
+
+
 class ConversationResponse(BaseModel):
     """
     Схема для ответа с основными данными беседы.
