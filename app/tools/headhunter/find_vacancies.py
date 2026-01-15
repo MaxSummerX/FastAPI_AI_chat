@@ -1,5 +1,10 @@
+"""
+Модуль для импорта вакансий с HeadHunter.ru
+"""
+
 import asyncio
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -248,11 +253,18 @@ async def filtered_vacancies(
         logger.info(f"✅ Найдено {len(result)} вакансий из {len(vacancies)}")
 
         # Создаём директорию если нужно
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        output_path_obj = Path(output_path)
+        output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+
+        # Создаём временный путь для атомарной записи
+        temp_output_path = output_path_obj.with_suffix(f"{output_path_obj.suffix}.tmp")
 
         # Запись результата
-        async with aiofiles.open(output_path, mode="w", encoding="utf-8") as file:
+        async with aiofiles.open(temp_output_path, mode="w", encoding="utf-8") as file:
             await file.write(json.dumps(result, indent=2, ensure_ascii=False))
+
+        # Атомарно переименование на оригинальный название
+        shutil.move(temp_output_path, output_path)
 
         logger.info(f"💾 Результат сохранён в: {output_path}")
 
