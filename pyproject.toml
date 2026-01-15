@@ -40,6 +40,9 @@ dependencies = [
 dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.1",
+    "aiosqlite>=0.20.0",
     "mypy>=1.18.2",
     "ruff>=0.14.0",
     "pre-commit>=4.3.0",
@@ -84,4 +87,26 @@ exclude = [
     '__pycache__',
     'alembic/',
     'app/migration/'
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
 ]
