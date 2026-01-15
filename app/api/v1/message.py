@@ -184,7 +184,7 @@ async def add_message_stream(
         run_id=str(user_message.id),
     )
 
-    # Получаем историю с системным промтом и релевантными фактами для контекста
+    # Получаем историю с системным промптом и релевантными фактами для контекста
     history = await get_conversation_history_with_mem0(
         message=message.content,
         user_id=current_user.id,
@@ -243,22 +243,28 @@ async def add_message_stream_v2(
                 PromptModel.is_active.is_(True),
             )
         )
+        prompt = prompt_result.first()
+        logger.info(f"Поиск промпта: id={prompt_id}, найден={prompt is not None}")
+        if not prompt:
+            logger.warning(f"Промпт не найден: id={prompt_id}, пользователь={current_user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Prompt with id={prompt_id} not found or not accessible"
+            )
 
-        if not prompt_result:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
-
-        prompt = cast(PromptModel, prompt_result.first()).content
+        prompt_content = prompt.content
     else:
-        prompt = START_PROMPT
+        prompt_content = START_PROMPT
 
     if not mem0ai_on:
-        history = await get_conversation_history(prompt=prompt, db=db, conversation_id=conversation_id, limit=10)
+        history = await get_conversation_history(
+            prompt=prompt_content, db=db, conversation_id=conversation_id, limit=10
+        )
     else:
-        # Получаем историю с системным промтом и релевантными фактами для контекста
+        # Получаем историю с системным промптом и релевантными фактами для контекста
         history = await get_conversation_history_with_mem0(
             message=message.content,
             user_id=current_user.id,
-            prompt=prompt,
+            prompt=prompt_content,
             db=db,
             conversation_id=conversation_id,
             limit=10,
