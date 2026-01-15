@@ -5,14 +5,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
-class UserRegister(BaseModel):
+class BaseUser(BaseModel):
     """
-    Схема для регистрации пользователя.
-    Используется в POST-запросах.
+    Базовая схема пользователя для работы паролями
     """
 
-    username: str = Field(..., min_length=3, max_length=50, description="Имя пользователя")
-    email: EmailStr = Field(..., max_length=255, description="Email пользователя")
     password: str = Field(..., min_length=8, max_length=255, description="Пароль (минимум 8 символов)")
 
     @field_validator("password")
@@ -48,16 +45,34 @@ class UserRegister(BaseModel):
         return value
 
 
-class UserUpdateAuth(BaseModel):
-    # TODO: Переработать класс для обновления данных авторизации, нужно атомизировать на отдельные параметры и сделать отдельные endpoints для каждого параметра
+class UserRegister(BaseUser):
     """
-    Схема для обновления основных данных пользователя.
-    Используется в PATCH-запросах.
+    Схема для регистрации пользователя.
+    Используется в POST-запросах.
     """
 
-    username: str | None = Field(None, min_length=3, max_length=50, description="Имя пользователя")
-    email: EmailStr | None = Field(None, max_length=255, description="Email пользователя")
-    password: str | None = Field(None, min_length=8, max_length=255, description="Пароль (минимум 8 символов)")
+    username: str = Field(..., min_length=3, max_length=50, description="Имя пользователя")
+    email: EmailStr = Field(..., max_length=255, description="Email пользователя")
+
+
+class UserUpdatePassword(BaseUser):
+    """Схема для обновления пароля"""
+
+    current_password: str = Field(..., description="Текущий пароль")
+
+
+class UserUpdateEmail(BaseModel):
+    """Схема для обновления email с подтверждением"""
+
+    current_password: str = Field(..., description="Текущий пароль")
+    new_email: EmailStr = Field(..., max_length=255, description="Email пользователя")
+
+
+class UserUpdateUsername(BaseModel):
+    """Схема для обновления username"""
+
+    current_password: str = Field(..., description="Текущий пароль")
+    username: str = Field(..., min_length=3, max_length=50, description="Имя пользователя")
 
 
 class UserUpdateProfile(BaseModel):
