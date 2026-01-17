@@ -33,5 +33,7 @@ class ConversationResponse(BaseModel):
     user_id: UUID = Field(description="UUID пользователя")
     title: str | None = Field(None, description="Название беседы")
     created_at: datetime = Field(description="Дата создания")
+    updated_at: datetime | None = Field(None, description="Дата обновления")
+    is_archived: bool = Field(default=False, description="Архивная ли беседа")
 
     model_config = ConfigDict(from_attributes=True)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MessageCreate(BaseModel):
@@ -13,7 +13,15 @@ class MessageCreate(BaseModel):
     role: str = Field(
         default="user", pattern="^(user|assistant|system)$", description="Роль: 'user', 'assistant' или 'system'"
     )
-    content: str = Field(description="Сообщение")
+    content: str = Field(min_length=1, description="Сообщение")
+
+    @field_validator("content")
+    @classmethod
+    def content_must_not_be_empty(cls, v: str) -> str:
+        """Валидация что контент не пустой или только из пробелов."""
+        if not v or not v.strip():
+            raise ValueError("Message content cannot be empty")
+        return v
 
 
 class MessageResponse(BaseModel):
