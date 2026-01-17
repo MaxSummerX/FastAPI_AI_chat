@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from sqlalchemy.orm import sessionmaker
 
 from app.main import app
+from app.models import Conversation as ConversationModel
+from app.models import Message as MessageModel
 from app.models.base_model import Base
 from app.models.users import User as UserModel
 
@@ -192,3 +194,103 @@ async def admin_headers(client: AsyncClient, admin_user: UserModel) -> dict[str,
     tokens = response.json()
 
     return {"Authorization": f"Bearer {tokens['access_token']}"}
+
+
+# ============================================================
+# Фикстуры для Conversations и Messages
+# ============================================================
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_conversation(db_session: AsyncSession, test_user: UserModel) -> ConversationModel:
+    """Создаёт тестовую беседу."""
+    import uuid
+
+    conversation = ConversationModel(
+        id=uuid.uuid4(),
+        user_id=test_user.id,
+        title="Test Conversation",
+    )
+    db_session.add(conversation)
+    await db_session.commit()
+    await db_session.refresh(conversation)
+
+    return conversation
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_conversations(db_session: AsyncSession, test_user: UserModel) -> list[ConversationModel]:
+    """Создаёт несколько тестовых бесед для пагинации."""
+    import uuid
+    from asyncio import sleep
+    from datetime import UTC, datetime
+
+    conversations = []
+    # Создаём 25 бесед с разным временем создания
+    for i in range(25):
+        conv = ConversationModel(
+            id=uuid.uuid4(),
+            user_id=test_user.id,
+            title=f"Conversation {i}",
+            created_at=datetime.now(UTC),
+        )
+        conversations.append(conv)
+        db_session.add(conv)
+        # Небольшая задержка для разницы во времени
+        await sleep(0.001)
+
+    await db_session.commit()
+
+    for conv in conversations:
+        await db_session.refresh(conv)
+
+    return conversations
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_message(db_session: AsyncSession, test_conversation: ConversationModel) -> MessageModel:
+    """Создаёт тестовое сообщение."""
+    import uuid
+
+    message = MessageModel(
+        id=uuid.uuid4(),
+        conversation_id=test_conversation.id,
+        role="user",
+        content="Test message",
+        model="gpt-4",
+    )
+    db_session.add(message)
+    await db_session.commit()
+    await db_session.refresh(message)
+
+    return message
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_messages(db_session: AsyncSession, test_conversation: ConversationModel) -> list[MessageModel]:
+    """Создаёт несколько тестовых сообщений для пагинации."""
+    import uuid
+    from asyncio import sleep
+    from datetime import UTC, datetime
+
+    messages = []
+    # Создаём 50 сообщений
+    for i in range(50):
+        msg = MessageModel(
+            id=uuid.uuid4(),
+            conversation_id=test_conversation.id,
+            role="user" if i % 2 == 0 else "assistant",
+            content=f"Message {i}",
+            timestamp=datetime.now(UTC),
+            model="gpt-4",
+        )
+        messages.append(msg)
+        db_session.add(msg)
+        await sleep(0.001)
+
+    await db_session.commit()
+
+    for msg in messages:
+        await db_session.refresh(msg)
+
+    return messages
