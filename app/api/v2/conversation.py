@@ -50,11 +50,6 @@ async def get_conversations(
 ) -> PaginatedResponse[ConversationSchemas]:
     """
     Получить беседы пользователя с пагинацией (курсорной).
-
-    **Пагинация:**
-    - Использует курсорную пагинацию на основе created_at + id
-    - Возвращает беседы от новых к старым
-    - Поддерживает бесконечный скролл
     """
     logger.info(
         f"Запрос на получение бесед пользователя {current_user.id} "
@@ -111,7 +106,7 @@ async def get_conversations(
     )
 
     return PaginatedResponse(
-        items=conversations,
+        items=cast(list[ConversationSchemas], conversations),
         next_cursor=next_cursor,
         has_next=has_next,
     )

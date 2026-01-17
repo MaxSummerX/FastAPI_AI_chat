@@ -64,9 +64,6 @@ async def get_messages(
 ) -> PaginatedResponse[MessageSchemas]:
     """
     Получить историю сообщений с курсорной пагинацией.
-
-    Возвращает сообщения в хронологическом порядке (от старого к новому).
-    > cursor используется для загрузки более старых сообщений (прокрутка вверх).
     """
     logger.info(f"Запрос сообщений беседы {conversation_id} от пользователя {current_user.id}")
 
@@ -132,7 +129,7 @@ async def get_messages(
     )
 
     return PaginatedResponse(
-        items=messages,
+        items=cast(list[MessageSchemas], messages),
         next_cursor=next_cursor,
         has_next=has_next,
     )
