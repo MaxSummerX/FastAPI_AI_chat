@@ -39,7 +39,7 @@ def encode_cursor(timestamp: datetime, id_uuid: UUID) -> str:
     cursor_bytes = json_str.encode("utf-8")
     encoded = base64.b64encode(cursor_bytes).decode("ascii")
 
-    logger.debug(f"Encoded cursor: timestamp={timestamp}, id={id_str} -> {encoded[:20]}...")
+    logger.debug(f"Encoded cursor: timestamp={timestamp}, id={id_str} -> {encoded[: min(20, len(encoded))]}...")
 
     return encoded
 
@@ -69,7 +69,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
         # Конвертируем timestamp
         timestamp = datetime.fromisoformat(timestamp_str)
 
-        logger.debug(f"Decoded cursor: {cursor[:20]}... -> timestamp={timestamp}, id={id_str}")
+        logger.debug(f"Decoded cursor: {cursor[: min(20, len(cursor))]}... -> timestamp={timestamp}, id={id_str}")
 
         return timestamp, id_str
 
