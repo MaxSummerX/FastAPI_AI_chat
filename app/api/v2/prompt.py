@@ -124,7 +124,7 @@ async def get_user_prompts(
     "/{prompt_id}", response_model=PromptResponse, status_code=status.HTTP_200_OK, summary="Получить промпт по ID"
 )
 async def get_prompt(
-    prompt_id: str,
+    prompt_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> PromptModel:
@@ -167,7 +167,7 @@ async def create_prompt(
 
 @router.put("/{prompt_id}", response_model=PromptResponse, status_code=status.HTTP_200_OK, summary="Обновить промпт")
 async def update_prompt(
-    prompt_id: str,
+    prompt_id: UUID,
     prompt_data: PromptUpdate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
@@ -203,7 +203,7 @@ async def update_prompt(
 
 @router.delete("/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить промпт")
 async def delete_prompt(
-    prompt_id: str,
+    prompt_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> None:
