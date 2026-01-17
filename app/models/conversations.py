@@ -44,4 +44,5 @@ class Conversation(Base):
     __table_args__ = (
         Index("ix_conversations_user_id", "user_id"),
         Index("ix_conversations_user_updated", "user_id", "updated_at"),
+        Index("ix_conversations_pagination", "user_id", "created_at", "id"),
     )

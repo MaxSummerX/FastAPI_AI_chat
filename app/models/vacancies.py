@@ -91,6 +91,8 @@ class Vacancy(Base):
         Index("ix_vacancies_new_salary_area", "salary_from", "area_id"),
         Index("ix_vacancies_new_experience_schedule", "experience_id", "schedule_id"),
         Index("ix_vacancies_new_published", "published_at", "is_active"),
+        Index("ix_vacancies_pagination_created", "user_id", "created_at", "id"),
+        Index("ix_vacancies_pagination_published", "user_id", "published_at", "id"),
     )
 
     def is_stale(self, days: int = 30) -> bool:

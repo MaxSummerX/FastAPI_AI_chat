@@ -51,4 +51,5 @@ class Prompts(Base):
     __table_args__ = (
         Index("ix_prompts_user_id_is_active", user_id, is_active),
         Index("ix_prompts_created_at", created_at),
+        Index("ix_prompts_pagination", "user_id", "created_at", "id"),
     )

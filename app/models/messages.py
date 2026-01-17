@@ -54,4 +54,5 @@ class Message(Base):
     __table_args__ = (
         Index("ix_messages_conversation_id", "conversation_id"),
         Index("ix_messages_conversation_timestamp", "conversation_id", "timestamp"),
+        Index("ix_messages_pagination", "conversation_id", "timestamp", "id"),
     )

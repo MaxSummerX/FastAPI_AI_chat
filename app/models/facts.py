@@ -101,4 +101,5 @@ class Fact(Base):
         Index("ix_user_facts_user_active", "user_id", "is_active"),
         Index("ix_user_facts_source_type", "source_type"),
         Index("ix_user_facts_user_source", "user_id", "source_type"),
+        Index("ix_facts_pagination", "user_id", "created_at", "id"),
     )
