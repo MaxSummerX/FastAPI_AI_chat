@@ -1,8 +1,8 @@
-import asyncio
 import json
 import uuid
 from typing import Any, cast
 
+from loguru import logger
 from mem0 import AsyncMemory
 from sqlalchemy import select
 
@@ -45,7 +45,7 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
 
             # Проверяем что беседа существует
             if not message_db:
-                print(f"Conversation не найдена: {message_id}")
+                logger.info(f"Conversation не найдена: {message_id}")
                 continue
 
             # Подгружаем из бд соответсвующую факт
@@ -54,7 +54,7 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
             # Проверяем наличие факта
             if existing_fact:
                 # Факт уже существует, пропускаем
-                print(f"Факт уже есть: {existing_fact.id}")
+                logger.info(f"Факт уже есть: {existing_fact.id}")
                 continue
             # Если факта нет запускаем категоризацию через llm
             else:
@@ -70,19 +70,19 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
                     # Конвертируем ответ
                     response_str = cast(str, response)
                     category_data: dict[str, Any] = json.loads(response_str)
-                    print(f"Категория из LLM: {category_data}")
+                    logger.info(f"Категория из LLM: {category_data}")
 
                     # Извлекаем значение категории
                     category_value = category_data.get("category")
 
                     # Проверяем что категория не пустая
                     if category_value is None:
-                        print(f"Категория не определена для факта: {fact['memory']}")
+                        logger.info(f"Категория не определена для факта: {fact['memory']}")
                         continue
                 else:
                     # Если метаданные имеют категорию, то передаём их
                     category_value = fact["metadata"]["category"]
-                    print(f"Категория из metadata: {category_value}")
+                    logger.info(f"Категория из metadata: {category_value}")
 
                 # Создавай новый факт
                 new_fact = FactModel(
@@ -97,7 +97,8 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
                 session.add(new_fact)
                 # Сохраняем
                 await session.commit()
-                print(f"✓ Факт создан: {new_fact.id}")
+                logger.info(f"✓ Факт создан: {new_fact.id}")
 
 
-asyncio.run(import_from_mem0ai_to_postgres_db("test_user"))
+async def import_from_postgres_db_to_mem0ai() -> None:
+    pass
