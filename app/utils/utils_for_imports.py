@@ -89,7 +89,7 @@ async def import_from_mem0ai_to_postgres_db(user_id: str) -> None:
                     user_id=conversation.user_id,
                     content=fact["memory"],
                     category=category_value,
-                    source_type="imported",
+                    source_type="extracted",
                     source_conversation_id=conversation.id,
                     source_message_id=message_db.id,
                 )
