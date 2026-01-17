@@ -15,8 +15,10 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.models import Conversation as ConversationModel
+from app.models import Fact as FactModel
 from app.models import Message as MessageModel
 from app.models.base_model import Base
+from app.models.prompts import Prompts as PromptModel
 from app.models.users import User as UserModel
 
 
@@ -294,3 +296,131 @@ async def test_messages(db_session: AsyncSession, test_conversation: Conversatio
         await db_session.refresh(msg)
 
     return messages
+
+
+# ============================================================
+# Фикстуры для Facts
+# ============================================================
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_fact(db_session: AsyncSession, test_user: UserModel) -> FactModel:
+    """Создаёт тестовый факт."""
+    import uuid
+
+    from app.models.facts import FactCategory, FactSource
+
+    fact = FactModel(
+        id=uuid.uuid4(),
+        user_id=test_user.id,
+        content="Test fact about user",
+        category=FactCategory.PERSONAL,
+        source_type=FactSource.USER_PROVIDED,
+        confidence=1.0,
+        is_active=True,
+    )
+    db_session.add(fact)
+    await db_session.commit()
+    await db_session.refresh(fact)
+
+    return fact
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_facts(db_session: AsyncSession, test_user: UserModel) -> list[FactModel]:
+    """Создаёт несколько тестовых фактов для пагинации."""
+    import uuid
+    from asyncio import sleep
+
+    from app.models.facts import FactCategory, FactSource
+
+    facts = []
+    categories = list(FactCategory)
+
+    # Создаём 30 фактов с разными категориями
+    for i in range(30):
+        fact = FactModel(
+            id=uuid.uuid4(),
+            user_id=test_user.id,
+            content=f"Test fact number {i}",
+            category=categories[i % len(categories)],
+            source_type=FactSource.USER_PROVIDED,
+            confidence=0.8 + (i % 3) * 0.1,
+            is_active=True,
+        )
+        facts.append(fact)
+        db_session.add(fact)
+        # Небольшая задержка для разницы во времени
+        await sleep(0.001)
+
+    await db_session.commit()
+
+    for fact in facts:
+        await db_session.refresh(fact)
+
+    return facts
+
+
+# ============================================================
+# Фикстуры для Prompts
+# ============================================================
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_prompt(db_session: AsyncSession, test_user: UserModel) -> PromptModel:
+    """Создаёт тестовый промпт."""
+    import uuid
+    from datetime import UTC, datetime
+
+    from app.models.prompts import Prompts
+
+    prompt = Prompts(
+        id=uuid.uuid4(),
+        user_id=test_user.id,
+        title="Test Prompt",
+        content="You are a helpful assistant",
+        is_active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db_session.add(prompt)
+    await db_session.commit()
+    await db_session.refresh(prompt)
+
+    return prompt
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_prompts(db_session: AsyncSession, test_user: UserModel) -> list[PromptModel]:
+    """Создаёт несколько тестовых промптов для пагинации."""
+    import uuid
+    from asyncio import sleep
+    from datetime import UTC, datetime
+
+    from app.models.prompts import Prompts
+
+    prompts = []
+
+    # Создаём 30 промптов с разным временем создания
+    for i in range(30):
+        prompt = Prompts(
+            id=uuid.uuid4(),
+            user_id=test_user.id,
+            title=f"Prompt {i}",
+            content=f"This is prompt content number {i}",
+            is_active=True,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        prompts.append(prompt)
+        db_session.add(prompt)
+        await db_session.flush()  # Флаш чтобы получить ID и зафиксировать timestamp
+        # Небольшая задержка для разницы во времени
+        await sleep(0.001)
+
+    await db_session.commit()
+
+    for prompt in prompts:
+        await db_session.refresh(prompt)
+
+    return prompts
