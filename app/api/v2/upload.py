@@ -9,10 +9,10 @@ from app.models.users import User as UserModel
 from app.tools.upload.upload_conversations import upload_conversations_other_provider
 
 
-router_v2 = APIRouter(prefix="/upload", tags=["Imports_V2"])
+router = APIRouter(prefix="/upload", tags=["Imports_V2"])
 
 
-@router_v2.post("/conversations_import/", status_code=status.HTTP_201_CREATED)
+@router.post("/conversations_import/", status_code=status.HTTP_201_CREATED)
 async def conversations_import(
     provider: ImportedProvider,
     background_tasks: BackgroundTasks,
@@ -20,7 +20,7 @@ async def conversations_import(
     file: UploadFile = File(...),
 ) -> dict[str, Any]:
     """
-    Асинхронно сохраняет загруженный файл на диск.
+    Асинхронно сохраняет загруженный файл на диск и сохраняет беседы в бд от соответствующего провайдера
     """
     logger.info(f"Вызовы импорта бесед для пользователя {current_user.id}")
     return await upload_conversations_other_provider(

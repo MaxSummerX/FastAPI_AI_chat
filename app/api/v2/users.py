@@ -28,10 +28,10 @@ from app.schemas.users import UserResponseFull as UserFullSchema
 from app.utils.user_validators import validate_user_unique
 
 
-router_v2 = APIRouter(prefix="/user", tags=["User_V2"])
+router = APIRouter(prefix="/user", tags=["User_V2"])
 
 
-@router_v2.get("/", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+@router.get("/", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
 async def get_base_user_info(current_user: UserModel = Depends(get_current_user)) -> UserModel:
     """
     Возвращает основную информацию о пользователе
@@ -40,7 +40,7 @@ async def get_base_user_info(current_user: UserModel = Depends(get_current_user)
     return current_user
 
 
-@router_v2.get("/info", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
+@router.get("/info", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
 async def get_full_user_info(
     current_user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_async_postgres_db)
 ) -> UserModel:
@@ -62,7 +62,7 @@ async def get_full_user_info(
         ) from e
 
 
-@router_v2.post("/register", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
 async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async_postgres_db)) -> UserModel:
     """
     Регистрирует нового пользователя в системе.
@@ -118,7 +118,7 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async
         ) from e
 
 
-@router_v2.post("/register_with_invite", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/register_with_invite", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
 async def register_with_invite(
     invite_code: str,
     user: UserRegister,
@@ -198,7 +198,7 @@ async def register_with_invite(
         ) from e
 
 
-@router_v2.post("/token")
+@router.post("/token")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_async_postgres_db),
@@ -256,7 +256,7 @@ async def login(
         ) from e
 
 
-@router_v2.post("/refresh-token")
+@router.post("/refresh-token")
 async def get_refresh_token(
     refresh_token: str,
     db: AsyncSession = Depends(get_async_postgres_db),
@@ -318,7 +318,7 @@ async def get_refresh_token(
         ) from e
 
 
-@router_v2.patch("/update", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
+@router.patch("/update", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
 async def update_user_profile(
     user_info: UserUpdateProfile,
     current_user: UserModel = Depends(get_current_user),
@@ -375,7 +375,7 @@ async def update_user_profile(
         ) from e
 
 
-@router_v2.post("/update-email", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+@router.post("/update-email", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
 async def update_user_email(
     data: UserUpdateEmail,
     current_user: UserModel = Depends(get_current_user),
@@ -442,7 +442,7 @@ async def update_user_email(
         ) from e
 
 
-@router_v2.post("/update-password", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+@router.post("/update-password", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
 async def update_user_password(
     data: UserUpdatePassword,
     current_user: UserModel = Depends(get_current_user),
@@ -501,7 +501,7 @@ async def update_user_password(
         ) from e
 
 
-@router_v2.post("/update-username", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+@router.post("/update-username", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
 async def update_user_username(
     data: UserUpdateUsername,
     current_user: UserModel = Depends(get_current_user),
