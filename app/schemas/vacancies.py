@@ -36,8 +36,30 @@ class VacancyResponse(VacancyBase):
     apply_url: str | None = Field(default=None, description="Ссылка для отклика на вакансию")
     is_active: bool = Field(description="Активна ли вакансия во внутренней логике")
     is_archived: bool = Field(description="Архивная ли вакансия на hh.ru")
+    is_favorite: bool = Field(default=False, description="В избранном ли вакансия")
     published_at: datetime | None = Field(default=None, description="Дата публикации на hh.ru")
     created_at: datetime = Field(description="Дата создания записи в БД")
     updated_at: datetime = Field(description="Дата последнего обновления в БД")
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VacancyPaginationResponse(VacancyBase):
+    """
+    Схема для ответа с данными о вакансии
+    """
+
+    id: UUID = Field(description="UUID вакансии в БД")
+    query_request: str = Field(description="Поисковый запрос, по которому была найдена вакансия")
+    title: str = Field(description="Название вакансии")
+    created_at: datetime = Field(description="Дата создания записи в БД")
+    employer_name: str | None = Field(default=None, description="Название компании-работодателя")
+    salary_from: int | None = Field(default=None, description="Зарплата от")
+    salary_to: int | None = Field(default=None, description="Зарплата до")
+    salary_currency: str | None = Field(default=None, description="Валюта зарплаты (RUR, USD, EUR)")
+    area_name: str | None = Field(default=None, description="Название города")
+    is_active: bool = Field(description="Активна ли вакансия во внутренней логике")
+    is_archived: bool = Field(description="Архивная ли вакансия на hh.ru")
+    is_favorite: bool = Field(default=False, description="В избранном ли вакансия")
+    published_at: datetime | None = Field(default=None, description="Дата публикации на hh.ru")
     model_config = ConfigDict(from_attributes=True)
