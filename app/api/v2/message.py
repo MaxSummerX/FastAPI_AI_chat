@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -47,7 +46,6 @@ MAXIMUM_PER_PAGE = 100
 
 @router.get(
     "/",
-    response_model=PaginatedResponse[MessageSchemas],
     status_code=status.HTTP_200_OK,
     summary="Получить сообщения c пагинацией",
 )
@@ -129,14 +127,16 @@ async def get_messages(
     )
 
     return PaginatedResponse(
-        items=cast(list[MessageSchemas], messages),
+        items=[MessageSchemas.model_validate(message) for message in messages],
         next_cursor=next_cursor,
         has_next=has_next,
     )
 
 
 @router.post(
-    "/", response_model=MessageSchemas, status_code=status.HTTP_201_CREATED, summary="Добавить сообщение в беседу"
+    "/",
+    status_code=status.HTTP_201_CREATED,
+    summary="Добавить сообщение в беседу",
 )
 async def add_message(
     conversation_id: UUID,
@@ -145,7 +145,7 @@ async def add_message(
     prompt_id: UUID | None = None,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> MessageModel:
+) -> MessageSchemas:
     """
     Добавить сообщение в беседу и получить ответ от ассистента.
 
@@ -196,7 +196,10 @@ async def add_message(
         if not prompt_result:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
 
-        prompt = cast(PromptModel, prompt_result.first()).content
+        prompt_obj = prompt_result.first()
+        if not prompt_obj:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")  # зачем еще проверка
+        prompt = prompt_obj.content
 
     # Сохраняем сообщение пользователя
     user_message = MessageModel(
@@ -226,7 +229,7 @@ async def add_message(
 
     logger.info(f"Сообщение добавлено в беседу {conversation_id}")
 
-    return assistant_message
+    return MessageSchemas.model_validate(assistant_message)
 
 
 @router.post("/stream", status_code=status.HTTP_200_OK, summary="Добавить сообщение с поточным ответом")
@@ -266,7 +269,7 @@ async def add_message_stream(
         )
     )
 
-    conversation = cast(ConversationModel, result.first())
+    conversation = result.first()
 
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
