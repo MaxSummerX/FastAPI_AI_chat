@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -33,7 +32,6 @@ MAXIMUM_PER_PAGE = 100
 
 @router.get(
     "/",
-    response_model=PaginatedResponse[ConversationSchemas],
     status_code=status.HTTP_200_OK,
     tags=[TAGS],
     summary="Получить беседы пользователя с пагинацией",
@@ -106,7 +104,7 @@ async def get_conversations(
     )
 
     return PaginatedResponse(
-        items=cast(list[ConversationSchemas], conversations),
+        items=[ConversationSchemas.model_validate(conversation) for conversation in conversations],
         next_cursor=next_cursor,
         has_next=has_next,
     )
@@ -123,7 +121,7 @@ async def create_conversation(
     conversation_data: ConversationCreate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> ConversationModel:
+) -> ConversationSchemas:
     """
     Создать новую беседу для текущего пользователя.
     """
@@ -136,12 +134,11 @@ async def create_conversation(
 
     logger.info(f"Создана беседа {conversation.id} для пользователя {current_user.id}")
 
-    return cast(ConversationModel, conversation)
+    return ConversationSchemas.model_validate(conversation)
 
 
 @router.patch(
     "/{conversation_id}",
-    response_model=ConversationSchemas,
     status_code=status.HTTP_200_OK,
     tags=[TAGS],
     summary="Обновить беседу",
@@ -151,7 +148,7 @@ async def update_conversation(
     conversation_data: ConversationUpdate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> ConversationModel:
+) -> ConversationSchemas:
     """
     Переименовать беседу или отправить её в архив.
     """
@@ -174,7 +171,7 @@ async def update_conversation(
 
     logger.info(f"Обновлена беседа {conversation.id} для пользователя {current_user.id}")
 
-    return cast(ConversationModel, conversation)
+    return ConversationSchemas.model_validate(conversation)
 
 
 @router.delete("/{conversation_id}", status_code=status.HTTP_200_OK, tags=[TAGS], summary="Удалить беседу")
