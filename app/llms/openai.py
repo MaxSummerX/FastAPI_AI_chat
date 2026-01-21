@@ -37,17 +37,26 @@ class AsyncOpenAILLM(LLMBase):
             self.config.model = "gpt-5-nano"
 
         if os.environ.get("OPENROUTER_API_KEY"):  # Использование OpenRouter
-            self.client = AsyncOpenAI(
-                api_key=os.environ.get("OPENROUTER_API_KEY"),
-                base_url=self.config.openrouter_base_url
-                or os.getenv("OPENROUTER_BASE_URL")
-                or "https://openrouter.ai/api/v1",
-            )
+            base_url: str = "https://openrouter.ai/api/v1"
+            if isinstance(self.config, OpenAIConfig) and self.config.openrouter_base_url:
+                base_url = self.config.openrouter_base_url
+            elif os.getenv("OPENROUTER_BASE_URL"):
+                env_url = os.getenv("OPENROUTER_BASE_URL")
+                if env_url:
+                    base_url = env_url
+
+            self.client = AsyncOpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url=base_url)
         else:
             api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
-            base_url = self.config.openai_base_url or os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+            openai_base_url: str = "https://api.openai.com/v1"
+            if isinstance(self.config, OpenAIConfig) and self.config.openai_base_url:
+                openai_base_url = self.config.openai_base_url
+            elif os.getenv("OPENAI_BASE_URL"):
+                env_url = os.getenv("OPENAI_BASE_URL")
+                if env_url:
+                    openai_base_url = env_url
 
-            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self.client = AsyncOpenAI(api_key=api_key, base_url=openai_base_url)
 
     def _parse_response(self, response: Any, tools: list[dict[str, Any]] | None) -> str | dict[str, Any]:
         """
@@ -123,18 +132,20 @@ class AsyncOpenAILLM(LLMBase):
         )
 
         if os.getenv("OPENROUTER_API_KEY"):
-            openrouter_params = {}
-            if self.config.models:
-                openrouter_params["models"] = self.config.models
-                openrouter_params["route"] = self.config.route
-                params.pop("model")
+            openrouter_params: dict[str, Any] = {}
+            if isinstance(self.config, OpenAIConfig):
+                if self.config.models:
+                    openrouter_params["models"] = self.config.models
+                    if self.config.route:
+                        openrouter_params["route"] = self.config.route
+                    params.pop("model")
 
-            if self.config.site_url and self.config.app_name:
-                extra_headers = {
-                    "HTTP-Referer": self.config.site_url,
-                    "X-Title": self.config.app_name,
-                }
-                openrouter_params["extra_headers"] = extra_headers
+                if self.config.site_url and self.config.app_name:
+                    extra_headers = {
+                        "HTTP-Referer": self.config.site_url,
+                        "X-Title": self.config.app_name,
+                    }
+                    openrouter_params["extra_headers"] = extra_headers
 
             params.update(**openrouter_params)
 
@@ -153,7 +164,7 @@ class AsyncOpenAILLM(LLMBase):
         response = await self.client.chat.completions.create(**params)
 
         parsed_response = self._parse_response(response, tools)
-        if self.config.response_callback:
+        if isinstance(self.config, OpenAIConfig) and self.config.response_callback:
             try:
                 if asyncio.iscoroutinefunction(self.config.response_callback):
                     await self.config.response_callback(self, response, params)
@@ -188,18 +199,20 @@ class AsyncOpenAILLM(LLMBase):
         )
 
         if os.getenv("OPENROUTER_API_KEY"):
-            openrouter_params = {}
-            if self.config.models:
-                openrouter_params["models"] = self.config.models
-                openrouter_params["route"] = self.config.route
-                params.pop("model")
+            openrouter_params: dict[str, Any] = {}
+            if isinstance(self.config, OpenAIConfig):
+                if self.config.models:
+                    openrouter_params["models"] = self.config.models
+                    if self.config.route:
+                        openrouter_params["route"] = self.config.route
+                    params.pop("model")
 
-            if self.config.site_url and self.config.app_name:
-                extra_headers = {
-                    "HTTP-Referer": self.config.site_url,
-                    "X-Title": self.config.app_name,
-                }
-                openrouter_params["extra_headers"] = extra_headers
+                if self.config.site_url and self.config.app_name:
+                    extra_headers = {
+                        "HTTP-Referer": self.config.site_url,
+                        "X-Title": self.config.app_name,
+                    }
+                    openrouter_params["extra_headers"] = extra_headers
 
             params.update(**openrouter_params)
 
