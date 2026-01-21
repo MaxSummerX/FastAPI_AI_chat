@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -31,7 +30,6 @@ MAXIMUM_PER_PAGE = 100
 
 @router.get(
     "/",
-    response_model=PaginatedResponse[FactResponse],
     status_code=status.HTTP_200_OK,
     summary="Получить факты пользователя с пагинацией",
 )
@@ -111,13 +109,13 @@ async def get_all_facts(
     logger.info(f"Возвращено {len(facts)} фактов, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}")
 
     return PaginatedResponse(
-        items=cast(list[FactResponse], facts),
+        items=[FactResponse.model_validate(fact) for fact in facts],
         next_cursor=next_cursor,
         has_next=has_next,
     )
 
 
-@router.get("/{fact_id}", response_model=FactResponse, status_code=status.HTTP_200_OK, summary="Получить факт по ID")
+@router.get("/{fact_id}", status_code=status.HTTP_200_OK, summary="Получить факт по ID")
 async def get_fact(
     fact_id: UUID,
     current_user: UserModel = Depends(get_current_user),
@@ -133,15 +131,15 @@ async def get_fact(
         )
     )
 
-    fact = cast(FactResponse, result.first())
+    fact = result.first()
 
     if not fact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fact not found")
 
-    return fact
+    return FactResponse.model_validate(fact)
 
 
-@router.post("/", response_model=FactResponse, status_code=status.HTTP_201_CREATED, summary="Создать новый факт")
+@router.post("/", status_code=status.HTTP_201_CREATED, summary="Создать новый факт")
 async def create_fact(
     fact_data: FactCreate,
     current_user: UserModel = Depends(get_current_user),
@@ -170,10 +168,10 @@ async def create_fact(
 
     logger.info(f"Создан факт {new_fact.id} для пользователя {current_user.id}")
 
-    return cast(FactResponse, new_fact)
+    return FactResponse.model_validate(new_fact)
 
 
-@router.patch("/{fact_id}", response_model=FactResponse, status_code=status.HTTP_200_OK, summary="Обновить факт")
+@router.patch("/{fact_id}", status_code=status.HTTP_200_OK, summary="Обновить факт")
 async def update_fact(
     fact_id: UUID,
     fact_data: FactUpdate,
@@ -200,7 +198,7 @@ async def update_fact(
 
     logger.info(f"Обновлён факт {fact_id}")
 
-    return cast(FactResponse, fact)
+    return FactResponse.model_validate(fact)
 
 
 @router.delete("/{fact_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить факт")
