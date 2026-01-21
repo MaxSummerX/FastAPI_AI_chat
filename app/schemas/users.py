@@ -89,6 +89,15 @@ class UserUpdateProfile(BaseModel):
     preferred_language: str | None = Field(None, max_length=10, description="Предпочитаемый язык")
     timezone: str | None = Field(None, max_length=50, description="Часовой пояс")
     settings: dict | None = Field(None, description="Настройки")
+    resume: str | None = Field(None, min_length=10, max_length=50000, description="Резюме пользователя (текст)")
+
+    @field_validator("resume")
+    @classmethod
+    def validate_resume_not_empty(cls, v: str | None) -> str | None:
+        """Проверка, что резюме не состоит только из пробелов"""
+        if v is not None and not v.strip():
+            raise ValueError("Резюме не может быть пустым или только из пробелов")
+        return v
 
 
 class UserResponseBase(BaseModel):
@@ -123,5 +132,6 @@ class UserResponseFull(UserResponseBase):
     created_at: datetime = Field(description="Дата создания")
     updated_at: datetime = Field(description="Дата обновления")
     last_login: datetime | None = Field(None, description="Последний вход")
+    resume: str | None = Field(None, description="Резюме пользователя")
 
     model_config = ConfigDict(from_attributes=True)
