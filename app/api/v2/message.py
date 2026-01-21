@@ -193,9 +193,6 @@ async def add_message(
             )
         )
 
-        if not prompt_result:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
-
         prompt_obj = prompt_result.first()
         if not prompt_obj:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")  # зачем еще проверка
