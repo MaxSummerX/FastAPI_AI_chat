@@ -122,7 +122,7 @@ async def get_fact(
     fact_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> FactModel:
+) -> FactResponse:
     """
     Получить один факт о пользователе
     """
@@ -133,7 +133,7 @@ async def get_fact(
         )
     )
 
-    fact = cast(FactModel, result.first())
+    fact = cast(FactResponse, result.first())
 
     if not fact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fact not found")
@@ -146,7 +146,7 @@ async def create_fact(
     fact_data: FactCreate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> FactModel:
+) -> FactResponse:
     """
     Создание факта пользователем вручную.
     """
@@ -170,7 +170,7 @@ async def create_fact(
 
     logger.info(f"Создан факт {new_fact.id} для пользователя {current_user.id}")
 
-    return cast(FactModel, new_fact)
+    return cast(FactResponse, new_fact)
 
 
 @router.patch("/{fact_id}", response_model=FactResponse, status_code=status.HTTP_200_OK, summary="Обновить факт")
@@ -179,7 +179,7 @@ async def update_fact(
     fact_data: FactUpdate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> FactModel:
+) -> FactResponse:
     """
     Обновить факт о пользователе
     """
@@ -200,7 +200,7 @@ async def update_fact(
 
     logger.info(f"Обновлён факт {fact_id}")
 
-    return cast(FactModel, fact)
+    return cast(FactResponse, fact)
 
 
 @router.delete("/{fact_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить факт")
