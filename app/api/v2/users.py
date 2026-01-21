@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -31,28 +30,29 @@ from app.utils.user_validators import validate_user_unique
 router = APIRouter(prefix="/user", tags=["User_V2"])
 
 
-@router.get("/", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
-async def get_base_user_info(current_user: UserModel = Depends(get_current_user)) -> UserModel:
+@router.get("/", status_code=status.HTTP_200_OK, summary="Получить базовую информацию о пользователе")
+async def get_base_user_info(current_user: UserModel = Depends(get_current_user)) -> UserBaseSchema:
     """
     Возвращает основную информацию о пользователе
     """
     logger.info(f"Запрос базовой информации пользователя: {current_user.id}")
-    return current_user
+    return UserBaseSchema.model_validate(current_user)
 
 
-@router.get("/info", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
+@router.get("/info", status_code=status.HTTP_200_OK, summary="Получить полную информацию о пользователе")
 async def get_full_user_info(
     current_user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_async_postgres_db)
-) -> UserModel:
+) -> UserFullSchema:
     """
     Возвращает полную информацию о текущем пользователе.
     """
     logger.info(f"Запрос полной информации пользователя: {current_user.id}")
     try:
-        user = await db.scalars(
+        result = await db.scalars(
             select(UserModel).where(UserModel.email == current_user.email, UserModel.is_active.is_(True))
         )
-        return cast(UserModel, user.first())
+        user = result.first()
+        return UserFullSchema.model_validate(user)
 
     except Exception as e:
         logger.error(f"Ошибка при получении полной информации пользователя {current_user.id}: {e}")
@@ -62,8 +62,8 @@ async def get_full_user_info(
         ) from e
 
 
-@router.post("/register", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
-async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async_postgres_db)) -> UserModel:
+@router.post("/register", status_code=status.HTTP_201_CREATED, summary="Зарегистрировать нового пользователя")
+async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async_postgres_db)) -> UserBaseSchema:
     """
     Регистрирует нового пользователя в системе.
     """
@@ -84,7 +84,7 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async
 
         logger.info(f"Пользователь успешно зарегистрирован: {new_user.id}")
 
-        return new_user
+        return UserBaseSchema.model_validate(new_user)
 
     except HTTPException:
         # Пробрасываем HTTPException
@@ -118,12 +118,12 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_async
         ) from e
 
 
-@router.post("/register_with_invite", response_model=UserBaseSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/register_with_invite", status_code=status.HTTP_201_CREATED, summary="Зарегистрироваться с инвайт-кодом")
 async def register_with_invite(
     invite_code: str,
     user: UserRegister,
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> UserModel:
+) -> UserBaseSchema:
     """
     Регистрирует нового пользователя с использованием invite кода.
     """
@@ -167,7 +167,7 @@ async def register_with_invite(
 
         logger.info(f"Пользователь успешно зарегистрирован с invite кодом: {new_user.id}")
 
-        return new_user
+        return UserBaseSchema.model_validate(new_user)
 
     except HTTPException:
         # Пробрасываем HTTPException
@@ -198,7 +198,7 @@ async def register_with_invite(
         ) from e
 
 
-@router.post("/token")
+@router.post("/token", summary="Получить JWT токены (логин)")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_async_postgres_db),
@@ -256,7 +256,7 @@ async def login(
         ) from e
 
 
-@router.post("/refresh-token")
+@router.post("/refresh-token", summary="Обновить access токен")
 async def get_refresh_token(
     refresh_token: str,
     db: AsyncSession = Depends(get_async_postgres_db),
@@ -318,12 +318,12 @@ async def get_refresh_token(
         ) from e
 
 
-@router.patch("/update", response_model=UserFullSchema, status_code=status.HTTP_200_OK)
+@router.patch("/update", status_code=status.HTTP_200_OK, summary="Обновить профиль")
 async def update_user_profile(
     user_info: UserUpdateProfile,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> UserModel:
+) -> UserFullSchema:
     """
     Обновляет профиль пользователя.
     """
@@ -335,7 +335,7 @@ async def update_user_profile(
 
         if not update_data:
             # Нет данных для обновления
-            return current_user
+            return UserFullSchema.model_validate(current_user)
 
         # Выполняем обновление
         result = await db.execute(select(UserModel).where(UserModel.id == current_user.id).with_for_update())
@@ -353,7 +353,7 @@ async def update_user_profile(
 
         logger.info(f"Профиль пользователя успешно обновлён: {user.id}")
 
-        return cast(UserModel, user)
+        return UserFullSchema.model_validate(user)
 
     except HTTPException:
         raise
@@ -375,12 +375,12 @@ async def update_user_profile(
         ) from e
 
 
-@router.post("/update-email", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+@router.post("/update-email", status_code=status.HTTP_200_OK, summary="Обновить email")
 async def update_user_email(
     data: UserUpdateEmail,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> UserModel:
+) -> UserBaseSchema:
     """
     Обновляет email пользователя.
     Требуется текущий пароль для подтверждения.
@@ -396,7 +396,7 @@ async def update_user_email(
         # 2. Проверяем что новый email отличается от текущего
         if data.new_email == current_user.email:
             logger.info(f"Новый email совпадает с текущим: {current_user.id}")
-            return current_user
+            return UserBaseSchema.model_validate(current_user)
 
         # 3. Проверяем что новый email уникален
         await validate_user_unique(db, current_user.username, data.new_email, exclude_user_id=current_user.id)
@@ -413,7 +413,7 @@ async def update_user_email(
         await db.commit()
         logger.info(f"Email пользователя успешно обновлён: {user.id}")
 
-        return cast(UserModel, user)
+        return UserBaseSchema.model_validate(user)
 
     except HTTPException:
         raise
@@ -442,12 +442,12 @@ async def update_user_email(
         ) from e
 
 
-@router.post("/update-password", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+@router.post("/update-password", status_code=status.HTTP_200_OK, summary="Обновить пароль")
 async def update_user_password(
     data: UserUpdatePassword,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> UserModel:
+) -> UserBaseSchema:
     """
     Обновляет пароль пользователя.
     Требуется текущий пароль для подтверждения.
@@ -463,7 +463,7 @@ async def update_user_password(
         # 2. Проверяем что новый пароль отличается от текущего
         if verify_password(data.password, current_user.password_hash):
             logger.info(f"Новый пароль совпадает с текущим: {current_user.id}")
-            return current_user
+            return UserBaseSchema.model_validate(current_user)
 
         # 3. Хешируем новый пароль
         new_password_hash = hash_password(data.password)
@@ -483,7 +483,7 @@ async def update_user_password(
         await db.commit()
         logger.info(f"Пароль пользователя успешно обновлён: {user.id}")
 
-        return cast(UserModel, user)
+        return UserBaseSchema.model_validate(user)
 
     except HTTPException:
         raise
@@ -501,12 +501,12 @@ async def update_user_password(
         ) from e
 
 
-@router.post("/update-username", response_model=UserBaseSchema, status_code=status.HTTP_200_OK)
+@router.post("/update-username", status_code=status.HTTP_200_OK, summary="Обновить username")
 async def update_user_username(
     data: UserUpdateUsername,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> UserModel:
+) -> UserBaseSchema:
     """
     Обновляет username пользователя.
     Требуется текущий пароль для подтверждения.
@@ -522,7 +522,7 @@ async def update_user_username(
         # 2. Проверяем что новый username отличается от текущего
         if data.username == current_user.username:
             logger.info(f"Новый username совпадает с текущим: {current_user.id}")
-            return current_user
+            return UserBaseSchema.model_validate(current_user)
 
         # 3. Проверяем что новый username уникален
         await validate_user_unique(db, data.username, current_user.email, exclude_user_id=current_user.id)
@@ -539,7 +539,7 @@ async def update_user_username(
         await db.commit()
         logger.info(f"Username пользователя успешно обновлён: {user.id}")
 
-        return cast(UserModel, user)
+        return UserBaseSchema.model_validate(user)
 
     except HTTPException:
         raise
