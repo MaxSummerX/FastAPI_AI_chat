@@ -57,6 +57,55 @@ async def fetch_full_vacancy(vacancy_id: str, url: str = HH_API_URL) -> dict[str
             raise HTTPException(status_code=500, detail=f"Ошибка при загрузке описании вакансии: {e}") from None
 
 
+async def vacancy_create(hh_id: str, query: str, user_id: UUID) -> Vacancy | None:
+    """Создаем запись о вакансии в бд"""
+
+    details = await fetch_full_vacancy(hh_id)
+
+    salary = details.get("salary") or {}
+    experience = details.get("experience") or {}
+    area = details.get("area") or {}
+    schedule = details.get("schedule") or {}
+    employment = details.get("employment") or {}
+    employer = details.get("employer") or {}
+
+    # Парсинг даты публикации из ISO формата
+    published_at_str = details.get("published_at")
+    published_at = None
+    if published_at_str:
+        try:
+            # Парсим дату в формате ISO 8601 (например: "2026-01-07T11:56:31+0300")
+            published_at = datetime.fromisoformat(published_at_str)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Не удалось распарсить дату {published_at_str}: {e}")
+
+    vacancy = Vacancy(
+        user_id=user_id,
+        hh_id=hh_id,
+        query_request=query,
+        title=details.get("name"),
+        description=details.get("description"),
+        salary_from=salary.get("from"),
+        salary_to=salary.get("to"),
+        salary_currency=salary.get("currency"),
+        salary_gross=salary.get("gross"),
+        experience_id=experience.get("id"),
+        area_id=area.get("id"),
+        area_name=area.get("name"),
+        schedule_id=schedule.get("id"),
+        employment_id=employment.get("id"),
+        employer_id=employer.get("id"),
+        employer_name=employer.get("name"),
+        hh_url=details.get("alternate_url"),
+        apply_url=details.get("apply_alternate_url"),
+        is_archived=details.get("archived", False),
+        raw_data=details,
+        published_at=published_at,
+    )
+
+    return vacancy
+
+
 async def vacancies_create(
     query: str,
     user_id: UUID,
@@ -89,53 +138,7 @@ async def vacancies_create(
 
     for hh_id in new_ids:
         try:
-            details = await fetch_full_vacancy(hh_id)
-
-            if not details:
-                logger.warning(f"Не удалось получить данные для вакансии {hh_id}")
-                continue
-
-            salary = details.get("salary") or {}
-            experience = details.get("experience") or {}
-            area = details.get("area") or {}
-            schedule = details.get("schedule") or {}
-            employment = details.get("employment") or {}
-            employer = details.get("employer") or {}
-
-            # Парсинг даты публикации из ISO формата
-            published_at_str = details.get("published_at")
-            published_at = None
-            if published_at_str:
-                try:
-                    # Парсим дату в формате ISO 8601 (например: "2026-01-07T11:56:31+0300")
-                    published_at = datetime.fromisoformat(published_at_str)
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Не удалось распарсить дату {published_at_str}: {e}")
-
-            vacancy = Vacancy(
-                user_id=user_id,
-                hh_id=hh_id,
-                query_request=query,
-                title=details.get("name"),
-                description=details.get("description"),
-                salary_from=salary.get("from"),
-                salary_to=salary.get("to"),
-                salary_currency=salary.get("currency"),
-                salary_gross=salary.get("gross"),
-                experience_id=experience.get("id"),
-                area_id=area.get("id"),
-                area_name=area.get("name"),
-                schedule_id=schedule.get("id"),
-                employment_id=employment.get("id"),
-                employer_id=employer.get("id"),
-                employer_name=employer.get("name"),
-                hh_url=details.get("alternate_url"),
-                apply_url=details.get("apply_alternate_url"),
-                is_archived=details.get("archived", False),
-                raw_data=details,
-                published_at=published_at,
-            )
-
+            vacancy = await vacancy_create(hh_id, query, user_id)
             session.add(vacancy)
             await asyncio.sleep(HH_REQUEST_DELAY)
 
