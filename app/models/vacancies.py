@@ -11,11 +11,15 @@ from app.models.base_model import Base
 
 if TYPE_CHECKING:
     from app.models.users import User
+    from app.models.vacancy_analysis import VacancyAnalysis
 
 
 class Vacancy(Base):
     """
-    Данные вакансии от HeadHunter
+    Данные вакансии от HeadHunter.
+
+    Одна вакансия может иметь множество анализов от LLM
+    (соответствие, привлекательность, подготовка и т.д.).
     """
 
     __tablename__ = "vacancies"
@@ -62,6 +66,8 @@ class Vacancy(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     # Архивная ли вакансия (на hh.ru)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # В избранном ли вакансия
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # Json данные
     raw_data: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), default=None)
 
@@ -80,8 +86,11 @@ class Vacancy(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    # Relationship
+    # Relationships
     user: Mapped["User"] = relationship("User", back_populates="vacancies")
+    analyses: Mapped[list["VacancyAnalysis"]] = relationship(
+        "VacancyAnalysis", back_populates="vacancy", cascade="all, delete-orphan"
+    )
 
     # Индексы
     __table_args__ = (
