@@ -12,7 +12,11 @@ from app.tools.upload.upload_conversations import upload_conversations_other_pro
 router = APIRouter(prefix="/upload", tags=["Imports_V2"])
 
 
-@router.post("/conversations_import/", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/conversations_import/",
+    status_code=status.HTTP_201_CREATED,
+    summary="Импорт диалогов из Claude.ai или GPT",
+)
 async def conversations_import(
     provider: ImportedProvider,
     background_tasks: BackgroundTasks,
