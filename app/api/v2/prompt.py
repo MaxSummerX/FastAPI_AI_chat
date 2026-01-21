@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -34,7 +33,6 @@ MAXIMUM_PER_PAGE = 100
 
 @router.get(
     "/",
-    response_model=PaginatedResponse[PromptResponse],
     status_code=status.HTTP_200_OK,
     summary="Получить промпты пользователя с пагинацией",
 )
@@ -114,20 +112,18 @@ async def get_user_prompts(
     )
 
     return PaginatedResponse(
-        items=cast(list[PromptResponse], prompts),
+        items=[PromptResponse.model_validate(prompt) for prompt in prompts],
         next_cursor=next_cursor,
         has_next=has_next,
     )
 
 
-@router.get(
-    "/{prompt_id}", response_model=PromptResponse, status_code=status.HTTP_200_OK, summary="Получить промпт по ID"
-)
+@router.get("/{prompt_id}", status_code=status.HTTP_200_OK, summary="Получить промпт по ID")
 async def get_prompt(
     prompt_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> PromptModel:
+) -> PromptResponse:
     """Получить конкретный промпт"""
     logger.info(f"Запрос на получение промпта {prompt_id} пользователем {current_user.id}")
 
@@ -141,15 +137,15 @@ async def get_prompt(
     if not prompt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Промпт не найден или недоступен")
 
-    return cast(PromptModel, prompt)
+    return PromptResponse.model_validate(prompt)
 
 
-@router.post("/", response_model=PromptResponse, status_code=status.HTTP_201_CREATED, summary="Создать новый промпт")
+@router.post("/", status_code=status.HTTP_201_CREATED, summary="Создать новый промпт")
 async def create_prompt(
     prompt_data: PromptCreate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> PromptModel:
+) -> PromptResponse:
     """Создать новый промпт"""
     logger.info(f"Запрос на создание промпта пользователем {current_user.id}")
 
@@ -162,16 +158,16 @@ async def create_prompt(
     await db.refresh(prompt)
 
     logger.info(f"Промпт {prompt.id} успешно создан")
-    return prompt
+    return PromptResponse.model_validate(prompt)
 
 
-@router.put("/{prompt_id}", response_model=PromptResponse, status_code=status.HTTP_200_OK, summary="Обновить промпт")
+@router.put("/{prompt_id}", status_code=status.HTTP_200_OK, summary="Обновить промпт")
 async def update_prompt(
     prompt_id: UUID,
     prompt_data: PromptUpdate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> PromptModel:
+) -> PromptResponse:
     """Обновить промпт"""
     logger.info(f"Запрос на обновление промпта {prompt_id} пользователем {current_user.id}")
 
@@ -198,7 +194,7 @@ async def update_prompt(
     await db.refresh(prompt)
 
     logger.info(f"Промпт {prompt.id} успешно обновлен")
-    return cast(PromptModel, prompt)
+    return PromptResponse.model_validate(prompt)
 
 
 @router.delete("/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить промпт")
