@@ -34,6 +34,7 @@ class User(Base):
     last_name: Mapped[str | None] = mapped_column(String(50))
     avatar_url: Mapped[str | None] = mapped_column(String(200))
     bio: Mapped[str | None] = mapped_column(Text)
+    resume: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Контактные данные (опционально)
     phone_number: Mapped[str | None] = mapped_column(String(20))
