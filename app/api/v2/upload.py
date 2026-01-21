@@ -13,7 +13,7 @@ router = APIRouter(prefix="/upload", tags=["Imports_V2"])
 
 
 @router.post(
-    "/conversations_import/",
+    "/conversations_import",
     status_code=status.HTTP_201_CREATED,
     summary="Импорт диалогов из Claude.ai или GPT",
 )
