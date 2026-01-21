@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import conversation, fact, prompts, tools, upload, users
 from app.api.v2 import conversation as conversation_v2
 from app.api.v2 import fact as fact_v2
+from app.api.v2 import head_hunter as head_hunter_v2
 from app.api.v2 import prompt as prompt_v2
 from app.api.v2 import upload as upload_v2
 from app.api.v2 import users as users_v2
@@ -41,3 +42,4 @@ app.include_router(users_v2.router, prefix="/api/v2")
 app.include_router(conversation_v2.router, prefix="/api/v2")
 app.include_router(fact_v2.router, prefix="/api/v2")
 app.include_router(prompt_v2.router, prefix="/api/v2")
+app.include_router(head_hunter_v2.router, prefix="/api/v2")
