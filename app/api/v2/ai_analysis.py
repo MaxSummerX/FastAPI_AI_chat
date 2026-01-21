@@ -10,12 +10,40 @@ from app.models.users import User as UserModel
 from app.tools.ai_research.ai_scan import analyze_vacancy_from_db
 
 
-router = APIRouter(prefix="/head_hunter", tags=["AI_analysis_V2"])
+router = APIRouter(prefix="/", tags=["AI_analyses_V2"])
 
 
-DEFAULT_PER_PAGE = 20
-MINIMUM_PER_PAGE = 1
-MAXIMUM_PER_PAGE = 100
+@router.post("/analyses", status_code=status.HTTP_201_CREATED)
+async def create_vacancy_analysis() -> None:
+    """
+    Принимаем id вакансии и выбираем какие типы анализов нужно сделать.
+    Создает анализ вакансии по заданному типа или по всем типам сразу.
+    """
+    pass
+
+
+@router.get("/analyses", status_code=status.HTTP_200_OK)
+async def get_all_vacancy_analyses() -> None:
+    """
+    возращаем все анализы вакансии по id вакансии, которые сделаны, иначе None
+    """
+    pass
+
+
+@router.get("/analyses/{id}", status_code=status.HTTP_200_OK)
+async def get_vacancy_analysis() -> None:
+    """
+    возвращаем анализ по её id
+    """
+    pass
+
+
+@router.delete("/analyses/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_vacancy_analysis() -> None:
+    """
+    Удаляем анализ по её id
+    """
+    pass
 
 
 @router.get("/ai_analysis", status_code=status.HTTP_200_OK)
