@@ -30,7 +30,7 @@ from app.utils.user_validators import validate_user_unique
 router = APIRouter(prefix="/user", tags=["User_V2"])
 
 
-@router.get("/", status_code=status.HTTP_200_OK, summary="Получить базовую информацию о пользователе")
+@router.get("", status_code=status.HTTP_200_OK, summary="Получить базовую информацию о пользователе")
 async def get_base_user_info(current_user: UserModel = Depends(get_current_user)) -> UserBaseSchema:
     """
     Возвращает основную информацию о пользователе

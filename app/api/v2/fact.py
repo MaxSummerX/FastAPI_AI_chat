@@ -29,7 +29,7 @@ MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
-    "/",
+    "",
     status_code=status.HTTP_200_OK,
     summary="Получить факты пользователя с пагинацией",
 )
@@ -139,7 +139,7 @@ async def get_fact(
     return FactResponse.model_validate(fact)
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, summary="Создать новый факт")
+@router.post("", status_code=status.HTTP_201_CREATED, summary="Создать новый факт")
 async def create_fact(
     fact_data: FactCreate,
     current_user: UserModel = Depends(get_current_user),

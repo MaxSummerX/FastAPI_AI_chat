@@ -31,7 +31,7 @@ MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
-    "/",
+    "",
     status_code=status.HTTP_200_OK,
     tags=[TAGS],
     summary="Получить беседы пользователя с пагинацией",
@@ -111,7 +111,7 @@ async def get_conversations(
 
 
 @router.post(
-    "/",
+    "",
     response_model=ConversationSchemas,
     status_code=status.HTTP_201_CREATED,
     tags=[TAGS],
@@ -174,12 +174,12 @@ async def update_conversation(
     return ConversationSchemas.model_validate(conversation)
 
 
-@router.delete("/{conversation_id}", status_code=status.HTTP_200_OK, tags=[TAGS], summary="Удалить беседу")
+@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, tags=[TAGS], summary="Удалить беседу")
 async def delete_conversation(
     conversation_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
-) -> dict[str, str]:
+) -> None:
     """
     Полное удаление беседы по UUID из БД (включая все сообщения).
 
@@ -196,8 +196,6 @@ async def delete_conversation(
     await db.commit()
 
     logger.info(f"Удалена беседа {conversation_id}")
-
-    return {"message": "Conversation deleted"}
 
 
 router.include_router(message.router)

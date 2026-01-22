@@ -5,6 +5,7 @@ from loguru import logger
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v2 import ai_analysis
 from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
 from app.enum.experience import Experience
@@ -23,17 +24,18 @@ from app.utils.utils_for_pagination import (
 )
 
 
-router = APIRouter(prefix="/head_hunter", tags=["Head_hunter_v2"])
+router = APIRouter(prefix="/vacancies")
 
-
+TAGS = "Vacancies_v2"
 DEFAULT_PER_PAGE = 20
 MINIMUM_PER_PAGE = 1
 MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
-    "/vacancies",
+    "/",
     status_code=status.HTTP_200_OK,
+    tags=[TAGS],
     summary="Получить вакансии пользователя с пагинацией",
 )
 async def get_all_vacancies(
@@ -131,8 +133,9 @@ async def get_all_vacancies(
 
 
 @router.get(
-    "/vacancies_hh/{hh_id_vacancy}",
+    "/head_hunter/{hh_id_vacancy}",
     status_code=status.HTTP_200_OK,
+    tags=[TAGS],
     summary="Получить вакансию по hh_id (с автоимпортом в бд)",
 )
 async def hh_vacancy(
@@ -178,8 +181,9 @@ async def hh_vacancy(
 
 
 @router.get(
-    "/vacancies/{id_vacancy}",
+    "/{id_vacancy}",
     status_code=status.HTTP_200_OK,
+    tags=[TAGS],
     summary="Получить вакансию по UUID",
 )
 async def get_vacancy(
@@ -205,8 +209,9 @@ async def get_vacancy(
 
 
 @router.delete(
-    "/vacancies/{id_vacancy}",
+    "/{id_vacancy}",
     status_code=status.HTTP_204_NO_CONTENT,
+    tags=[TAGS],
     summary="Мягкое удаление вакансии",
 )
 async def delete_vacancy(
@@ -239,6 +244,7 @@ async def delete_vacancy(
 @router.post(
     "/import_vacancies",
     status_code=status.HTTP_202_ACCEPTED,
+    tags=[TAGS],
     summary="Импорт вакансий с hh.ru в фоновом режиме",
 )
 async def save_all_vacancies(
@@ -270,8 +276,9 @@ async def save_all_vacancies(
 
 
 @router.put(
-    "/vacancies/{id_vacancy}/favorite",
+    "/{id_vacancy}/favorite",
     status_code=status.HTTP_204_NO_CONTENT,
+    tags=[TAGS],
     summary="Добавить вакансию в избранное",
 )
 async def add_to_favorites(
@@ -303,8 +310,9 @@ async def add_to_favorites(
 
 
 @router.delete(
-    "/vacancies/{id_vacancy}/favorite",
+    "/{id_vacancy}/favorite",
     status_code=status.HTTP_204_NO_CONTENT,
+    tags=[TAGS],
     summary="Удалить вакансию из избранного",
 )
 async def remove_from_favorites(
@@ -333,3 +341,6 @@ async def remove_from_favorites(
 
     logger.info(f"Вакансия {id_vacancy} удалена из избранного")
     return
+
+
+router.include_router(ai_analysis.router)

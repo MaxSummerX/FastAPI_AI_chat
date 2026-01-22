@@ -32,7 +32,7 @@ MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
-    "/",
+    "",
     status_code=status.HTTP_200_OK,
     summary="Получить промпты пользователя с пагинацией",
 )
@@ -140,7 +140,7 @@ async def get_prompt(
     return PromptResponse.model_validate(prompt)
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, summary="Создать новый промпт")
+@router.post("", status_code=status.HTTP_201_CREATED, summary="Создать новый промпт")
 async def create_prompt(
     prompt_data: PromptCreate,
     current_user: UserModel = Depends(get_current_user),
