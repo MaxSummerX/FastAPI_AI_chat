@@ -24,14 +24,14 @@ from app.models.users import User as UserModel
 @pytest.mark.asyncio
 async def test_get_base_user_unauthorized(client: AsyncClient) -> None:
     """Тест: неавторизованный запрос к /user"""
-    response = await client.get("/api/v2/user/")
+    response = await client.get("/api/v2/user")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_base_user_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное получение базовой информации"""
-    response = await client.get("/api/v2/user/", headers=auth_headers)
+    response = await client.get("/api/v2/user", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()

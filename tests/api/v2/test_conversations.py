@@ -23,7 +23,7 @@ from app.models import Conversation as ConversationModel
 @pytest.mark.asyncio
 async def test_get_conversations_unauthorized(client: AsyncClient) -> None:
     """Тест: неавторизованный запрос к /conversations"""
-    response = await client.get("/api/v2/conversations/")
+    response = await client.get("/api/v2/conversations")
     assert response.status_code == 401
 
 
@@ -32,7 +32,7 @@ async def test_get_conversations_first_page(
     client: AsyncClient, auth_headers: dict[str, str], test_conversations: list
 ) -> None:
     """Тест: получение первой страницы бесед (без курсора)"""
-    response = await client.get("/api/v2/conversations/", headers=auth_headers)
+    response = await client.get("/api/v2/conversations", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -51,7 +51,7 @@ async def test_get_conversations_with_custom_limit(
     client: AsyncClient, auth_headers: dict[str, str], test_conversations: list
 ) -> None:
     """Тест: получение бесед с кастомным limit"""
-    response = await client.get("/api/v2/conversations/", headers=auth_headers, params={"limit": 10})
+    response = await client.get("/api/v2/conversations", headers=auth_headers, params={"limit": 10})
     assert response.status_code == 200
 
     data = response.json()
@@ -65,7 +65,7 @@ async def test_get_conversations_with_cursor(
 ) -> None:
     """Тест: получение второй страницы с курсором"""
     # Первая страница
-    first_response = await client.get("/api/v2/conversations/", headers=auth_headers, params={"limit": 10})
+    first_response = await client.get("/api/v2/conversations", headers=auth_headers, params={"limit": 10})
     first_data = first_response.json()
     cursor = first_data["next_cursor"]
 
@@ -73,7 +73,7 @@ async def test_get_conversations_with_cursor(
     assert cursor is not None
 
     # Вторая страница с курсором
-    response = await client.get("/api/v2/conversations/", headers=auth_headers, params={"limit": 10, "cursor": cursor})
+    response = await client.get("/api/v2/conversations", headers=auth_headers, params={"limit": 10, "cursor": cursor})
     assert response.status_code == 200
 
     data = response.json()
@@ -90,7 +90,7 @@ async def test_get_conversations_last_page(
 ) -> None:
     """Тест: получение последней страницы"""
     # Запрашиваем больше чем есть
-    response = await client.get("/api/v2/conversations/", headers=auth_headers, params={"limit": 25})
+    response = await client.get("/api/v2/conversations", headers=auth_headers, params={"limit": 25})
     assert response.status_code == 200
 
     data = response.json()
@@ -102,7 +102,7 @@ async def test_get_conversations_last_page(
 @pytest.mark.asyncio
 async def test_get_conversations_invalid_cursor(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение с невалидным курсором"""
-    response = await client.get("/api/v2/conversations/", headers=auth_headers, params={"cursor": "invalid_cursor"})
+    response = await client.get("/api/v2/conversations", headers=auth_headers, params={"cursor": "invalid_cursor"})
     assert response.status_code == 400
 
 
@@ -110,7 +110,7 @@ async def test_get_conversations_invalid_cursor(client: AsyncClient, auth_header
 async def test_get_conversations_limit_validation(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: валидация limit параметра"""
     # Слишком большой limit
-    response = await client.get("/api/v2/conversations/", headers=auth_headers, params={"limit": 150})
+    response = await client.get("/api/v2/conversations", headers=auth_headers, params={"limit": 150})
     # Должен использовать максимальное значение (100)
     assert response.status_code == 200
 
@@ -118,7 +118,7 @@ async def test_get_conversations_limit_validation(client: AsyncClient, auth_head
 @pytest.mark.asyncio
 async def test_get_conversations_empty_db(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение бесед из пустой БД"""
-    response = await client.get("/api/v2/conversations/", headers=auth_headers)
+    response = await client.get("/api/v2/conversations", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -135,7 +135,7 @@ async def test_get_conversations_empty_db(client: AsyncClient, auth_headers: dic
 @pytest.mark.asyncio
 async def test_create_conversation_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное создание беседы"""
-    response = await client.post("/api/v2/conversations/", headers=auth_headers, json={"title": "My New Conversation"})
+    response = await client.post("/api/v2/conversations", headers=auth_headers, json={"title": "My New Conversation"})
     assert response.status_code == 201
 
     data = response.json()
@@ -148,7 +148,7 @@ async def test_create_conversation_success(client: AsyncClient, auth_headers: di
 @pytest.mark.asyncio
 async def test_create_conversation_default_title(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание беседы с дефолтным названием"""
-    response = await client.post("/api/v2/conversations/", headers=auth_headers, json={})
+    response = await client.post("/api/v2/conversations", headers=auth_headers, json={})
     assert response.status_code == 201
 
     data = response.json()
@@ -158,7 +158,7 @@ async def test_create_conversation_default_title(client: AsyncClient, auth_heade
 @pytest.mark.asyncio
 async def test_create_conversation_unauthorized(client: AsyncClient) -> None:
     """Тест: создание беседы без авторизации"""
-    response = await client.post("/api/v2/conversations/", json={"title": "Test Conversation"})
+    response = await client.post("/api/v2/conversations", json={"title": "Test Conversation"})
     assert response.status_code == 401
 
 
@@ -236,10 +236,7 @@ async def test_delete_conversation_success(
 ) -> None:
     """Тест: успешное удаление беседы"""
     response = await client.delete(f"/api/v2/conversations/{test_conversation.id}", headers=auth_headers)
-    assert response.status_code == 200
-
-    data = response.json()
-    assert "message" in data
+    assert response.status_code == 204
 
 
 @pytest.mark.asyncio

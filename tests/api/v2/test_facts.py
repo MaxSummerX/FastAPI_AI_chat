@@ -23,14 +23,14 @@ from app.models import Fact as FactModel
 @pytest.mark.asyncio
 async def test_get_facts_unauthorized(client: AsyncClient) -> None:
     """Тест: неавторизованный запрос к facts"""
-    response = await client.get("/api/v2/facts/")
+    response = await client.get("/api/v2/facts")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_facts_empty(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение фактов когда их нет"""
-    response = await client.get("/api/v2/facts/", headers=auth_headers)
+    response = await client.get("/api/v2/facts", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -49,7 +49,7 @@ async def test_get_facts_first_page(
     test_facts: list[FactModel],
 ) -> None:
     """Тест: первая страница фактов (без cursor)"""
-    response = await client.get("/api/v2/facts/", headers=auth_headers, params={"limit": 15})
+    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 15})
     assert response.status_code == 200
 
     data = response.json()
@@ -66,13 +66,13 @@ async def test_get_facts_with_cursor(
 ) -> None:
     """Тест: вторая страница фактов (с cursor)"""
     # Первая страница
-    first_response = await client.get("/api/v2/facts/", headers=auth_headers, params={"limit": 10})
+    first_response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 10})
     first_data = first_response.json()
     cursor = first_data["next_cursor"]
 
     # Вторая страница
     response = await client.get(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         params={"limit": 10, "cursor": cursor},
     )
@@ -98,7 +98,7 @@ async def test_get_facts_pagination_to_end(
         if cursor:
             params["cursor"] = cursor
 
-        response = await client.get("/api/v2/facts/", headers=auth_headers, params=params)
+        response = await client.get("/api/v2/facts", headers=auth_headers, params=params)
         data = response.json()
 
         all_items.extend(data["items"])
@@ -116,7 +116,7 @@ async def test_get_facts_pagination_to_end(
 async def test_get_facts_invalid_cursor(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: использование невалидного курсора"""
     response = await client.get(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         params={"cursor": "invalid_cursor_base64"},
     )
@@ -130,7 +130,7 @@ async def test_get_facts_ordering_desc(
     test_facts: list[FactModel],
 ) -> None:
     """Тест: проверка правильности сортировки (от нового к старому)"""
-    response = await client.get("/api/v2/facts/", headers=auth_headers, params={"limit": 10})
+    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 10})
     assert response.status_code == 200
 
     data = response.json()
@@ -151,7 +151,7 @@ async def test_get_facts_filter_by_category(
 ) -> None:
     """Тест: фильтрация фактов по категории"""
     response = await client.get(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         params={"category": "personal", "limit": 100},
     )
@@ -176,13 +176,13 @@ async def test_get_facts_include_inactive(
     await db_session.commit()
 
     # Без include_inactive - неактивные не возвращаются
-    response_active = await client.get("/api/v2/facts/", headers=auth_headers, params={"limit": 100})
+    response_active = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 100})
     active_data = response_active.json()
     assert len(active_data["items"]) == 29
 
     # С include_inactive - все факты
     response_all = await client.get(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         params={"include_inactive": True, "limit": 100},
     )
@@ -194,14 +194,14 @@ async def test_get_facts_include_inactive(
 async def test_get_facts_limit_validation(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: валидация limit параметра"""
     # Слишком большой limit - использует максимум
-    response = await client.get("/api/v2/facts/", headers=auth_headers, params={"limit": 150})
+    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 150})
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_get_facts_limit_minimum(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: limit меньше минимума возвращает ошибку валидации"""
-    response = await client.get("/api/v2/facts/", headers=auth_headers, params={"limit": 0})
+    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 0})
     assert response.status_code == 422
 
 
@@ -273,7 +273,7 @@ async def test_get_fact_other_user(
 async def test_create_fact_unauthorized(client: AsyncClient) -> None:
     """Тест: создание факта без авторизации"""
     response = await client.post(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         json={
             "content": "Test fact about user",
             "category": "personal",
@@ -286,7 +286,7 @@ async def test_create_fact_unauthorized(client: AsyncClient) -> None:
 async def test_create_fact_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное создание факта"""
     response = await client.post(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         json={
             "content": "User loves Python programming",
@@ -309,7 +309,7 @@ async def test_create_fact_success(client: AsyncClient, auth_headers: dict[str, 
 async def test_create_fact_default_category(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание факта с категорией по умолчанию (personal)"""
     response = await client.post(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         json={
             "content": "Another fact",
@@ -325,7 +325,7 @@ async def test_create_fact_default_category(client: AsyncClient, auth_headers: d
 async def test_create_fact_with_metadata(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание факта с метаданными"""
     response = await client.post(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         json={
             "content": "Fact with metadata",
@@ -343,7 +343,7 @@ async def test_create_fact_with_metadata(client: AsyncClient, auth_headers: dict
 async def test_create_fact_empty_content(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание факта с пустым контентом"""
     response = await client.post(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         json={
             "content": "   ",
@@ -357,7 +357,7 @@ async def test_create_fact_empty_content(client: AsyncClient, auth_headers: dict
 async def test_create_fact_content_too_short(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: контент короче минимума (5 символов)"""
     response = await client.post(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         json={
             "content": "abc",
@@ -370,7 +370,7 @@ async def test_create_fact_content_too_short(client: AsyncClient, auth_headers: 
 async def test_create_fact_invalid_confidence(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: невалидное значение confidence"""
     response = await client.post(
-        "/api/v2/facts/",
+        "/api/v2/facts",
         headers=auth_headers,
         json={
             "content": "Valid content for fact",

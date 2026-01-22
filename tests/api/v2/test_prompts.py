@@ -24,14 +24,14 @@ from app.models.prompts import Prompts as PromptModel
 @pytest.mark.asyncio
 async def test_get_prompts_unauthorized(client: AsyncClient) -> None:
     """Тест: неавторизованный запрос к prompts"""
-    response = await client.get("/api/v2/prompts/")
+    response = await client.get("/api/v2/prompts")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_prompts_empty(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение промптов когда их нет"""
-    response = await client.get("/api/v2/prompts/", headers=auth_headers)
+    response = await client.get("/api/v2/prompts", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -50,7 +50,7 @@ async def test_get_prompts_first_page(
     test_prompts: list[PromptModel],
 ) -> None:
     """Тест: первая страница промптов (без cursor)"""
-    response = await client.get("/api/v2/prompts/", headers=auth_headers, params={"limit": 15})
+    response = await client.get("/api/v2/prompts", headers=auth_headers, params={"limit": 15})
     assert response.status_code == 200
 
     data = response.json()
@@ -67,13 +67,13 @@ async def test_get_prompts_with_cursor(
 ) -> None:
     """Тест: вторая страница промптов (с cursor)"""
     # Первая страница
-    first_response = await client.get("/api/v2/prompts/", headers=auth_headers, params={"limit": 10})
+    first_response = await client.get("/api/v2/prompts", headers=auth_headers, params={"limit": 10})
     first_data = first_response.json()
     cursor = first_data["next_cursor"]
 
     # Вторая страница
     response = await client.get(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         params={"limit": 10, "cursor": cursor},
     )
@@ -99,7 +99,7 @@ async def test_get_prompts_pagination_to_end(
         if cursor:
             params["cursor"] = cursor
 
-        response = await client.get("/api/v2/prompts/", headers=auth_headers, params=params)
+        response = await client.get("/api/v2/prompts", headers=auth_headers, params=params)
         data = response.json()
 
         all_items.extend(data["items"])
@@ -117,7 +117,7 @@ async def test_get_prompts_pagination_to_end(
 async def test_get_prompts_invalid_cursor(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: использование невалидного курсора"""
     response = await client.get(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         params={"cursor": "invalid_cursor_base64"},
     )
@@ -131,7 +131,7 @@ async def test_get_prompts_ordering_desc(
     test_prompts: list[PromptModel],
 ) -> None:
     """Тест: проверка правильности сортировки (от нового к старому)"""
-    response = await client.get("/api/v2/prompts/", headers=auth_headers, params={"limit": 10})
+    response = await client.get("/api/v2/prompts", headers=auth_headers, params={"limit": 10})
     assert response.status_code == 200
 
     data = response.json()
@@ -157,13 +157,13 @@ async def test_get_prompts_include_inactive(
     await db_session.commit()
 
     # Без include_inactive - неактивные не возвращаются
-    response_active = await client.get("/api/v2/prompts/", headers=auth_headers, params={"limit": 100})
+    response_active = await client.get("/api/v2/prompts", headers=auth_headers, params={"limit": 100})
     active_data = response_active.json()
     assert len(active_data["items"]) == 29
 
     # С include_inactive - все промпты
     response_all = await client.get(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         params={"include_inactive": True, "limit": 100},
     )
@@ -175,14 +175,14 @@ async def test_get_prompts_include_inactive(
 async def test_get_prompts_limit_validation(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: валидация limit параметра"""
     # Слишком большой limit - использует максимум
-    response = await client.get("/api/v2/prompts/", headers=auth_headers, params={"limit": 150})
+    response = await client.get("/api/v2/prompts", headers=auth_headers, params={"limit": 150})
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_get_prompts_limit_minimum(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: limit меньше минимума возвращает ошибку валидации"""
-    response = await client.get("/api/v2/prompts/", headers=auth_headers, params={"limit": 0})
+    response = await client.get("/api/v2/prompts", headers=auth_headers, params={"limit": 0})
     assert response.status_code == 422
 
 
@@ -253,7 +253,7 @@ async def test_get_prompt_other_user(
 async def test_create_prompt_unauthorized(client: AsyncClient) -> None:
     """Тест: создание промпта без авторизации"""
     response = await client.post(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         json={
             "title": "Test Prompt",
             "content": "You are a helpful assistant",
@@ -266,7 +266,7 @@ async def test_create_prompt_unauthorized(client: AsyncClient) -> None:
 async def test_create_prompt_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное создание промпта"""
     response = await client.post(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         json={
             "title": "Code Helper",
@@ -286,7 +286,7 @@ async def test_create_prompt_success(client: AsyncClient, auth_headers: dict[str
 async def test_create_prompt_without_title(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание промпта без заголовка"""
     response = await client.post(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         json={
             "content": "Simple prompt content",
@@ -303,7 +303,7 @@ async def test_create_prompt_without_title(client: AsyncClient, auth_headers: di
 async def test_create_prompt_with_metadata(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание промпта с метаданными"""
     response = await client.post(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         json={
             "title": "Metadata Prompt",
@@ -321,7 +321,7 @@ async def test_create_prompt_with_metadata(client: AsyncClient, auth_headers: di
 async def test_create_prompt_empty_content(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание промпта с пустым контентом"""
     response = await client.post(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         json={
             "title": "Empty",
@@ -335,7 +335,7 @@ async def test_create_prompt_empty_content(client: AsyncClient, auth_headers: di
 async def test_create_prompt_title_too_long(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: заголовок длиннее максимума (255 символов)"""
     response = await client.post(
-        "/api/v2/prompts/",
+        "/api/v2/prompts",
         headers=auth_headers,
         json={
             "title": "x" * 256,
