@@ -424,3 +424,59 @@ async def test_prompts(db_session: AsyncSession, test_user: UserModel) -> list[P
         await db_session.refresh(prompt)
 
     return prompts
+
+
+# ============================================================
+# Фикстуры для Background Tasks (mocking)
+# ============================================================
+
+
+@pytest.fixture(scope="function")
+def mock_background_tasks() -> Generator[None]:
+    """
+    Создаёт мок для BackgroundTasks.
+
+    Используется для тестирования endpoints, которые используют
+    фоновые задачи, чтобы избежать их реального выполнения.
+    """
+    from unittest.mock import patch
+
+    # Патчим функцию конвертации, которая вызывается в background task
+    with (
+        patch("app.tools.upload.upload_conversations.convert"),
+        patch("app.tools.upload.upload_conversations.convert_gtp"),
+    ):
+        yield
+
+
+@pytest_asyncio.fixture(scope="function")
+async def client_with_mocked_background(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
+    """
+    Создаёт HTTP клиент с замоканными фоновыми задачами.
+
+    Подменяет функции конвертации, которые вызываются в background tasks.
+    """
+    from unittest.mock import patch
+
+    from app.depends.db_depends import get_async_postgres_db
+
+    # Функция-override для зависимости БД
+    async def override_get_db() -> AsyncGenerator[AsyncSession]:
+        yield db_session
+
+    # Подменяем зависимости
+    app.dependency_overrides[get_async_postgres_db] = override_get_db
+
+    # Создаём клиент с ASGI транспортом и замоканными background функциями
+    with (
+        patch("app.tools.upload.upload_conversations.convert"),
+        patch("app.tools.upload.upload_conversations.convert_gtp"),
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as ac:
+            yield ac
+
+    # Восстанавливаем оригинальные зависимости
+    app.dependency_overrides.clear()
