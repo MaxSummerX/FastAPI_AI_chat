@@ -51,7 +51,7 @@ class VacancyAnalysis(Base):
     # Текстовый результат анализа
     result_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Какая модель LLM использовалась для анализа
-    model_used: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_used: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Количество использованных токенов
     tokens_used: Mapped[int | None] = mapped_column(types.Integer, nullable=True)
     # Дата создания записи в БД
