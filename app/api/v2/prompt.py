@@ -135,7 +135,7 @@ async def get_prompt(
 
     prompt = result.first()
     if not prompt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Промпт не найден или недоступен")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found or inaccessible")
 
     return PromptResponse.model_validate(prompt)
 
@@ -178,7 +178,7 @@ async def update_prompt(
 
     prompt = result.first()
     if not prompt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Промпт не найден")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
 
     # Обновляем только переданные поля
     if prompt_data.title is not None:
@@ -217,7 +217,7 @@ async def delete_prompt(
 
     prompt = result.first()
     if not prompt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Промпт не найден или уже удален")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found or already deleted")
 
     # Мягкое удаление - меняем флаг is_active
     prompt.is_active = False
