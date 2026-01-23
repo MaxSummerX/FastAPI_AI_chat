@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt_config import ALGORITHM, SECRET_KEY
 from app.depends.db_depends import get_async_postgres_db
+from app.enum.roles import UserRole
 from app.models.users import User as UserModel
 
 
@@ -46,3 +47,15 @@ async def get_current_user(
         raise credentials_exception
 
     return user
+
+
+async def get_current_admin_user(current_user: UserModel = Depends(get_current_user)) -> UserModel:
+    """
+    Проверяет что текущий пользователь имеет роль администратора.
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
