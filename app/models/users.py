@@ -6,6 +6,7 @@ from sqlalchemy import JSON, DateTime, Index, String, Text, types
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.enum.roles import UserRole
 from app.models.base_model import Base
 
 
@@ -46,6 +47,13 @@ class User(Base):
     # Статусы
     is_active: Mapped[bool] = mapped_column(default=True)
     is_verified: Mapped[bool] = mapped_column(default=False)
+
+    # Роль пользователя (по умолчанию USER)
+    role: Mapped[UserRole] = mapped_column(
+        types.Enum(UserRole, native_enum=False, length=20),
+        default=UserRole.USER,
+        nullable=False,
+    )
 
     # Настройки (через with_variant - задаём специфичные настройки типа данных для postgresql)
     settings: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"))
