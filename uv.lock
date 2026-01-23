@@ -360,6 +360,7 @@ dependencies = [
     { name = "aiofiles" },
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "backoff" },
     { name = "bcrypt" },
     { name = "email-validator" },
     { name = "fastapi" },
@@ -377,6 +378,7 @@ dependencies = [
     { name = "rank-bm25" },
     { name = "redis" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "tenacity" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -404,6 +406,7 @@ requires-dist = [
     { name = "aiosqlite", marker = "extra == 'dev'", specifier = ">=0.20.0" },
     { name = "alembic", specifier = ">=1.17.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "backoff", specifier = ">=2.2.1" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.120.0" },
@@ -428,6 +431,7 @@ requires-dist = [
     { name = "redis", specifier = ">=7.1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.44" },
+    { name = "tenacity", specifier = ">=9.1.2" },
     { name = "types-aiofiles", marker = "extra == 'dev'" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
