@@ -112,7 +112,6 @@ async def get_conversations(
 
 @router.post(
     "",
-    response_model=ConversationSchemas,
     status_code=status.HTTP_201_CREATED,
     tags=[TAGS],
     summary="Создать новую беседу",
@@ -187,9 +186,14 @@ async def delete_conversation(
     """
     logger.info(f"Запрос на удаление беседы {conversation_id} пользователем {current_user.id}")
 
-    conversation = await db.get(ConversationModel, conversation_id)
+    result = await db.scalars(
+        select(ConversationModel).where(
+            ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
+        )
+    )
+    conversation = result.first()
 
-    if not conversation or conversation.user_id != current_user.id:
+    if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     await db.delete(conversation)
