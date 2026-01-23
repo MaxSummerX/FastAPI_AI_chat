@@ -5,7 +5,7 @@ from loguru import logger
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v2 import ai_analysis
+from app.api.v2 import vacancy_analysis
 from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
 from app.enum.experience import Experience
@@ -33,7 +33,7 @@ MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
-    "/",
+    "",
     status_code=status.HTTP_200_OK,
     tags=[TAGS],
     summary="Получить вакансии пользователя с пагинацией",
@@ -67,7 +67,7 @@ async def get_all_vacancies(
     limit = validate_pagination_limit(limit, default=DEFAULT_PER_PAGE, maximum=MAXIMUM_PER_PAGE)
 
     # Формируем базовый запрос
-    conditions = [VacancyModel.user_id == current_user.id]
+    conditions = [VacancyModel.user_id == current_user.id, VacancyModel.is_active.is_(True)]
 
     if tier:
         conditions.append(VacancyModel.experience_id.in_(tier))
@@ -151,7 +151,11 @@ async def hh_vacancy(
     base_query = optimized_query(VacancyModel, VacancyResponse)
     # Проверяем наличие вакансии в БД
     result = await db.scalars(
-        base_query.where(VacancyModel.user_id == current_user.id, VacancyModel.hh_id == hh_id_vacancy)
+        base_query.where(
+            VacancyModel.user_id == current_user.id,
+            VacancyModel.hh_id == hh_id_vacancy,
+            VacancyModel.is_active.is_(True),
+        )
     )
 
     vacancy = result.one_or_none()
@@ -173,7 +177,7 @@ async def hh_vacancy(
 
         except Exception as e:
             logger.error(f"Ошибка при импорте вакансии {hh_id_vacancy}: {e}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Вакансия не найдена") from None
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found") from None
 
     logger.info(f"Пользователь {current_user.email} запросил raw_data о вакансии hh_id: {hh_id_vacancy}")
 
@@ -198,12 +202,16 @@ async def get_vacancy(
 
     # optimized_query автоматически применяет load_only для полей из VacancyResponse
     base_query = optimized_query(VacancyModel, VacancyResponse)
-    result = await db.scalars(base_query.where(VacancyModel.user_id == current_user.id, VacancyModel.id == id_vacancy))
+    result = await db.scalars(
+        base_query.where(
+            VacancyModel.user_id == current_user.id, VacancyModel.id == id_vacancy, VacancyModel.is_active.is_(True)
+        )
+    )
 
     vacancy = result.one_or_none()
 
     if not vacancy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Вакансия не найдена")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
 
     return VacancyResponse.model_validate(vacancy)
 
@@ -238,7 +246,6 @@ async def delete_vacancy(
     await db.commit()
 
     logger.info(f"Вакансия {id_vacancy} удалёна")
-    return
 
 
 @router.post(
@@ -343,4 +350,4 @@ async def remove_from_favorites(
     return
 
 
-router.include_router(ai_analysis.router)
+router.include_router(vacancy_analysis.router)
