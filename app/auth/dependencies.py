@@ -12,7 +12,7 @@ from app.enum.roles import UserRole
 from app.models.users import User as UserModel
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/user/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v2/user/token")
 
 
 async def get_current_user(

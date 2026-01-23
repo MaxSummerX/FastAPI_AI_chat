@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import conversation, fact, prompts, tools, upload, users
 from app.api.v2 import analysis as analysis_v2
 from app.api.v2 import conversation as conversation_v2
 from app.api.v2 import fact as fact_v2
@@ -31,12 +30,12 @@ app.middleware("http")(log_middleware)
 app.middleware("http")(add_security_headers)  # Security headers
 
 # Подключаем маршруты категорий
-app.include_router(users.router_v1, prefix="/api/v1")
-app.include_router(conversation.router_v1, prefix="/api/v1")
-app.include_router(fact.router_v1, prefix="/api/v1")
-app.include_router(prompts.router_v1, prefix="/api/v1")
-app.include_router(upload.router_v1, prefix="/api/v1")
-app.include_router(tools.router_V1, prefix="/api/v1")
+# app.include_router(users.router_v1, prefix="/api/v1")
+# app.include_router(conversation.router_v1, prefix="/api/v1")
+# app.include_router(fact.router_v1, prefix="/api/v1")
+# app.include_router(prompts.router_v1, prefix="/api/v1")
+# app.include_router(upload.router_v1, prefix="/api/v1")
+# app.include_router(tools.router_V1, prefix="/api/v1")
 
 # Подключаем маршруты категорий 2ой версии
 app.include_router(upload_v2.router, prefix="/api/v2")

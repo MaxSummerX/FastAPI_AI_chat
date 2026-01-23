@@ -57,6 +57,8 @@ class VacancyPaginationResponse(VacancyBase):
     salary_from: int | None = Field(default=None, description="Зарплата от")
     salary_to: int | None = Field(default=None, description="Зарплата до")
     salary_currency: str | None = Field(default=None, description="Валюта зарплаты (RUR, USD, EUR)")
+    salary_gross: bool | None = Field(default=None, description="True - до вычета налогов, False - на руки")
+    experience_id: str | None = Field(default=None, description="ID уровня опыта (noExperience, between1And3, etc.)")
     area_name: str | None = Field(default=None, description="Название города")
     is_active: bool = Field(description="Активна ли вакансия во внутренней логике")
     is_archived: bool = Field(description="Архивная ли вакансия на hh.ru")
