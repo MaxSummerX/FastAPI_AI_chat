@@ -179,7 +179,7 @@ async def add_message(
 
     # Валидация: контент не должен быть пустым
     if not message.content or not message.content.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message content cannot be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Message content cannot be empty")
 
     # Получаем промпт с дополнительными проверками
     if not prompt_id:
@@ -195,7 +195,7 @@ async def add_message(
 
         prompt_obj = prompt_result.first()
         if not prompt_obj:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")  # зачем еще проверка
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
         prompt = prompt_obj.content
 
     # Сохраняем сообщение пользователя
