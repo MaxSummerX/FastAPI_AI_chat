@@ -56,7 +56,10 @@ async def list_unused_codes(
     result = await db.scalars(select(InviteModel).where(InviteModel.is_used.is_(False)))
     invites = result.all()
 
-    codes = [InviteCodeResponse(id=invite.id, code=invite.code, created_at=invite.created_at) for invite in invites]
+    codes = [
+        InviteCodeResponse(id=invite.id, code=invite.code, is_used=invite.is_used, created_at=invite.created_at)
+        for invite in invites
+    ]
 
     logger.info(f"Найдено {len(codes)} неиспользованных инвайт-кодов")
 
@@ -83,7 +86,7 @@ async def check_invite_code(
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite code not found")
 
-    return InviteCodeResponse(id=invite.id, code=invite.code, created_at=invite.created_at)
+    return InviteCodeResponse(id=invite.id, code=invite.code, is_used=invite.is_used, created_at=invite.created_at)
 
 
 @router.post("/{code}/use", status_code=status.HTTP_200_OK, summary="Использовать инвайт-код")

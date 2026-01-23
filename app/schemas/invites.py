@@ -9,6 +9,7 @@ class InviteCodeResponse(BaseModel):
 
     id: UUID
     code: str
+    is_used: bool
     created_at: datetime
 
 
