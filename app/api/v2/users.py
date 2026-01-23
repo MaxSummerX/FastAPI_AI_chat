@@ -391,7 +391,7 @@ async def update_user_email(
         # 1. Проверяем текущий пароль
         if not verify_password(data.current_password, current_user.password_hash):
             logger.warning(f"Неверный пароль при попытке обновления email: {current_user.id}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный текущий пароль")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
 
         # 2. Проверяем что новый email отличается от текущего
         if data.new_email == current_user.email:
@@ -408,7 +408,7 @@ async def update_user_email(
         user = result.scalar_one_or_none()
 
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
         await db.commit()
         logger.info(f"Email пользователя успешно обновлён: {user.id}")
@@ -424,22 +424,20 @@ async def update_user_email(
 
         if "email" in error_detail or "users_email_key" in error_detail:
             logger.warning(f"Попытка обновить email на уже занятый: {current_user.id}")
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email уже зарегистрирован") from e
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered") from e
 
         logger.error(f"IntegrityError при обновлении email: {current_user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нарушение ограничений уникальности") from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uniqueness constraint violation") from e
 
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(f"Ошибка базы данных при обновлении email {current_user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ошибка базы данных") from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error") from e
 
     except Exception as e:
         await db.rollback()
         logger.error(f"Неожиданная ошибка при обновлении email {current_user.id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Внутренняя ошибка сервера"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from e
 
 
 @router.post("/update-password", status_code=status.HTTP_200_OK, summary="Обновить пароль")
@@ -458,7 +456,7 @@ async def update_user_password(
         # 1. Проверяем текущий пароль
         if not verify_password(data.current_password, current_user.password_hash):
             logger.warning(f"Неверный пароль при попытке обновления пароля: {current_user.id}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный текущий пароль")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
 
         # 2. Проверяем что новый пароль отличается от текущего
         if verify_password(data.password, current_user.password_hash):
@@ -478,7 +476,7 @@ async def update_user_password(
         user = result.scalar_one_or_none()
 
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
         await db.commit()
         logger.info(f"Пароль пользователя успешно обновлён: {user.id}")
@@ -491,14 +489,12 @@ async def update_user_password(
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(f"Ошибка базы данных при обновлении пароля {current_user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ошибка базы данных") from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error") from e
 
     except Exception as e:
         await db.rollback()
         logger.error(f"Неожиданная ошибка при обновлении пароля {current_user.id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Внутренняя ошибка сервера"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from e
 
 
 @router.post("/update-username", status_code=status.HTTP_200_OK, summary="Обновить username")
@@ -517,7 +513,7 @@ async def update_user_username(
         # 1. Проверяем текущий пароль
         if not verify_password(data.current_password, current_user.password_hash):
             logger.warning(f"Неверный пароль при попытке обновления username: {current_user.id}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный текущий пароль")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
 
         # 2. Проверяем что новый username отличается от текущего
         if data.username == current_user.username:
@@ -534,7 +530,7 @@ async def update_user_username(
         user = result.scalar_one_or_none()
 
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
         await db.commit()
         logger.info(f"Username пользователя успешно обновлён: {user.id}")
@@ -550,19 +546,17 @@ async def update_user_username(
 
         if "username" in error_detail or "users_username_key" in error_detail:
             logger.warning(f"Попытка обновить username на уже занятый: {current_user.id}")
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username уже занят") from e
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken") from e
 
         logger.error(f"IntegrityError при обновлении username: {current_user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нарушение ограничений уникальности") from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uniqueness constraint violation") from e
 
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(f"Ошибка базы данных при обновлении username {current_user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ошибка базы данных") from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error") from e
 
     except Exception as e:
         await db.rollback()
         logger.error(f"Неожиданная ошибка при обновлении username {current_user.id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Внутренняя ошибка сервера"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from e
