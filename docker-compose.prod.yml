@@ -1,0 +1,185 @@
+# ============================================================================
+# AI_chat - Production Docker Compose
+# ============================================================================
+# Для запуска на домашнем сервере 192.168.3.3
+# Все сервисы внутри одной docker сети
+
+services:
+  # ===========================================================================
+  # Бэкенд приложение
+  # ===========================================================================
+  app:
+    image: ai-chat:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: AI_chat_app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.prod
+    environment:
+      # Переопределяем .env для работы внутри docker сети
+      - POSTGRESQL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - QDRANT_BASE_URL=http://qdrant:6333
+      - NEO4J_BASE_URL=bolt://neo4j:7687
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai-chat-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ===========================================================================
+  # PostgreSQL - База данных
+  # ===========================================================================
+  postgres:
+    image: postgres:17
+    container_name: AI_chat_postgres
+    ports:
+      - "5432:5432"  # Доступ снаружи для разработки
+    volumes:
+      - ./storage/postgres/data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    restart: unless-stopped
+    networks:
+      - ai-chat-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ===========================================================================
+  # Qdrant - Векторная база данных
+  # ===========================================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: AI_chat_qdrant
+    ports:
+      - "6333:6333"  # Доступ снаружи для разработки
+    volumes:
+      - ./storage/qdrant:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
+    restart: unless-stopped
+    networks:
+      - ai-chat-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "timeout 5s bash -c '</dev/tcp/127.0.0.1/6333'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ===========================================================================
+  # Neo4j - Графовая база данных
+  # ===========================================================================
+  neo4j:
+    image: neo4j:latest
+    container_name: AI_chat_neo4j
+    ports:
+      - "7474:7474"  # Web UI
+      - "7687:7687"  # Bolt protocol
+    volumes:
+      - ./storage/neo4j/data:/data
+      - ./storage/neo4j/logs:/logs
+      - ./storage/neo4j/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
+    restart: unless-stopped
+    networks:
+      - ai-chat-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ===========================================================================
+  # Redis - Кэширование
+  # ===========================================================================
+  redis:
+    image: redis:latest
+    container_name: AI_chat_redis
+    ports:
+      - "6379:6379"  # Доступ снаружи для разработки
+    volumes:
+      - ./storage/redis/data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    restart: unless-stopped
+    networks:
+      - ai-chat-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ===========================================================================
+  # Ollama - LLM и Embedding модели
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: AI_chat_ollama
+    ports:
+      - "11434:11434"  # Доступ снаружи для разработки
+    volumes:
+      - ./storage/ollama:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - ai-chat-network
+    healthcheck:
+      test: ["CMD", "/bin/ollama", "list"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# ============================================================================
+# Сеть для взаимодействия сервисов
+# ============================================================================
+networks:
+  ai-chat-network:
+    driver: bridge
+    name: ai-chat-network
+
+# ============================================================================
+# Volumes (опционально - для управления через docker)
+# ============================================================================
+# volumes:
+#   postgres_data:
+#   qdrant_storage:
+#   neo4j_data:
+#   neo4j_logs:
+#   redis_data:
+#   ollama_data:

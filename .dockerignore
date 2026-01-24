@@ -1,0 +1,50 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Виртуальные окружения
+.env
+.env.*
+.venv
+venv/
+ENV/
+
+# Тесты и покрытие
+.pytest_cache
+.coverage
+htmlcov/
+tests/
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Логи
+*.log
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Документация
+*.md
+docs/
+
+# Конфиги линтеров (уже есть в pyproject.toml.prod)
+.ruff_cache
+.mypy_cache
+pyproject.toml
