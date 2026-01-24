@@ -1,14 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v2 import analysis as analysis_v2
-from app.api.v2 import conversation as conversation_v2
-from app.api.v2 import fact as fact_v2
-from app.api.v2 import invite as invite_v2
-from app.api.v2 import prompt as prompt_v2
-from app.api.v2 import upload as upload_v2
-from app.api.v2 import users as users_v2
-from app.api.v2 import vacancy as vacancy_v2
+from app.api.v2 import analysis, conversation, fact, invite, prompt, upload, users, vacancy
 from app.configs.settings import settings
 from app.middleware.logging import log_middleware
 from app.middleware.security_middleware import add_security_headers
@@ -29,20 +22,18 @@ app.add_middleware(TimingMiddleware)  # Замер времени
 app.middleware("http")(log_middleware)
 app.middleware("http")(add_security_headers)  # Security headers
 
-# Подключаем маршруты категорий
-# app.include_router(users.router_v1, prefix="/api/v1")
-# app.include_router(conversation.router_v1, prefix="/api/v1")
-# app.include_router(fact.router_v1, prefix="/api/v1")
-# app.include_router(prompts.router_v1, prefix="/api/v1")
-# app.include_router(upload.router_v1, prefix="/api/v1")
-# app.include_router(tools.router_V1, prefix="/api/v1")
 
-# Подключаем маршруты категорий 2ой версии
-app.include_router(upload_v2.router, prefix="/api/v2")
-app.include_router(users_v2.router, prefix="/api/v2")
-app.include_router(conversation_v2.router, prefix="/api/v2")
-app.include_router(fact_v2.router, prefix="/api/v2")
-app.include_router(prompt_v2.router, prefix="/api/v2")
-app.include_router(vacancy_v2.router, prefix="/api/v2")
-app.include_router(invite_v2.router, prefix="/api/v2")
-app.include_router(analysis_v2.router, prefix="/api/v2")
+# Подключаем маршруты 2ой версии
+app.include_router(upload.router, prefix="/api/v2")
+app.include_router(users.router, prefix="/api/v2")
+app.include_router(conversation.router, prefix="/api/v2")
+app.include_router(fact.router, prefix="/api/v2")
+app.include_router(prompt.router, prefix="/api/v2")
+app.include_router(vacancy.router, prefix="/api/v2")
+app.include_router(invite.router, prefix="/api/v2")
+app.include_router(analysis.router, prefix="/api/v2")
+
+
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "healthy"}
