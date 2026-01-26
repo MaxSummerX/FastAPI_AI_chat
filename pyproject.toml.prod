@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-chat"
+name = "AI_chat_memo"
 version = "0.1.1"
 description = "AI Chat Application with Memory"
 authors = [{ name = "MaxSummerX" }]

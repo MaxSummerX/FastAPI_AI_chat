@@ -10,7 +10,7 @@ dist
 build
 
 # Виртуальные окружения
-.env
+.env.backup
 .env.*
 .venv
 venv/

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 packages = ["app"]
 
 [project]
-name = "FastAPI_AI_chat"
+name = "AI_chat_memo"
 version = "0.1.1"
 description = "Учебный проект асинхронного чата с AI, извлекающего и использующего факты о пользователе для персонализированного контекста беседы"
 authors = [{ name = "MaxSummerX" }]
