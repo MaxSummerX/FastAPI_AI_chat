@@ -492,9 +492,10 @@ async def client_with_mocked_import(db_session: AsyncSession) -> AsyncGenerator[
     """
     Создаёт HTTP клиент с замоканными функциями импорта вакансий.
 
-    Подменяет функции импорта с hh.ru, которые вызываются в background tasks.
+    Подменяет Redis, Celery tasks и функции импорта, которые вызываются в background tasks.
     """
-    from unittest.mock import patch
+    from dataclasses import dataclass
+    from unittest.mock import Mock, patch
 
     from app.depends.db_depends import get_async_postgres_db
 
@@ -505,13 +506,32 @@ async def client_with_mocked_import(db_session: AsyncSession) -> AsyncGenerator[
     # Подменяем зависимости
     app.dependency_overrides[get_async_postgres_db] = override_get_db
 
-    # Создаём асинхронный мок для import_vacancies
-    async def mock_import(*args: object, **kwargs: object) -> None:
-        """Фейковая функция импорта, которая ничего не делает"""
-        pass
+    # Мок для Celery Task result
+    @dataclass
+    class MockTaskResult:
+        """Мок для результата Celery задачи"""
 
-    # Патчим функцию импорта в модуле, где она используется (vacancy.py)
-    with patch("app.api.v2.vacancy.import_vacancies", side_effect=mock_import):
+        id: str
+        state: str = "PENDING"
+
+    # Мок для Redis клиента
+    mock_redis = Mock()
+    mock_redis.get.return_value = None  # Нет активной задачи
+    mock_redis.setex.return_value = True
+
+    # Мок для Celery task
+    mock_task = Mock()
+    mock_task.id = "test-task-id-12345"
+    mock_task.state = "PENDING"
+
+    # Патчим Redis в task.py
+    # Патчим Celery task.apply_async
+    with (
+        patch("app.api.v2.task.redis_client", mock_redis),
+        patch("app.tasks.vacancy_tasks.redis_client", mock_redis),
+        patch("app.api.v2.task.import_vacancy_task.apply_async", return_value=mock_task),
+        patch("app.api.v2.task.clear_lock", Mock()),
+    ):
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",

@@ -279,49 +279,56 @@ async def test_get_vacancy_by_hh_id_with_import(
     client: AsyncClient, auth_headers: dict[str, str], test_user: UserModel
 ) -> None:
     """Тест: импорт вакансии с hh.ru при отсутствии в БД"""
+    from datetime import UTC, datetime
+
+    from app.models.vacancies import Vacancy
+
     hh_id = "99999999"
 
-    # Мокаем функцию vacancy_create для избежания реального HTTP запроса
-    mock_vacancy_data = {
-        "id": hh_id,
-        "name": "Test Python Developer",
-        "description": "Test description from HH.ru",
-        "salary": {"from": 120000, "to": 180000, "currency": "RUR", "gross": True},
-        "experience": {"id": "between1And3"},
-        "area": {"id": "1", "name": "Москва"},
-        "schedule": {"id": "fullDay"},
-        "employment": {"id": "full"},
-        "employer": {"id": "12345", "name": "HH Company"},
-        "alternate_url": f"https://hh.ru/vacancy/{hh_id}",
-        "apply_alternate_url": f"https://hh.ru/vacancy/{hh_id}?apply=true",
-        "archived": False,
-        "published_at": "2026-01-15T12:00:00+0300",
-    }
+    # Мокаем функцию vacancy_create напрямую
+    mock_vacancy = Vacancy(
+        id=uuid.uuid4(),
+        user_id=test_user.id,
+        hh_id=hh_id,
+        query_request="Personal request",
+        title="Test Python Developer",
+        description="Test description from HH.ru",
+        salary_from=120000,
+        salary_to=180000,
+        salary_currency="RUR",
+        salary_gross=True,
+        experience_id="between1And3",
+        area_id="1",
+        area_name="Москва",
+        schedule_id="fullDay",
+        employment_id="full",
+        employer_id="12345",
+        employer_name="HH Company",
+        hh_url=f"https://hh.ru/vacancy/{hh_id}",
+        apply_url=f"https://hh.ru/vacancy/{hh_id}?apply=true",
+        is_archived=False,
+        published_at=datetime.now(UTC),
+        is_active=True,
+    )
 
-    with patch("app.tools.headhunter.find_vacancies.fetch_full_vacancy", new_callable=AsyncMock) as mock_fetch:
-        mock_fetch.return_value = mock_vacancy_data
-
+    with patch("app.api.v2.vacancy.vacancy_create", new_callable=AsyncMock, return_value=mock_vacancy):
         response = await client.get(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
         assert data["hh_id"] == hh_id
         assert data["title"] == "Test Python Developer"
-        mock_fetch.assert_called_once_with(hh_id)
 
 
 @pytest.mark.asyncio
 async def test_get_vacancy_by_hh_id_not_found_on_hh(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: вакансия не найдена на hh.ru"""
+    from fastapi import HTTPException
+
     hh_id = "00000000"
 
-    with patch(
-        "app.tools.headhunter.find_vacancies.fetch_full_vacancy",
-        new_callable=AsyncMock,
-    ) as mock_fetch:
-        from fastapi import HTTPException
-
-        mock_fetch.side_effect = HTTPException(status_code=404, detail="Vacancy not found")
+    with patch("app.api.v2.vacancy.vacancy_create", new_callable=AsyncMock) as mock_create:
+        mock_create.side_effect = HTTPException(status_code=404, detail="Vacancy not found")
 
         response = await client.get(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers)
 
@@ -466,66 +473,3 @@ async def test_remove_from_favorites_unauthorized(client: AsyncClient, test_vaca
     """Тест: удаление из избранного без авторизации"""
     response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}/favorite")
     assert response.status_code == 401
-
-
-# ============================================================
-# POST /vacancies/import_vacancies - импорт в фоновом режиме
-# ============================================================
-
-
-@pytest.mark.asyncio
-async def test_import_vacancies_success(
-    client_with_mocked_import: AsyncClient, auth_headers_import: dict[str, str]
-) -> None:
-    """Тест: успешный запуск импорта вакансий в фоновом режиме"""
-    response = await client_with_mocked_import.post(
-        "/api/v2/vacancies/import_vacancies",
-        headers=auth_headers_import,
-        params={"query": "python developer"},
-    )
-
-    assert response.status_code == 202
-    data = response.json()
-    assert "message" in data
-    assert "python developer" in data["message"]
-
-
-@pytest.mark.asyncio
-async def test_import_vacancies_with_tiers(
-    client_with_mocked_import: AsyncClient, auth_headers_import: dict[str, str]
-) -> None:
-    """Тест: импорт вакансий с фильтрацией по уровню опыта"""
-    response = await client_with_mocked_import.post(
-        "/api/v2/vacancies/import_vacancies",
-        headers=auth_headers_import,
-        params={
-            "query": "django developer",
-            "tier": [Experience.tier_1.value, Experience.tier_2.value],
-        },
-    )
-
-    assert response.status_code == 202
-
-
-@pytest.mark.asyncio
-async def test_import_vacancies_unauthorized(client_with_mocked_import: AsyncClient) -> None:
-    """Тест: запуск импорта без авторизации"""
-    response = await client_with_mocked_import.post(
-        "/api/v2/vacancies/import_vacancies",
-        params={"query": "python developer"},
-    )
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_import_vacancies_with_all_tiers(
-    client_with_mocked_import: AsyncClient, auth_headers_import: dict[str, str]
-) -> None:
-    """Тест: импорт вакансий для всех уровней опыта"""
-    response = await client_with_mocked_import.post(
-        "/api/v2/vacancies/import_vacancies",
-        headers=auth_headers_import,
-        params={"query": "fastapi developer"},
-    )
-
-    assert response.status_code == 202
