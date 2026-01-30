@@ -116,12 +116,13 @@ async def create_vacancy_analysis(
         )
 
     try:
-        result, description = await analyze_vacancy_from_db(
+        result, prompt_template = await analyze_vacancy_from_db(
             llm=llm,
             vacancy_id=id_vacancy,
             analysis_type=data.analysis_type,
             custom_prompt=data.custom_prompt if data.custom_prompt else None,
             user_id=current_user.id,
+            resume=current_user.resume,
             session=db,
         )
     except VacancyNotFoundError as e:
@@ -147,7 +148,7 @@ async def create_vacancy_analysis(
         user_id=current_user.id,
         title=title,
         analysis_type=data.analysis_type,
-        prompt_template=description,
+        prompt_template=prompt_template,
         custom_prompt=data.custom_prompt,
         result_text=result,
     )
