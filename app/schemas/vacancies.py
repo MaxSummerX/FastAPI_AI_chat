@@ -65,3 +65,25 @@ class VacancyPaginationResponse(VacancyBase):
     is_favorite: bool = Field(default=False, description="В избранном ли вакансия")
     published_at: datetime | None = Field(default=None, description="Дата публикации на hh.ru")
     model_config = ConfigDict(from_attributes=True)
+
+
+class VacancyForAnalysis(BaseModel):
+    """
+    Схема для данных вакансии, используемых в Celery задаче для анализа
+    """
+
+    id: UUID = Field(description="UUID вакансии в БД")
+    title: str = Field(description="Название вакансии")
+    description: str | None = Field(default=None, description="Описание вакансии")
+    salary_from: int | None = Field(default=None, description="Зарплата от")
+    salary_to: int | None = Field(default=None, description="Зарплата до")
+    salary_currency: str | None = Field(default=None, description="Валюта зарплаты")
+    salary_gross: bool | None = Field(default=None, description="До вычета налогов или на руки")
+    experience_id: str | None = Field(default=None, description="ID уровня опыта")
+    area_name: str | None = Field(default=None, description="Название города")
+    schedule_id: str | None = Field(default=None, description="ID графика работы")
+    employment_id: str | None = Field(default=None, description="ID типа занятости")
+    employer_name: str | None = Field(default=None, description="Название компании")
+    resume: str | None = Field(default=None, description="Резюме пользователя")
+
+    model_config = ConfigDict(from_attributes=True)
