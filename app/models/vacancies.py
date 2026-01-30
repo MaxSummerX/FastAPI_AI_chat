@@ -126,5 +126,7 @@ class Vacancy(Base):
             return f"{int(self.salary_from)} - {int(self.salary_to)} {currency} ({gross_suffix})"
         elif self.salary_from:
             return f"от {int(self.salary_from)} {currency} ({gross_suffix})"
-        else:
+        elif self.salary_to:
             return f"до {int(self.salary_to)} {currency} ({gross_suffix})"
+        else:
+            return "Зарплата не указана"
