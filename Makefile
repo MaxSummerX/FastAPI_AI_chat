@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs ps clean backup restore
+.PHONY: help build rebuild rebuild-app up down restart logs ps clean clean-all prune fix-perms backup restore
 
 # ============================================================================
 # Makefile для управления AI_chat
@@ -15,19 +15,24 @@ help: ## Показать эту справку
 build: ## Собрать Docker образы
 	docker compose -f docker-compose.prod.yml build
 
+rebuild: ## Собрать и пересоздать ВСЕ контейнеры (включая БД - данные сохраняются)
+	docker compose -f docker-compose.prod.yml up -d --build --force-recreate
+
+rebuild-app: ## Собрать и пересоздать ТОЛЬКО app + celery_worker (РЕКОМЕНДУЕТСЯ)
+	docker compose -f docker-compose.prod.yml up -d --build --force-recreate app celery_worker
+
 up: ## Запустить все сервисы
 	docker compose -f docker-compose.prod.yml up -d
 
-down: ## Остановить все сервисы
+down: ## Остановить и удалить контейнеры
 	docker compose -f docker-compose.prod.yml down
 
 restart: ## Перезапустить все сервисы
 	docker compose -f docker-compose.prod.yml restart
 
-deploy: ## Обновить с GitHub и перезапустить
+deploy: ## Обновить с GitHub и пересоздать app + celery
 	git pull
-	docker compose -f docker-compose.prod.yml build app
-	docker compose -f docker-compose.prod.yml up -d app
+	docker compose -f docker-compose.prod.yml up -d --build --force-recreate app celery_worker
 
 logs: ## Посмотреть логи всех сервисов
 	docker compose -f docker-compose.prod.yml logs -f
@@ -43,6 +48,10 @@ clean: ## Удалить контейнеры, сети (сохранив volume
 
 clean-all: ## Удалить ВСЁ включая volumes (ОПАСНО!)
 	docker compose -f docker-compose.prod.yml down -v
+
+prune: ## Удалить остановленные контейнеры и образы <none>
+	docker container prune -f
+	docker image prune -f
 
 # ============================================================================
 # Разработка (локально)
