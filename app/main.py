@@ -1,15 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v2 import analysis, conversation, fact, invite, prompt, upload, users, vacancy
+from app.api.v2 import analysis, conversation, fact, invite, prompt, task, upload, users, vacancy
 from app.configs.settings import settings
+from app.lifespan import lifespan
 from app.middleware.logging import log_middleware
 from app.middleware.security_middleware import add_security_headers
 from app.middleware.timing_middleware import TimingMiddleware
 
 
-# Создаём приложение FastAPI
-app = FastAPI(title="AI chat", version="0.1.1")
+app = FastAPI(
+    title="AI chat",
+    version="0.1.1",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,8 +36,9 @@ app.include_router(prompt.router, prefix="/api/v2")
 app.include_router(vacancy.router, prefix="/api/v2")
 app.include_router(invite.router, prefix="/api/v2")
 app.include_router(analysis.router, prefix="/api/v2")
+app.include_router(task.router, prefix="/api/v2")
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health Check"])
 async def health_check() -> dict[str, str]:
     return {"status": "healthy"}
