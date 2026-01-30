@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from httpx import AsyncClient
 from loguru import logger
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,8 @@ from app.models import Vacancy as VacancyModel
 from app.models.users import User as UserModel
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.vacancies import VacancyPaginationResponse, VacancyResponse
-from app.tools.headhunter.find_vacancies import import_vacancies, vacancy_create
+from app.tools.headhunter.find_vacancies import vacancy_create
+from app.tools.headhunter.headhunter_client import get_hh_client
 from app.utils.db_optimizer import optimized_query
 from app.utils.utils_for_pagination import (
     calculate_has_more,
@@ -142,6 +144,7 @@ async def hh_vacancy(
     hh_id_vacancy: str,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
+    hh_client: AsyncClient = Depends(get_hh_client),
 ) -> VacancyResponse:
     """
     Получает информацию о вакансии по hh_id из базы данных сервиса.
@@ -165,9 +168,7 @@ async def hh_vacancy(
         logger.info(f"Вакансия {hh_id_vacancy} не найдена в БД, обращение к API HH.ru")
         try:
             vacancy = await vacancy_create(
-                hh_id=hh_id_vacancy,
-                query="Personal request",
-                user_id=current_user.id,
+                hh_id=hh_id_vacancy, query="Personal request", user_id=current_user.id, hh_client=hh_client
             )
             db.add(vacancy)
             await db.commit()
@@ -246,40 +247,6 @@ async def delete_vacancy(
     await db.commit()
 
     logger.info(f"Вакансия {id_vacancy} удалёна")
-
-
-@router.post(
-    "/import_vacancies",
-    status_code=status.HTTP_202_ACCEPTED,
-    tags=[TAGS],
-    summary="Импорт вакансий с hh.ru в фоновом режиме",
-)
-async def save_all_vacancies(
-    query: str,
-    background_tasks: BackgroundTasks,
-    tiers: list[Experience] | None = Query(
-        None,
-        description="Фильтрация по уровню опыта. Можно выбрать несколько значений. Если не указано - возвращаются все вакансии.",
-    ),
-    db: AsyncSession = Depends(get_async_postgres_db),
-    current_user: UserModel = Depends(get_current_user),
-) -> dict[str, str]:
-    """
-    Запускает импорт вакансий с hh.ru в фоновом режиме.
-
-    Примеры запросов:
-    - django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado
-
-    Фильтрация по уровню опыта (tiers):
-    - noExperience: Без опыта
-    - between1And3: От 1 до 3 лет
-    - between3And6: От 3 до 6 лет
-    - moreThan6: Более 6 лет
-    """
-
-    background_tasks.add_task(import_vacancies, query=query, tiers=tiers, user_id=current_user.id, session=db)
-
-    return {"message": f"Импорт вакансий по запросу '{query}' запущен в фоновом режиме"}
 
 
 @router.put(
