@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from httpx import AsyncClient
 from loguru import logger
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v2 import vacancy_analysis
@@ -11,6 +11,7 @@ from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
 from app.enum.experience import Experience
 from app.models import Vacancy as VacancyModel
+from app.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.models.users import User as UserModel
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.vacancies import VacancyPaginationResponse, VacancyResponse
@@ -69,20 +70,18 @@ async def get_all_vacancies(
     limit = validate_pagination_limit(limit, default=DEFAULT_PER_PAGE, maximum=MAXIMUM_PER_PAGE)
 
     # Формируем базовый запрос
-    conditions = [VacancyModel.user_id == current_user.id, VacancyModel.is_active.is_(True)]
-
-    if tier:
-        conditions.append(VacancyModel.experience_id.in_(tier))
-
-    if favorite is not None:
-        conditions.append(VacancyModel.is_favorite == favorite)
-
-    # optimized_query автоматически применяет load_only для полей из VacancyPaginationResponse
     base_query = optimized_query(VacancyModel, VacancyPaginationResponse)
 
-    query = base_query.where(*conditions)
+    query = base_query.join(UserVacanciesModel).where(
+        UserVacanciesModel.user_id == current_user.id,
+        VacancyModel.is_active.is_(True),
+    )
 
-    # query = select(VacancyModel).where(*conditions)
+    if tier:
+        query = query.where(VacancyModel.experience_id.in_(tier))
+
+    if favorite is not None:
+        query = query.where(UserVacanciesModel.is_favorite == favorite)
 
     # Применяем курсор если указан
     if cursor:
@@ -106,56 +105,57 @@ async def get_all_vacancies(
     query = query.order_by(VacancyModel.created_at.desc(), VacancyModel.id.desc())
 
     # Берём на один элемент больше для проверки has_next
-    result = await db.scalars(query.limit(limit + 1))
-    vacancies = list(result.all())
+    result = await db.execute(query.add_columns(UserVacanciesModel.is_favorite.label("is_favorite")).limit(limit + 1))
+    rows = list(result.all())  # ← кортежи (Vacancy, is_favorite)
 
-    # Проверяем наличие следующей страницы
-    has_next = calculate_has_more(vacancies, limit)
+    # Эти функции работают с кортежами без изменений!
+    has_next = calculate_has_more(rows, limit)
+    rows = trim_excess_item(rows, limit, reverse=False)
 
-    # Убираем лишний элемент если он есть
-    vacancies = trim_excess_item(vacancies, limit, reverse=False)
-
-    # Формируем курсор для следующей страницы
+    # Формируем курсор — нужно распаковать кортеж
     next_cursor = None
-
-    if vacancies and has_next:
-        last_vacancy = vacancies[-1]
+    if rows and has_next:
+        last_vacancy, _ = rows[-1]  # ← распаковываем: Vacancy, is_favorite
         next_cursor = encode_cursor(last_vacancy.created_at, last_vacancy.id)
-        logger.debug(f"Сформирован курсор для следующей страницы на основе вакансий {last_vacancy.id}")
 
-    logger.info(
-        f"Возвращено {len(vacancies)} вакансий, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}"
-    )
+    logger.info(f"Возвращено {len(rows)} вакансий, has_next={has_next}")
+
+    # Формируем ответ с is_favorite
+    items = []
+    for vacancy, is_fav in rows:  # ← распаковываем кортеж
+        item = VacancyPaginationResponse.model_validate(vacancy).model_dump()
+        item["is_favorite"] = is_fav
+        items.append(VacancyPaginationResponse(**item))
 
     return PaginatedResponse(
-        items=[VacancyPaginationResponse.model_validate(vacancy) for vacancy in vacancies],
+        items=items,
         next_cursor=next_cursor,
         has_next=has_next,
     )
 
 
-@router.get(
+@router.post(
     "/head_hunter/{hh_id_vacancy}",
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_204_NO_CONTENT,
     tags=[TAGS],
-    summary="Получить вакансию по hh_id (с автоимпортом в бд)",
+    summary="Добавить вакансию по hh_id в пул пользователя",
 )
 async def hh_vacancy(
     hh_id_vacancy: str,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
     hh_client: AsyncClient = Depends(get_hh_client),
-) -> VacancyResponse:
+) -> None:
     """
-    Получает информацию о вакансии по hh_id из базы данных сервиса.
+    Добавляет вакансию по hh_id в пул пользователя.
+    Если вакансия уже есть в БД - просто создаёт связь.
+    Если нет - импортирует из hh.ru и создаёт связь.
     """
     logger.info(f"Запрос на получение вакансии по HH.ru id {hh_id_vacancy} для пользователя {current_user.id}")
-    # optimized_query автоматически применяет load_only для полей из VacancyResponse
+    # Проверяем наличие вакансии в БД (без фильтра по пользователю)
     base_query = optimized_query(VacancyModel, VacancyResponse)
-    # Проверяем наличие вакансии в БД
     result = await db.scalars(
         base_query.where(
-            VacancyModel.user_id == current_user.id,
             VacancyModel.hh_id == hh_id_vacancy,
             VacancyModel.is_active.is_(True),
         )
@@ -163,26 +163,40 @@ async def hh_vacancy(
 
     vacancy = result.one_or_none()
 
-    # Если вакансии нет - импортируем из hh.ru
+    # Если вакансии нет в БД - импортируем из hh.ru
     if not vacancy:
-        logger.info(f"Вакансия {hh_id_vacancy} не найдена в БД, обращение к API HH.ru")
+        logger.info(f"Вакансия {hh_id_vacancy} не найдена в БД, создание")
         try:
-            vacancy = await vacancy_create(
-                hh_id=hh_id_vacancy, query="Personal request", user_id=current_user.id, hh_client=hh_client
-            )
-            db.add(vacancy)
+            vacancy_obj = await vacancy_create(hh_id=hh_id_vacancy, query="Personal request", hh_client=hh_client)
+
+            db.add(vacancy_obj)
+            await db.flush()
+
+            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy_obj.id)
+            db.add(link)
             await db.commit()
 
-            # Данные уже есть в объекте vacancy, повторный запрос к БД не нужен
-            logger.info(f"Вакансия {hh_id_vacancy} успешно импортирована и сохранена")
+            logger.info(f"Вакансия {hh_id_vacancy} успешно импортирована")
 
         except Exception as e:
             logger.error(f"Ошибка при импорте вакансии {hh_id_vacancy}: {e}")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found") from None
+    else:
+        # Вакансия есть в БД - проверяем есть ли связь с пользователем
+        link_check = await db.execute(
+            select(UserVacanciesModel).where(
+                UserVacanciesModel.user_id == current_user.id,
+                UserVacanciesModel.vacancy_id == vacancy.id,
+            )
+        )
+        if not link_check.one_or_none():
+            # Связи нет - создаём
+            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy.id)
+            db.add(link)
+            await db.commit()
 
-    logger.info(f"Пользователь {current_user.email} запросил raw_data о вакансии hh_id: {hh_id_vacancy}")
-
-    return VacancyResponse.model_validate(vacancy)
+    logger.info(f"Вакансия {hh_id_vacancy} добавлена пользователю {current_user.email}")
+    return
 
 
 @router.get(
@@ -203,18 +217,25 @@ async def get_vacancy(
 
     # optimized_query автоматически применяет load_only для полей из VacancyResponse
     base_query = optimized_query(VacancyModel, VacancyResponse)
-    result = await db.scalars(
-        base_query.where(
-            VacancyModel.user_id == current_user.id, VacancyModel.id == id_vacancy, VacancyModel.is_active.is_(True)
+    result = await db.execute(
+        base_query.join(UserVacanciesModel)
+        .where(
+            UserVacanciesModel.user_id == current_user.id,
+            VacancyModel.id == id_vacancy,
+            VacancyModel.is_active.is_(True),
         )
+        .add_columns(UserVacanciesModel.is_favorite.label("is_favorite"))
     )
 
-    vacancy = result.one_or_none()
+    row = result.one_or_none()
 
-    if not vacancy:
+    if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
 
-    return VacancyResponse.model_validate(vacancy)
+    vacancy, is_favorite = row  # распаковываем кортеж (Vacancy, is_favorite)
+    response = VacancyResponse.model_validate(vacancy).model_dump()
+    response["is_favorite"] = is_favorite
+    return VacancyResponse(**response)
 
 
 @router.delete(
@@ -232,9 +253,20 @@ async def delete_vacancy(
     Мягкое удаление вакансии
     """
     logger.info(f"Запрос на удаление вакансии {id_vacancy} пользователя {current_user.id}")
+
+    # Проверяем что пользователь связан с вакансией
+    link_check = await db.execute(
+        select(UserVacanciesModel).where(
+            UserVacanciesModel.user_id == current_user.id,
+            UserVacanciesModel.vacancy_id == id_vacancy,
+        )
+    )
+    if not link_check.one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
+
     result = await db.execute(
         update(VacancyModel)
-        .where(VacancyModel.id == id_vacancy, VacancyModel.user_id == current_user.id, VacancyModel.is_active.is_(True))
+        .where(VacancyModel.id == id_vacancy, VacancyModel.is_active.is_(True))
         .values(is_active=False)
         .returning(VacancyModel.id)
     )
@@ -266,15 +298,15 @@ async def add_to_favorites(
     logger.info(f"Запрос на добавление вакансии {id_vacancy} в избранное")
 
     result = await db.execute(
-        update(VacancyModel)
-        .where(VacancyModel.id == id_vacancy, VacancyModel.user_id == current_user.id)
+        update(UserVacanciesModel)
+        .where(UserVacanciesModel.user_id == current_user.id, UserVacanciesModel.vacancy_id == id_vacancy)
         .values(is_favorite=True)
-        .returning(VacancyModel.id)
+        .returning(UserVacanciesModel.id)
     )
 
-    vacancy_id = result.scalar_one_or_none()
+    link_id = result.scalar_one_or_none()
 
-    if not vacancy_id:
+    if not link_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
 
     await db.commit()
@@ -300,15 +332,15 @@ async def remove_from_favorites(
     logger.info(f"Запрос на удаление вакансии {id_vacancy} из избранного")
 
     result = await db.execute(
-        update(VacancyModel)
-        .where(VacancyModel.id == id_vacancy, VacancyModel.user_id == current_user.id)
+        update(UserVacanciesModel)
+        .where(UserVacanciesModel.user_id == current_user.id, UserVacanciesModel.vacancy_id == id_vacancy)
         .values(is_favorite=False)
-        .returning(VacancyModel.id)
+        .returning(UserVacanciesModel.id)
     )
 
-    vacancy_id = result.scalar_one_or_none()
+    link_id = result.scalar_one_or_none()
 
-    if not vacancy_id:
+    if not link_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
 
     await db.commit()
