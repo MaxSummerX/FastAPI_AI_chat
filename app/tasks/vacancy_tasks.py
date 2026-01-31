@@ -14,6 +14,7 @@ from app.configs.llm_config import researcher_llm_config
 from app.enum.analysis import AnalysisType
 from app.enum.experience import Experience
 from app.llms.openai import AsyncOpenAILLM
+from app.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.models.users import User as UserModel
 from app.models.vacancies import Vacancy as VacancyModel
 from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
@@ -127,7 +128,8 @@ def ai_analyse_task(
                     UserModel.resume,
                 )
                 .select_from(VacancyModel)
-                .join(UserModel, VacancyModel.user_id == UserModel.id)
+                .join(UserVacanciesModel, UserVacanciesModel.vacancy_id == VacancyModel.id)
+                .join(UserModel, UserVacanciesModel.user_id == UserModel.id)
                 .outerjoin(
                     VacancyAnalysisModel,
                     and_(
@@ -139,7 +141,7 @@ def ai_analyse_task(
                     VacancyAnalysisModel.id.is_(None),
                     VacancyModel.experience_id.in_(tiers),
                     VacancyModel.is_active.is_(True),
-                    VacancyModel.user_id == user_id,
+                    UserVacanciesModel.user_id == user_id,
                 )
                 .order_by(VacancyModel.created_at.desc())
                 .limit(limit)
