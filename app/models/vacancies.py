@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Numeric, String, Text, types
+from sqlalchemy import JSON, Boolean, DateTime, Index, Numeric, String, Text, types
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,7 +10,7 @@ from app.models.base_model import Base
 
 
 if TYPE_CHECKING:
-    from app.models.users import User
+    from app.models.user_vacancies import UserVacancies
     from app.models.vacancy_analysis import VacancyAnalysis
 
 
@@ -26,8 +26,6 @@ class Vacancy(Base):
 
     # Primary key
     id: Mapped[uuid.UUID] = mapped_column(types.Uuid, primary_key=True, default=uuid.uuid4)
-    # Связь с пользователем
-    user_id: Mapped[uuid.UUID] = mapped_column(types.Uuid, ForeignKey("users.id", onupdate="CASCADE"), nullable=False)
     # id headhunter
     hh_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
     # По какому запросу была найдена впервые вакансия
@@ -66,8 +64,6 @@ class Vacancy(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     # Архивная ли вакансия (на hh.ru)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    # В избранном ли вакансия
-    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # Json данные
     raw_data: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), default=None)
 
@@ -87,7 +83,9 @@ class Vacancy(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship("User", back_populates="vacancies")
+    user_vacancies: Mapped[list["UserVacancies"]] = relationship(
+        "UserVacancies", back_populates="vacancy", cascade="all, delete-orphan"
+    )
     analyses: Mapped[list["VacancyAnalysis"]] = relationship(
         "VacancyAnalysis", back_populates="vacancy", cascade="all, delete-orphan"
     )
@@ -100,8 +98,8 @@ class Vacancy(Base):
         Index("ix_vacancies_new_salary_area", "salary_from", "area_id"),
         Index("ix_vacancies_new_experience_schedule", "experience_id", "schedule_id"),
         Index("ix_vacancies_new_published", "published_at", "is_active"),
-        Index("ix_vacancies_pagination_created", "user_id", "created_at", "id"),
-        Index("ix_vacancies_pagination_published", "user_id", "published_at", "id"),
+        Index("ix_vacancies_pagination_created", "created_at", "id"),
+        Index("ix_vacancies_pagination_published", "published_at", "id"),
     )
 
     def is_stale(self, days: int = 30) -> bool:
