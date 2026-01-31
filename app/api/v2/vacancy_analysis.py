@@ -11,6 +11,7 @@ from app.depends.llm_depends import get_researcher_llm
 from app.enum.analysis import AnalysisType
 from app.llms.openai import AsyncOpenAILLM
 from app.models import Vacancy as VacancyModel
+from app.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.models.users import User as UserModel
 from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.schemas.vacancy_analysis import (
@@ -44,10 +45,14 @@ async def get_all_vacancy_analyses(
     """
     logger.info(f"Запрос на получение анализов вакансии {id_vacancy} пользователя {current_user.id}")
 
-    # Проверяем что вакансия существует и активна
+    # Проверяем что вакансия существует, активна и связана с пользователем
     vacancy = await db.scalar(
-        select(VacancyModel.id).where(
-            VacancyModel.id == id_vacancy, VacancyModel.user_id == current_user.id, VacancyModel.is_active.is_(True)
+        select(VacancyModel.id)
+        .join(UserVacanciesModel)
+        .where(
+            UserVacanciesModel.user_id == current_user.id,
+            VacancyModel.id == id_vacancy,
+            VacancyModel.is_active.is_(True),
         )
     )
 
