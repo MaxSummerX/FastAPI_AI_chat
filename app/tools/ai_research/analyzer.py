@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enum.analysis import AnalysisType
 from app.llms.openai import AsyncOpenAILLM
+from app.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.models.vacancies import Vacancy as VacancyModel
 from app.tools.ai_research.exceptions import (
     InvalidAnalysisTypeError,
@@ -95,10 +96,14 @@ async def analyze_vacancy_from_db(
     Raises:
         VacancyNotFoundError: Если вакансия не найдена
     """
-    # Получаем вакансию
+    # Получаем вакансию (проверяем что она связана с пользователем)
     vacancy = await session.scalar(
-        select(VacancyModel).where(
-            VacancyModel.id == vacancy_id, VacancyModel.user_id == user_id, VacancyModel.is_active.is_(True)
+        select(VacancyModel)
+        .join(UserVacanciesModel)
+        .where(
+            UserVacanciesModel.user_id == user_id,
+            VacancyModel.id == vacancy_id,
+            VacancyModel.is_active.is_(True),
         )
     )
 
