@@ -57,7 +57,7 @@ services:
   celery_worker:
     image: ai-chat:latest
     container_name: AI_chat_celery_worker
-    command: uv run celery -A app.configs.celery_config worker --loglevel=info --concurrency=4
+    command: uv run celery -A app.configs.celery_config worker --loglevel=info --concurrency=1
     env_file:
       - .env
     environment:
