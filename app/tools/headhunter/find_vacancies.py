@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enum.experience import Experience
+from app.models.user_vacancies import UserVacancies
 from app.models.vacancies import Vacancy
 from app.tools.headhunter.headhunter_client import (
     HH_CONCURRENT_REQUESTS,
@@ -97,14 +98,13 @@ async def fetch_full_vacancy(
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке описании вакансии: {e}") from None
 
 
-async def vacancy_create(hh_id: str, query: str, user_id: UUID, hh_client: httpx.AsyncClient) -> Vacancy:
+async def vacancy_create(hh_id: str, query: str, hh_client: httpx.AsyncClient) -> Vacancy:
     """
     Создаёт объект Vacancy на основе данных с hh.ru.
 
     Args:
         hh_id: ID вакансии на hh.ru
         query: Поисковый запрос
-        user_id: ID пользователя
         hh_client: HTTP клиент
 
     Returns:
@@ -131,7 +131,6 @@ async def vacancy_create(hh_id: str, query: str, user_id: UUID, hh_client: httpx
             logger.warning(f"Не удалось распарсить дату {published_at_str}: {e}")
 
     return Vacancy(
-        user_id=user_id,
         hh_id=hh_id,
         query_request=query,
         title=details.get("name"),
@@ -177,6 +176,7 @@ async def vacancies_create(
             - total_found: всего найдено в файле
             - already_exists: уже было в БД
             - new_added: новых добавлено
+            - new_links: новых связей для существующих вакансий
             - errors: количество ошибок
     """
 
@@ -190,23 +190,35 @@ async def vacancies_create(
     # Собираем все ID вакансий
     all_ids = [vac.get("id") for vac in vacancies if vac.get("id")]
 
-    # Проверяем какие уже есть в БД
-    stmt = select(Vacancy.hh_id).where(Vacancy.hh_id.in_(all_ids))
+    # Проверяем какие вакансии уже есть в БД по hh_id
+    stmt = select(Vacancy.id, Vacancy.hh_id).where(Vacancy.hh_id.in_(all_ids))
     result = await session.execute(stmt)
-    existing_ids = {row.hh_id for row in result}
+    existing_vacancies = {row.hh_id: row.id for row in result.all()}
 
-    new_ids = set(all_ids) - existing_ids
+    # Проверяем какие УЖЕ СВЯЗАНЫ с этим пользователем
+    stmt = select(Vacancy.hh_id).join(UserVacancies).where(UserVacancies.user_id == user_id, Vacancy.hh_id.in_(all_ids))
+
+    # Разделяем на три категории:
+    #    - new_vacancies: которых нет вообще в БД
+    #    - new_links: есть в БД, но не связаны с пользователем
+    #    - linked_ids: уже есть у пользователя
+    result = await session.execute(stmt)
+    linked_ids = {row.hh_id for row in result.all()}
+
+    new_vacancies = set(all_ids) - existing_vacancies.keys()
+    new_links = existing_vacancies.keys() - linked_ids
 
     logger.info(f"Всего найдено: {len(all_ids)}")
-    logger.info(f"Уже в БД: {len(existing_ids)}")
-    logger.info(f"Новых для загрузки: {len(new_ids)}")
+    logger.info(f"Уже у пользователя: {len(linked_ids)}")
+    logger.info(f"Новых вакансий: {len(new_vacancies)}")
+    logger.info(f"Новых связей: {len(new_links)}")
 
     vacancies_to_add = []
     error_count = 0
 
-    for hh_id in new_ids:
+    for hh_id in new_vacancies:
         try:
-            vacancy = await vacancy_create(hh_id, query, user_id, hh_client)
+            vacancy = await vacancy_create(hh_id, query, hh_client)
             vacancies_to_add.append(vacancy)
             await asyncio.sleep(HH_REQUEST_DELAY)
 
@@ -215,14 +227,31 @@ async def vacancies_create(
             error_count += 1
             continue
 
+    # Добавляем вакансии в сессию и делаем flush для получения ID
     session.add_all(vacancies_to_add)
+    await session.flush()
+
+    # Теперь создаём связи (у вакансий уже есть ID)
+    links_to_add = []
+
+    # Связи для новых вакансий
+    for vacancy in vacancies_to_add:
+        links_to_add.append(UserVacancies(user_id=user_id, vacancy_id=vacancy.id))
+
+    # Связи для существующих вакансий
+    for hh_id in new_links:
+        links_to_add.append(UserVacancies(user_id=user_id, vacancy_id=existing_vacancies[hh_id]))
+
+    session.add_all(links_to_add)
     await session.commit()
+
     logger.info("Загрузка вакансий в БД завершена")
 
     return {
         "total_found": len(all_ids),
-        "already_exists": len(existing_ids),
-        "new_added": len(vacancies_to_add),
+        "already_linked": len(linked_ids),
+        "new_vacancies": len(vacancies_to_add),
+        "new_links": len(new_links),
         "errors": error_count,
     }
 
