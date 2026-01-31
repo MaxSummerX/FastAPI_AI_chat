@@ -36,7 +36,7 @@ class VacancyResponse(VacancyBase):
     apply_url: str | None = Field(default=None, description="Ссылка для отклика на вакансию")
     is_active: bool = Field(description="Активна ли вакансия во внутренней логике")
     is_archived: bool = Field(description="Архивная ли вакансия на hh.ru")
-    is_favorite: bool = Field(default=False, description="В избранном ли вакансия")
+    is_favorite: bool | None = Field(default=None, description="В избранном ли вакансия")
     published_at: datetime | None = Field(default=None, description="Дата публикации на hh.ru")
     created_at: datetime = Field(description="Дата создания записи в БД")
     updated_at: datetime = Field(description="Дата последнего обновления в БД")
