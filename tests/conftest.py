@@ -93,6 +93,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     Подменяет зависимость get_async_postgres_db на тестовую сессию.
     """
     from app.depends.db_depends import get_async_postgres_db
+    from app.lifespan import lifespan
 
     # Функция-override для зависимости
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
@@ -101,12 +102,14 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     # Подменяем зависимость
     app.dependency_overrides[get_async_postgres_db] = override_get_db
 
-    # Создаём клиент с ASGI транспортом
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as ac:
-        yield ac
+    # Запускаем lifespan вручную для инициализации HTTP клиентов
+    async with lifespan(app):
+        # Создаём клиент с ASGI транспортом
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as ac:
+            yield ac
 
     # Восстанавливаем оригинальную зависимость
     app.dependency_overrides.clear()
@@ -636,11 +639,11 @@ async def test_vacancy(db_session: AsyncSession, test_user: UserModel) -> Vacanc
     from datetime import UTC, datetime
 
     from app.enum.experience import Experience
+    from app.models.user_vacancies import UserVacancies
     from app.models.vacancies import Vacancy
 
     vacancy = Vacancy(
         id=uuid.uuid4(),
-        user_id=test_user.id,
         hh_id="12345678",
         query_request="python developer",
         title="Python Developer",
@@ -660,12 +663,20 @@ async def test_vacancy(db_session: AsyncSession, test_user: UserModel) -> Vacanc
         apply_url="https://hh.ru/vacancy/12345678?apply=true",
         is_active=True,
         is_archived=False,
-        is_favorite=False,
         published_at=datetime.now(UTC),
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
     db_session.add(vacancy)
+    await db_session.flush()
+
+    # Create UserVacancies relationship
+    user_vacancy = UserVacancies(
+        user_id=test_user.id,
+        vacancy_id=vacancy.id,
+        is_favorite=False,
+    )
+    db_session.add(user_vacancy)
     await db_session.commit()
     await db_session.refresh(vacancy)
 
@@ -680,6 +691,7 @@ async def test_vacancies(db_session: AsyncSession, test_user: UserModel) -> list
     from datetime import UTC, datetime, timedelta
 
     from app.enum.experience import Experience
+    from app.models.user_vacancies import UserVacancies
     from app.models.vacancies import Vacancy
 
     vacancies = []
@@ -689,7 +701,6 @@ async def test_vacancies(db_session: AsyncSession, test_user: UserModel) -> list
     for i in range(30):
         vacancy = Vacancy(
             id=uuid.uuid4(),
-            user_id=test_user.id,
             hh_id=f"hh_{i}",
             query_request=f"query_{i % 3}",  # 3 разных запроса
             title=f"Vacancy {i}",
@@ -709,13 +720,21 @@ async def test_vacancies(db_session: AsyncSession, test_user: UserModel) -> list
             apply_url=f"https://hh.ru/vacancy/{i}?apply=true",
             is_active=True,
             is_archived=i % 10 == 0,  # Каждая 10-я архивная
-            is_favorite=i % 5 == 0,  # Каждая 5-я в избранном
             published_at=datetime.now(UTC) - timedelta(days=i),
             created_at=datetime.now(UTC) - timedelta(seconds=i * 0.1),
             updated_at=datetime.now(UTC) - timedelta(seconds=i * 0.1),
         )
         vacancies.append(vacancy)
         db_session.add(vacancy)
+        await db_session.flush()
+
+        # Create UserVacancies relationship (каждая 5-я в избранном)
+        user_vacancy = UserVacancies(
+            user_id=test_user.id,
+            vacancy_id=vacancy.id,
+            is_favorite=i % 5 == 0,
+        )
+        db_session.add(user_vacancy)
         await db_session.flush()
         # Небольшая задержка для разницы во времени
         await sleep(0.001)

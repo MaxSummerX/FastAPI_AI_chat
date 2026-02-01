@@ -16,9 +16,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enum.experience import Experience
+from app.models.user_vacancies import UserVacancies
 from app.models.users import User as UserModel
 from app.models.vacancies import Vacancy as VacancyModel
 
@@ -263,22 +265,47 @@ async def test_get_vacancy_by_id_inactive(
 
 @pytest.mark.asyncio
 async def test_get_vacancy_by_hh_id_from_db(
-    client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_vacancy: VacancyModel,
+    test_user: UserModel,
+    db_session: AsyncSession,
 ) -> None:
-    """Тест: получение вакансии по hh_id из БД (без импорта)"""
-    response = await client.get(f"/api/v2/vacancies/head_hunter/{test_vacancy.hh_id}", headers=auth_headers)
-    assert response.status_code == 200
+    """Тест: добавление вакансии по hh_id из БД к пользователю"""
+    # First, remove the existing UserVacancy link so we can test adding it back
+    from app.models.user_vacancies import UserVacancies
 
-    data = response.json()
-    assert data["hh_id"] == test_vacancy.hh_id
-    assert data["title"] == test_vacancy.title
+    result = await db_session.scalars(
+        select(UserVacancies).where(
+            UserVacancies.user_id == test_user.id,
+            UserVacancies.vacancy_id == test_vacancy.id,
+        )
+    )
+    existing_link = result.one_or_none()
+    if existing_link:
+        await db_session.delete(existing_link)
+        await db_session.commit()
+
+    # POST request to add existing vacancy to user's pool
+    response = await client.post(f"/api/v2/vacancies/head_hunter/{test_vacancy.hh_id}", headers=auth_headers)
+    assert response.status_code == 204
+
+    # Verify the link was created
+    result = await db_session.scalars(
+        select(UserVacancies).where(
+            UserVacancies.user_id == test_user.id,
+            UserVacancies.vacancy_id == test_vacancy.id,
+        )
+    )
+    link = result.one_or_none()
+    assert link is not None
 
 
 @pytest.mark.asyncio
 async def test_get_vacancy_by_hh_id_with_import(
-    client: AsyncClient, auth_headers: dict[str, str], test_user: UserModel
+    client: AsyncClient, auth_headers_import: dict[str, str], test_user: UserModel
 ) -> None:
-    """Тест: импорт вакансии с hh.ru при отсутствии в БД"""
+    """Тест: импорт вакансии с hh.ru при отсутствии в БД (POST request)"""
     from datetime import UTC, datetime
 
     from app.models.vacancies import Vacancy
@@ -288,7 +315,6 @@ async def test_get_vacancy_by_hh_id_with_import(
     # Мокаем функцию vacancy_create напрямую
     mock_vacancy = Vacancy(
         id=uuid.uuid4(),
-        user_id=test_user.id,
         hh_id=hh_id,
         query_request="Personal request",
         title="Test Python Developer",
@@ -312,16 +338,14 @@ async def test_get_vacancy_by_hh_id_with_import(
     )
 
     with patch("app.api.v2.vacancy.vacancy_create", new_callable=AsyncMock, return_value=mock_vacancy):
-        response = await client.get(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers)
+        # POST request to add vacancy to user's pool
+        response = await client.post(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["hh_id"] == hh_id
-        assert data["title"] == "Test Python Developer"
+        assert response.status_code == 204
 
 
 @pytest.mark.asyncio
-async def test_get_vacancy_by_hh_id_not_found_on_hh(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+async def test_get_vacancy_by_hh_id_not_found_on_hh(client: AsyncClient, auth_headers_import: dict[str, str]) -> None:
     """Тест: вакансия не найдена на hh.ru"""
     from fastapi import HTTPException
 
@@ -330,15 +354,15 @@ async def test_get_vacancy_by_hh_id_not_found_on_hh(client: AsyncClient, auth_he
     with patch("app.api.v2.vacancy.vacancy_create", new_callable=AsyncMock) as mock_create:
         mock_create.side_effect = HTTPException(status_code=404, detail="Vacancy not found")
 
-        response = await client.get(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers)
+        response = await client.post(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
 
         assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_get_vacancy_by_hh_id_unauthorized(client: AsyncClient) -> None:
-    """Тест: получение вакансии по hh_id без авторизации"""
-    response = await client.get("/api/v2/vacancies/head_hunter/12345678")
+    """Тест: добавление вакансии по hh_id без авторизации"""
+    response = await client.post("/api/v2/vacancies/head_hunter/12345678")
     assert response.status_code == 401
 
 
@@ -391,24 +415,52 @@ async def test_delete_other_user_vacancy(
 
 @pytest.mark.asyncio
 async def test_add_to_favorites_success(
-    client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel, db_session: AsyncSession
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_vacancy: VacancyModel,
+    test_user: UserModel,
+    db_session: AsyncSession,
 ) -> None:
     """Тест: успешное добавление вакансии в избранное"""
+    # First set is_favorite to False
+    result = await db_session.scalars(
+        select(UserVacancies).where(
+            UserVacancies.user_id == test_user.id,
+            UserVacancies.vacancy_id == test_vacancy.id,
+        )
+    )
+    link = result.one_or_none()
+    if link:
+        link.is_favorite = False
+        await db_session.commit()
+
     response = await client.put(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
 
-    # Проверяем, что вакансия помечена как избранная
-    await db_session.refresh(test_vacancy)
-    assert test_vacancy.is_favorite is True
+    # Проверяем, что вакансия помечена как избранная через UserVacancies
+    await db_session.refresh(link)
+    assert link.is_favorite is True
 
 
 @pytest.mark.asyncio
 async def test_add_to_favorites_already_favorite(
-    client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel, db_session: AsyncSession
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_vacancy: VacancyModel,
+    test_user: UserModel,
+    db_session: AsyncSession,
 ) -> None:
     """Тест: повторное добавление в избранное (idempotent)"""
-    test_vacancy.is_favorite = True
-    await db_session.commit()
+    result = await db_session.scalars(
+        select(UserVacancies).where(
+            UserVacancies.user_id == test_user.id,
+            UserVacancies.vacancy_id == test_vacancy.id,
+        )
+    )
+    link = result.one_or_none()
+    if link:
+        link.is_favorite = True
+        await db_session.commit()
 
     response = await client.put(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
@@ -435,27 +487,53 @@ async def test_add_to_favorites_unauthorized(client: AsyncClient, test_vacancy: 
 
 @pytest.mark.asyncio
 async def test_remove_from_favorites_success(
-    client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel, db_session: AsyncSession
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_vacancy: VacancyModel,
+    test_user: UserModel,
+    db_session: AsyncSession,
 ) -> None:
     """Тест: успешное удаление вакансии из избранного"""
-    test_vacancy.is_favorite = True
-    await db_session.commit()
+    # First set is_favorite to True
+    result = await db_session.scalars(
+        select(UserVacancies).where(
+            UserVacancies.user_id == test_user.id,
+            UserVacancies.vacancy_id == test_vacancy.id,
+        )
+    )
+    link = result.one_or_none()
+    if link:
+        link.is_favorite = True
+        await db_session.commit()
 
     response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
 
-    # Проверяем, что вакансия помечена как не избранная
-    await db_session.refresh(test_vacancy)
-    assert test_vacancy.is_favorite is False
+    # Проверяем, что вакансия помечена как не избранная через UserVacancies
+    await db_session.refresh(link)
+    assert link.is_favorite is False
 
 
 @pytest.mark.asyncio
 async def test_remove_from_favorites_not_favorite(
-    client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel, db_session: AsyncSession
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_vacancy: VacancyModel,
+    test_user: UserModel,
+    db_session: AsyncSession,
 ) -> None:
     """Тест: удаление из избранного вакансии, которая там не находится (idempotent)"""
-    test_vacancy.is_favorite = False
-    await db_session.commit()
+    # First set is_favorite to False
+    result = await db_session.scalars(
+        select(UserVacancies).where(
+            UserVacancies.user_id == test_user.id,
+            UserVacancies.vacancy_id == test_vacancy.id,
+        )
+    )
+    link = result.one_or_none()
+    if link:
+        link.is_favorite = False
+        await db_session.commit()
 
     response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
