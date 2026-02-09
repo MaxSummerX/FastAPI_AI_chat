@@ -224,6 +224,6 @@ storage/
 config.json
 
 # Other
-app/polygon/
+polygon/
 /temp_files/
 /legacy/

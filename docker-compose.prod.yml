@@ -233,14 +233,8 @@ services:
     volumes:
       - ./storage/ollama:/root/.ollama
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'      # Максимум 2 ядра CPU
-          memory: 2G       # Максимум 2GB RAM
-        reservations:
-          cpus: '0.5'      # Гарантировано 0.5 ядра
-          memory: 512M     # Гарантировано 512MB
+    cpus: '2'
+    mem_limit: 2g
     networks:
       - ai-chat-network
     healthcheck:

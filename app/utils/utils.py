@@ -1,6 +1,6 @@
 import re
 import time
-from collections.abc import Awaitable
+from collections.abc import AsyncIterator, Awaitable
 from uuid import UUID
 
 from loguru import logger
@@ -100,12 +100,14 @@ async def save_message_to_db(db: AsyncSession, role: str, conversation_id: UUID,
     await db.commit()
 
 
-async def save_message_to_db_after_stream(
-    result: Awaitable[str], db: AsyncSession, conversation_id: UUID, model: str
-) -> None:
-    """Сохранение сообщения от llm в БД после stream ответа"""
+async def stream_and_save_to_db(
+    stream: AsyncIterator[str], result_awaitable: Awaitable[str], db: AsyncSession, conversation_id: UUID, model: str
+) -> AsyncIterator[str]:
+    """Стримим сообщения пользователю и Сохранение сообщения от llm в БД после stream ответа"""
+    async for chunk in stream:
+        yield chunk
 
-    full_response = await result
+    full_response = await result_awaitable
 
     assistant_message = MessageModel(
         conversation_id=conversation_id, role="assistant", content=full_response, model=model

@@ -108,6 +108,7 @@ class LLMBase(ABC):
     async def generate_response(
         self,
         messages: list[dict[str, str]],
+        model: str | None = None,
         response_format: str | Any = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str = "auto",
@@ -118,6 +119,7 @@ class LLMBase(ABC):
 
         Args:
             messages: Список словарей с 'role' и 'content'
+            model: Модель LLM. Если None - используется self.config.model.
             response_format: Формат ответа. Для получения ответа от модели в заданным шаблоном
             tools: Список инструментов, доступных модели
             tool_choice: Метод выбора инструмента

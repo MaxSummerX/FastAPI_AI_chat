@@ -20,11 +20,7 @@ from app.prompts.prompts_base import START_PROMPT
 from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
 from app.schemas.pagination import PaginatedResponse
-from app.utils.utils import (
-    get_conversation_history,
-    get_conversation_history_with_mem0,
-    save_message_to_db_after_stream,
-)
+from app.utils.utils import get_conversation_history, get_conversation_history_with_mem0, stream_and_save_to_db
 from app.utils.utils_for_pagination import (
     calculate_has_more,
     decode_cursor,
@@ -133,181 +129,6 @@ async def get_messages(
     )
 
 
-@router.post(
-    "",
-    status_code=status.HTTP_201_CREATED,
-    summary="Добавить сообщение в беседу",
-)
-async def add_message(
-    conversation_id: UUID,
-    message: MessageCreate,
-    background_tasks: BackgroundTasks,
-    prompt_id: UUID | None = None,
-    current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
-) -> MessageSchemas:
-    """
-    Добавить сообщение в беседу и получить ответ от ассистента.
-
-    Args:
-        conversation_id: UUID беседы
-        message: Сообщение пользователя (role, content)
-        background_tasks: FastAPI background tasks
-        prompt_id: Опциональный ID кастомного промпта
-        current_user: Текущий пользователь
-        db: Сессия БД
-
-    Returns:
-        MessageModel: Ответ ассистента
-
-    Raises:
-        HTTPException 404: Если беседа или промпт не найдены
-    """
-    logger.info(f"Запрос на добавление сообщения в беседу {conversation_id} пользователем {current_user.id}")
-
-    # Проверка доступа и существования беседы
-    conversation_result = await db.scalars(
-        select(ConversationModel).where(
-            ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
-        )
-    )
-
-    conversation = conversation_result.first()
-
-    if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    # Валидация: контент не должен быть пустым
-    if not message.content or not message.content.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Message content cannot be empty")
-
-    # Получаем промпт с дополнительными проверками
-    if not prompt_id:
-        prompt = START_PROMPT
-    else:
-        prompt_result = await db.scalars(
-            select(PromptModel).where(
-                PromptModel.id == prompt_id,
-                PromptModel.user_id == current_user.id,
-                PromptModel.is_active.is_(True),
-            )
-        )
-
-        prompt_obj = prompt_result.first()
-        if not prompt_obj:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
-        prompt = prompt_obj.content
-
-    # Сохраняем сообщение пользователя
-    user_message = MessageModel(
-        conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
-    )
-    db.add(user_message)
-    await db.flush()  # Получаем ID сообщения для background task
-
-    # Получаем историю беседы
-    history = await get_conversation_history(prompt, db, conversation_id, limit=10)
-
-    # Отправляем запрос к llm
-    assistant_response = await llm.generate_response(history)
-
-    # Сохраняем ответ ассистента
-    assistant_message = MessageModel(
-        conversation_id=conversation_id, role="assistant", content=assistant_response, model=llm.config.model
-    )
-    db.add(assistant_message)
-
-    await db.commit()
-
-    # Передаём сообщение пользователя в mem0ai
-    background_tasks.add_task(
-        memory_local.add, messages=[message.model_dump()], user_id=current_user.username, run_id=str(user_message.id)
-    )
-
-    logger.info(f"Сообщение добавлено в беседу {conversation_id}")
-
-    return MessageSchemas.model_validate(assistant_message)
-
-
-@router.post("/stream", status_code=status.HTTP_200_OK, summary="Добавить сообщение с поточным ответом")
-async def add_message_stream(
-    conversation_id: UUID,
-    message: MessageCreate,
-    background_tasks: BackgroundTasks,
-    current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
-) -> StreamingResponse:
-    """
-    Добавить сообщение в беседу и получить поточный ответ от ассистента.
-
-    Ответ передаётся в реальном времени через Server-Sent Events (SSE).
-
-    Args:
-        conversation_id: UUID беседы
-        message: Сообщение пользователя
-        background_tasks: FastAPI background tasks
-        current_user: Текущий пользователь
-        db: Сессия БД
-
-    Returns:
-        StreamingResponse: Потоковый ответ с текстом события
-
-    Raises:
-        HTTPException 404: Если беседа не найдена
-    """
-    logger.info(f"Запрос на добавление стримингового ответа в беседу {conversation_id} пользователем {current_user.id}")
-
-    # Проверка доступа и что беседа существует
-    result = await db.scalars(
-        select(ConversationModel).where(
-            ConversationModel.id == conversation_id,
-            ConversationModel.user_id == current_user.id,
-            ConversationModel.is_archived.is_(False),
-        )
-    )
-
-    conversation = result.first()
-
-    if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    # Сохраняем сообщение пользователя
-    user_message = MessageModel(
-        conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
-    )
-    db.add(user_message)
-    await db.flush()  # Получаем ID сообщения для background task
-    await db.commit()
-
-    # Передаём сообщение на извлечение фактов в mem0ai
-    background_tasks.add_task(
-        memory_local.add,
-        messages=[message.model_dump()],
-        user_id=str(current_user.id),
-        run_id=str(user_message.id),
-    )
-
-    # Получаем историю с системным промптом и релевантными фактами для контекста
-    history = await get_conversation_history_with_mem0(
-        message=message.content,
-        user_id=current_user.id,
-        prompt=START_PROMPT,
-        db=db,
-        conversation_id=conversation_id,
-        limit=10,
-    )
-
-    # Передаём историю для генерации ответа
-    stream, result_awaitable = await llm.generate_stream_response(messages=history)
-
-    background_tasks.add_task(save_message_to_db_after_stream, result_awaitable, db, conversation_id, llm.config.model)
-
-    logger.info(f"Стриминговый ответ запущен для беседы {conversation_id}")
-
-    # Возвращаем streaming ответ
-    return StreamingResponse(stream, media_type="text/event-stream")
-
-
 @router.post("/stream_v2", status_code=status.HTTP_200_OK, summary="Добавить сообщение с поточным ответом (v2)")
 async def add_message_stream_v2(
     conversation_id: UUID,
@@ -315,6 +136,8 @@ async def add_message_stream_v2(
     background_tasks: BackgroundTasks,
     mem0ai_on: bool = False,
     prompt_id: UUID | None = None,
+    model: str | None = None,
+    sliding_window: int = 10,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> StreamingResponse:
@@ -331,6 +154,8 @@ async def add_message_stream_v2(
         background_tasks: FastAPI background tasks
         mem0ai_on: Использовать ли mem0ai для контекста
         prompt_id: ID кастомного промпта
+        model: Модель LLM
+        sliding_window: Размер истории для контекста LLM
         current_user: Текущий пользователь
         db: Сессия БД
 
@@ -349,7 +174,9 @@ async def add_message_stream_v2(
     # Проверка существования беседы
     conversation_result = await db.scalars(
         select(ConversationModel).where(
-            ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
+            ConversationModel.id == conversation_id,
+            ConversationModel.user_id == current_user.id,
+            ConversationModel.is_archived.is_(False),
         )
     )
     conversation = conversation_result.first()
@@ -392,7 +219,7 @@ async def add_message_stream_v2(
 
     if not mem0ai_on:
         history = await get_conversation_history(
-            prompt=prompt_content, db=db, conversation_id=conversation_id, limit=10
+            prompt=prompt_content, db=db, conversation_id=conversation_id, limit=sliding_window
         )
     else:
         # Получаем историю с системным промптом и релевантными фактами для контекста
@@ -402,12 +229,12 @@ async def add_message_stream_v2(
             prompt=prompt_content,
             db=db,
             conversation_id=conversation_id,
-            limit=10,
+            limit=sliding_window,
         )
 
     # Передаём историю для генерации ответа
     try:
-        stream, result_awaitable = await llm.generate_stream_response(messages=history)
+        stream, result_awaitable = await llm.generate_stream_response(messages=history, model=model)
     except Exception as e:
         logger.error(f"Ошибка при генерации стримингового ответа: {e}")
         raise HTTPException(
@@ -422,10 +249,16 @@ async def add_message_stream_v2(
         run_id=str(user_message.id),
     )
 
-    # Сохраняем сообщение от llm в фоне
-    background_tasks.add_task(save_message_to_db_after_stream, result_awaitable, db, conversation_id, llm.config.model)
-
     logger.info(f"Сообщение добавлено в беседу {conversation_id}, стриминг запущен")
 
     # Возвращаем streaming ответ
-    return StreamingResponse(stream, media_type="text/event-stream")
+    return StreamingResponse(
+        stream_and_save_to_db(
+            stream=stream,
+            result_awaitable=result_awaitable,
+            db=db,
+            conversation_id=conversation_id,
+            model=model if model is not None else llm.config.model or "gpt-4o-mini",
+        ),
+        media_type="text/event-stream",
+    )

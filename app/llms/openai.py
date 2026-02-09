@@ -104,6 +104,7 @@ class AsyncOpenAILLM(LLMBase):
     async def generate_response(
         self,
         messages: list[dict[str, str]],
+        model: str | None = None,
         response_format: str | Any | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str = "auto",
@@ -114,6 +115,7 @@ class AsyncOpenAILLM(LLMBase):
 
         Args:
             messages (list): Список(list) содержащий словари(dict) 'role' и 'content'.
+            model (str, optional): Модель LLM. Если None - используется self.config.model.
             response_format (str or object, optional): Формат ответа. По умолчанию — «None».
             tools (list, optional): Список(list) tools что модель может вызвать. По умолчанию — None.
             tool_choice (str, optional): Метод выбора tools. По умолчанию — "auto".
@@ -126,7 +128,7 @@ class AsyncOpenAILLM(LLMBase):
 
         params.update(
             {
-                "model": self.config.model,
+                "model": model or self.config.model,
                 "messages": messages,
             }
         )
@@ -176,13 +178,14 @@ class AsyncOpenAILLM(LLMBase):
         return parsed_response
 
     async def generate_stream_response(
-        self, messages: list[dict[str, str]], **kwargs: Any
+        self, messages: list[dict[str, str]], model: str | None = None, **kwargs: Any
     ) -> tuple[AsyncIterator[str], Awaitable[str]]:
         """
         Сгенерировать ответ JSON на основе предоставленных сообщений с помощью OpenAI.
 
         Args:
             messages (list): Список(list) содержащий словари(dict) 'role' и 'content'.
+            model (str, optional): Модель LLM. Если None - используется self.config.model.
             **kwargs: Дополнительные параметры, специфичные для OpenAI.
 
         Returns:
@@ -192,7 +195,7 @@ class AsyncOpenAILLM(LLMBase):
 
         params.update(
             {
-                "model": self.config.model,
+                "model": model or self.config.model,
                 "messages": messages,
                 "stream": True,
             }
