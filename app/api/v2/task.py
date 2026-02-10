@@ -77,7 +77,7 @@ async def task_import_vacancies(
 
     # Запускаем задачу с callback для удаления блокировки
     task = import_vacancy_task.apply_async(
-        args=[query, tiers, current_user.id],
+        args=(query, tiers, current_user.id),
         task_id=task_id,
         link=clear_lock.s(lock_key),  # Удалить блокировку после завершения
     )
@@ -105,7 +105,7 @@ async def get_task_status(task_id: str, current_user: UserModel = Depends(get_cu
     - result: результат (если задача завершена)
     - error: ошибка (если задача упала)
     """
-    result = AsyncResult(task_id, app=celery)
+    result: AsyncResult[Any] = AsyncResult(task_id, app=celery)
 
     # Проверяем что пользователь имеет доступ к задаче
     task_user_id = None
@@ -179,7 +179,7 @@ async def task_analysis_vacancies(
 
     # Запускаем задачу
     task = ai_analyse_task.apply_async(
-        args=[analysis, tiers, current_user.id, custom_prompt, limit],
+        args=(analysis, tiers, current_user.id, custom_prompt, limit),
         task_id=task_id,
         link=clear_lock.s(lock_key),
     )

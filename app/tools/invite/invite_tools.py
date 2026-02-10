@@ -30,11 +30,11 @@ async def list_unused_codes() -> list[str]:
     async with async_session_maker() as session:
         result = await session.scalars(select(InviteModel.code).where(InviteModel.is_used.is_(False)))
 
-        codes: list[str] = result.all()
+        codes = result.all()
 
         if codes:
             logger.info(f"📋 Неиспользованные коды ({len(codes)}):")
         else:
             logger.info("❌ Нет неиспользованных кодов")
 
-        return codes
+        return list(codes)

@@ -131,10 +131,10 @@ async def register_with_invite(
 
     try:
         # Проверяем валидность invite кода
-        invite = await db.scalars(
+        result = await db.scalars(
             select(InviteModel).where(InviteModel.code == invite_code, InviteModel.is_used.is_(False))
         )
-        invite = invite.first()
+        invite = result.first()
 
         if not invite:
             logger.warning(f"Попытка регистрации с неверным invite кодом: {invite_code}")
@@ -275,7 +275,7 @@ async def get_refresh_token(
     try:
         # Декодируем refresh токен
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        username: str | None = payload["sub"]
 
         if username is None:
             logger.warning("Refresh токен не содержит username")

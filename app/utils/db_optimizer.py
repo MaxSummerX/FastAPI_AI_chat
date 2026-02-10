@@ -15,7 +15,7 @@ def optimized_query[T: DeclarativeBase, S: BaseModel](
     schema: type[S],
     relationship_strategy: Literal["joined", "selectin"] = "selectin",
     include_unloaded: bool = False,
-) -> Select[T]:
+) -> Select[tuple[T]]:
     """
     Создает оптимизированный SQLAlchemy запрос на основе Pydantic схемы
 
