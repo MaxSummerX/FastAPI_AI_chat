@@ -11,18 +11,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
+from app.depends.mem0_depends import close_memory, init_memory
+from app.tools.headhunter.headhunter_client import close_hh_client, get_hh_client, warmup_hh_client
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     Управление жизненным циклом FastAPI приложения.
 
-    Startup: инициализация ресурсов
-    - Инициализация HTTP клиентов для hh.ru
-    - Прогрев соединений
+    Startup (запуск):
+        - Инициализация singleton AsyncMemory (система памяти)
+        - Создание и прогрев HTTP клиента для hh.ru
 
-    Shutdown: корректное закрытие ресурсов
-    - Закрытие HTTP клиентов
+    Shutdown (остановка):
+        - Закрытие HTTP клиента
+        - Очистка singleton AsyncMemory
 
     Args:
         app: Экземпляр FastAPI приложения
@@ -31,20 +35,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         None: Контекстный менеджер для использования в FastAPI
     """
 
-    logger.info("🚀 FastAPI application starting up...")
+    logger.info("🚀 Запуск FastAPI приложения...")
+    logger.info("🚀 Инициализация AsyncMemory")
+    init_memory()
 
-    from app.tools.headhunter.headhunter_client import close_hh_client, get_hh_client, warmup_hh_client
-
-    logger.info("🔌 Initializing HTTP clients...")
+    logger.info("🔌 Инициализация HTTP клиента...")
     await get_hh_client()  # Создаём клиент
     await warmup_hh_client()  # Прогреваем соединение
-    logger.info("✅ HTTP clients ready")
+    logger.info("✅ HTTP клиенты готовы")
 
     yield
 
-    # ============================================================
-    # SHUTDOWN - Освобождение ресурсов
-    # ============================================================
-    logger.info("🛑 FastAPI application shutting down...")
+    logger.info("🛑 Остановка FastAPI приложения...")
     await close_hh_client()
-    logger.info("✅ HTTP clients closed successfully")
+    logger.info("✅ HTTP клиенты закрыты")
+    logger.info("🛑 Закрытие AsyncMemory")
+    close_memory()
