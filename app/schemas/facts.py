@@ -31,15 +31,6 @@ class FactCreate(FactBase):
     metadata_: dict | None = Field(default=None, description="Дополнительные метаданные факта")
 
 
-class FactUpdate(FactBase):
-    """Схема для обновления существующего факта"""
-
-    content: str | None = Field(default=None, min_length=5, max_length=1000, description="Факт о пользователе")
-    category: FactCategory | None = Field(default=None, description="Категория факта")
-    confidence: float | None = Field(default=None, ge=0.0, le=1.0, description="Уровень уверенности в факте(0.0-1.0)")
-    metadata_: dict | None = Field(default=None, description="Дополнительные метаданные факта")
-
-
 class FactResponse(BaseModel):
     """Схема для возврата факта клиенту"""
 
@@ -54,6 +45,7 @@ class FactResponse(BaseModel):
     created_at: datetime = Field(description="Дата создания")
     last_confirmed_at: datetime = Field(description="Последнее подтверждение факта")
     metadata_: dict | None = Field(default=None, description="Дополнительные метаданные факта")
+    mem0_id: UUID | None = Field(default=None, description="UUID факта в mem0ai")
 
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 

@@ -76,9 +76,6 @@ class Fact(Base):
     # Если факт устарел и заменён новым
     superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(types.Uuid, ForeignKey("facts.id", ondelete="SET NULL"))
 
-    # Relationships
-    user: Mapped["User"] = relationship("User", back_populates="facts")
-
     # Временные метки
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
@@ -87,6 +84,12 @@ class Fact(Base):
 
     # Метаданные
     metadata_: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), name="metadata")
+
+    # ID в mem0ai
+    mem0_id: Mapped[types.Uuid | None] = mapped_column(types.Uuid, default=None)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="facts")
 
     source_conversation: Mapped["Conversation | None"] = relationship(
         "Conversation", foreign_keys=[source_conversation_id]
