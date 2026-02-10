@@ -9,14 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.configs.llm_config import base_config_for_llm
-from app.configs.memory import custom_config
 from app.depends.db_depends import get_async_postgres_db
+from app.depends.mem0_depends import get_memory
 from app.llms.openai import AsyncOpenAILLM
 from app.models import Conversation as ConversationModel
 from app.models import Message as MessageModel
 from app.models import User as UserModel
 from app.models.prompts import Prompts as PromptModel
 from app.prompts.prompts_base import START_PROMPT
+from app.schemas.facts import FactSource
 from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
 from app.schemas.pagination import PaginatedResponse
@@ -32,7 +33,7 @@ from app.utils.utils_for_pagination import (
 
 router = APIRouter(prefix="/{conversation_id}/messages", tags=["Messages_v2"])
 
-memory_local = AsyncMemory(config=custom_config)
+
 llm = AsyncOpenAILLM(base_config_for_llm)
 
 DEFAULT_PER_PAGE = 20
@@ -138,6 +139,8 @@ async def add_message_stream_v2(
     prompt_id: UUID | None = None,
     model: str | None = None,
     sliding_window: int = 10,
+    memory_facts: int = 5,
+    memory: AsyncMemory = Depends(get_memory),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> StreamingResponse:
@@ -156,6 +159,8 @@ async def add_message_stream_v2(
         prompt_id: ID кастомного промпта
         model: Модель LLM
         sliding_window: Размер истории для контекста LLM
+        memory_facts: Кол-во фактов добавляем вы контекст
+        memory: сервис для работы памяти(mem0ai)
         current_user: Текущий пользователь
         db: Сессия БД
 
@@ -228,8 +233,10 @@ async def add_message_stream_v2(
             user_id=current_user.id,
             prompt=prompt_content,
             db=db,
+            memory=memory,
             conversation_id=conversation_id,
             limit=sliding_window,
+            memory_limit=memory_facts,
         )
 
     # Передаём историю для генерации ответа
@@ -243,10 +250,11 @@ async def add_message_stream_v2(
 
     # Создаём фоновую задачу для работы mem0ai
     background_tasks.add_task(
-        memory_local.add,
+        memory.add,
         messages=[message.model_dump()],
         user_id=str(current_user.id),
         run_id=str(user_message.id),
+        metadata={"source_type": FactSource.EXTRACTED.value},
     )
 
     logger.info(f"Сообщение добавлено в беседу {conversation_id}, стриминг запущен")

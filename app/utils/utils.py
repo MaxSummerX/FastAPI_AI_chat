@@ -4,10 +4,10 @@ from collections.abc import AsyncIterator, Awaitable
 from uuid import UUID
 
 from loguru import logger
+from mem0 import AsyncMemory
 from sqlalchemy import select
 
 from app.database.postgres_db import AsyncSession
-from app.depends.mem0_depends import get_memory
 from app.models.messages import Message as MessageModel
 from app.schemas.messages import HistoryMessage
 
@@ -28,15 +28,24 @@ def extract_json(text: str) -> str:
 
 
 def parse_facts_from_mem0(memory: dict) -> str:
-    data = [
-        "\nФакты о пользователе:",
-    ]
-    for item in memory["results"]:
-        if item["score"] >= 0.65:  # TODO: Лучше продумать работу системы со score
-            data.append(" -" + item["memory"] + " - " + item["created_at"][:16])
+    data = []
 
-    new_data = "\n".join(data)
-    return new_data
+    # Добавляем факты
+    if results := memory.get("results"):
+        data.append("\n📝 Факты о пользователе:")
+        for item in results:
+            data.append(f" • {item['memory']} - {item['created_at'][:16]}")
+
+    # Добавляем связи
+    if relations := memory.get("relations"):
+        data.append("\n🔗 Связи:")
+        for relation in relations:
+            source = relation["source"].replace("user_id:_", "User").replace("_", " ")
+            dest = relation["destination"].replace("_", " ")
+            rel_type = relation["relationship"].replace("_", " ")
+            data.append(f"  • {source} → {rel_type} → {dest}")
+
+    return "\n".join(data) if data else "Нет данных о пользователе"
 
 
 async def get_conversation_history(prompt: str, db: AsyncSession, conversation_id: UUID, limit: int = 10) -> list[dict]:
@@ -59,7 +68,15 @@ async def get_conversation_history(prompt: str, db: AsyncSession, conversation_i
 
 
 async def get_conversation_history_with_mem0(
-    message: str, user_id: UUID, prompt: str, db: AsyncSession, conversation_id: UUID, limit: int = 10
+    message: str,
+    user_id: UUID,
+    prompt: str,
+    db: AsyncSession,
+    memory: AsyncMemory,
+    conversation_id: UUID,
+    limit: int = 10,
+    memory_limit: int = 10,
+    fact_score: float = 0.65,
 ) -> list[dict]:
     """Получить историю в формате для LLM"""
     start = time.time()
@@ -76,8 +93,7 @@ async def get_conversation_history_with_mem0(
     messages = result.all()
 
     mem_start = time.time()
-    async with get_memory() as memory:
-        facts = await memory.search(message, user_id=str(user_id), limit=10)
+    facts = await memory.search(message, user_id=str(user_id), limit=memory_limit, threshold=fact_score)
     mem_time = time.time() - mem_start
 
     total_time = time.time() - start
