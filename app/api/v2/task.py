@@ -112,7 +112,7 @@ async def get_task_status(task_id: str, current_user: UserModel = Depends(get_cu
     if result.successful() and isinstance(result.result, dict):
         task_user_id = result.result.get("user_id")
 
-    if task_user_id and task_user_id != current_user.id:
+    if task_user_id and task_user_id != str(current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     response: dict[str, Any] = {

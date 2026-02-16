@@ -40,6 +40,9 @@ logs: ## Посмотреть логи всех сервисов
 logs-app: ## Посмотреть логи только приложения
 	docker compose -f docker-compose.prod.yml logs -f app
 
+logs-celery: ## Посмотреть логи только celery
+	docker compose -f docker-compose.prod.yml logs -f celery_worker
+
 ps: ## Показать статус сервисов
 	docker compose -f docker-compose.prod.yml ps
 
