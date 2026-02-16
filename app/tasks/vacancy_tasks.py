@@ -4,6 +4,7 @@ from uuid import UUID
 
 import redis
 from celery import Task
+from celery.signals import worker_process_init
 from dotenv import load_dotenv
 from loguru import logger
 from sqlalchemy import and_, select
@@ -30,6 +31,26 @@ LOCK_REDIS_URL = get_required_env("LOCK_REDIS_URL")
 
 
 redis_client = redis.from_url(LOCK_REDIS_URL, decode_responses=True)
+
+
+_worker_resources: dict = {}
+
+
+@worker_process_init.connect
+def init_worker(**kwargs: Any) -> None:
+    """
+    Выполняется в каждом воркер-процессе ПОСЛЕ fork.
+    Engine создаётся уже в правильном процессе без привязки к старому loop.
+    """
+    from app.database.session import create_session_factory
+
+    # Сначала создаём loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Потом engine — он создаётся внутри этого loop
+    _worker_resources["session_factory"] = create_session_factory()
+    _worker_resources["loop"] = loop
 
 
 @celery.task
@@ -65,8 +86,9 @@ def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, 
         dict со статистикой импорта
     """
 
-    async def run_import() -> dict[str, Any]:
-        async with async_session_maker() as session:
+    async def run_import() -> dict[str, int]:
+        """Асинхронная функция импорта вакансий."""
+        async with _worker_resources["session_factory"]() as session:
             return await import_vacancies(
                 query=query,
                 tiers=tiers,
@@ -75,7 +97,7 @@ def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, 
             )
 
     try:
-        result = asyncio.run(run_import())
+        result: dict[str, Any] = _worker_resources["loop"].run_until_complete(run_import())
         logger.success(f"✅ Импорт завершён: query='{query}': {result}")
         result["user_id"] = user_id
         return result
