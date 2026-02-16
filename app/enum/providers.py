@@ -1,6 +1,6 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class ImportedProvider(str, Enum):
+class ImportedProvider(StrEnum):
     GPT = "gpt"
     CLAUDE = "claude"

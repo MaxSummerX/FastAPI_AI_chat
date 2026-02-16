@@ -1,18 +1,27 @@
 from typing import Any
 
-from backoff import expo, on_exception
 from loguru import logger
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.llms.openai import AsyncOpenAILLM
 from app.tools.ai_research.exceptions import LLMError
 
 
-@on_exception(expo, Exception, max_tries=3, max_time=30)
-async def _call_llm_with_retry(llm: AsyncOpenAILLM, messages: list[dict[str, str]]) -> str | dict[str, Any]:
+@retry(
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception_type((TimeoutError, ConnectionError)),
+    reraise=True,
+)
+async def _call_llm_with_retry(
+    llm: AsyncOpenAILLM,
+    messages: list[dict[str, str]],
+) -> str | dict[str, Any]:
     """
-    Вызывает LLM с автоматическим retry при ошибках.
+    Вызывает LLM с автоматическим retry при транзиентных ошибках.
 
-    Использует экспоненциальный backoff для повторных попыток.
+    Retry только на TimeoutError / ConnectionError с экспоненциальным backoff.
+    LLMError (пустой ответ, бизнес-логика) — не ретраится, пробрасывается сразу.
 
     Args:
         llm: Инстанс LLM (получается через dependency injection)
@@ -22,7 +31,7 @@ async def _call_llm_with_retry(llm: AsyncOpenAILLM, messages: list[dict[str, str
         Текстовый ответ от LLM или dict (для structured output)
 
     Raises:
-        LLMError: Если все попытки завершились неудачно
+        LLMError: Пустой ответ или исчерпаны все попытки
     """
     try:
         result = await llm.generate_response(messages)
@@ -32,6 +41,13 @@ async def _call_llm_with_retry(llm: AsyncOpenAILLM, messages: list[dict[str, str
 
         return result
 
+    except LLMError:
+        raise
+
+    except (TimeoutError, ConnectionError):
+        logger.warning("Транзиентная ошибка LLM, tenacity выполнит retry...")
+        raise  # tenacity перехватит и решит: retry или стоп
+
     except Exception as e:
-        logger.error(f"Ошибка при вызове LLM: {e}")
+        logger.error(f"Неожиданная ошибка при вызове LLM: {e}")
         raise LLMError(f"Не удалось получить ответ от LLM: {e}") from e

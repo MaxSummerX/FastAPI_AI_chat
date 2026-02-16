@@ -56,7 +56,7 @@ def optimized_query[T: DeclarativeBase, S: BaseModel](
                 columns_to_load.add(field_name)
 
     # 3. Добавляем PK к загружаемым колонкам
-    columns_to_load |= pk_columns
+    columns_to_load |= {col for col in pk_columns if col is not None}
 
     # 4. Формируем запрос
     stmt = select(model)

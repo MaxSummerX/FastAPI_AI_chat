@@ -1,9 +1,9 @@
 import json
-import os
 from pathlib import Path
 from uuid import UUID
 
 import aiofiles
+import aiofiles.os as aios
 from loguru import logger
 from sqlalchemy import select
 
@@ -17,7 +17,7 @@ from app.utils.claude_split_conversations_async import split_conversations_async
 async def convert(user_id: UUID, provider: str, path: Path, input_file: str, output_dir: str) -> None:
     await split_conversations_async(input_file, output_dir)
 
-    files = [i for i in path.iterdir() if i.is_file()]
+    files = [path / f for f in await aios.listdir(path) if (path / f).is_file()]
 
     for item in files:
         try:
@@ -36,7 +36,7 @@ async def convert(user_id: UUID, provider: str, path: Path, input_file: str, out
 
                     if conversation:
                         logger.info(f"Беседа {item.name} уже существует. Удаляем исходный файл.")
-                        os.remove(item)
+                        await aios.remove(item)
                         continue
 
                     conversation = ConversationModel(
@@ -174,11 +174,11 @@ async def convert(user_id: UUID, provider: str, path: Path, input_file: str, out
                                     )
                                     session.add(message)
                                     await session.commit()
-            os.remove(item)
+            await aios.remove(item)
             logger.info(f"Файл {item.name} успешно обработан и удален")
 
         except Exception as e:
             logger.error(f"Ошибка при обработке файла {item.name}: {e}")
 
-    if path.exists():
-        os.rmdir(path)
+    if await aios.path.exists(path):
+        await aios.rmdir(path)

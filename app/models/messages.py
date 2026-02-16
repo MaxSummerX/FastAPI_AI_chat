@@ -1,6 +1,5 @@
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, types
@@ -8,19 +7,12 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.enum.messages import MessageRole
 from app.models.base_model import Base
 
 
 if TYPE_CHECKING:
     from app.models.conversations import Conversation
-
-
-class MessageRole(str, Enum):
-    """Роли участников диалога"""
-
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
 
 
 class Message(Base):

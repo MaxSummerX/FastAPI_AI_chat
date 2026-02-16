@@ -1,9 +1,9 @@
-import os
-
 from dotenv import load_dotenv
+
+from app.utils.env import get_required_env
 
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
+SECRET_KEY = get_required_env("SECRET_KEY")
+ALGORITHM = get_required_env("ALGORITHM")

@@ -77,7 +77,7 @@ async def task_import_vacancies(
 
     # Запускаем задачу с callback для удаления блокировки
     task = import_vacancy_task.apply_async(
-        args=(query, tiers, current_user.id),
+        args=(query, tiers, str(current_user.id)),
         task_id=task_id,
         link=clear_lock.s(lock_key),  # Удалить блокировку после завершения
     )
@@ -115,7 +115,7 @@ async def get_task_status(task_id: str, current_user: UserModel = Depends(get_cu
     if task_user_id and task_user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    response = {
+    response: dict[str, Any] = {
         "task_id": task_id,
         "status": result.state,
     }

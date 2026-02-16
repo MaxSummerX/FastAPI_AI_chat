@@ -7,9 +7,14 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict
+      - id: check-toml
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.13
+    rev: v0.15.0
     hooks:
       - id: ruff-check
         args: [ --fix ]
@@ -23,3 +28,9 @@ repos:
         additional_dependencies:
           - types-aiofiles
           - pydantic>=2.0
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: [ "-c", "pyproject.toml" ]

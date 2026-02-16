@@ -75,8 +75,8 @@ async def get_conversation_history_with_mem0(
     memory: AsyncMemory,
     conversation_id: UUID,
     limit: int = 10,
-    memory_limit: int = 10,
-    fact_score: float = 0.65,
+    memory_limit: int = 50,
+    fact_score: float = 0.3,
 ) -> list[dict]:
     """Получить историю в формате для LLM"""
     start = time.time()

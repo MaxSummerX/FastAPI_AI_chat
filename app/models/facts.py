@@ -1,6 +1,5 @@
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Text, types
@@ -8,6 +7,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.enum.facts import FactCategory, FactSource
 from app.models.base_model import Base
 
 
@@ -15,28 +15,6 @@ if TYPE_CHECKING:
     from app.models.conversations import Conversation
     from app.models.messages import Message
     from app.models.users import User
-
-
-class FactCategory(str, Enum):
-    """Категории фактов"""
-
-    PERSONAL = "personal"  # Личная информация
-    PROFESSIONAL = "professional"  # Работа, навыки
-    PREFERENCES = "preferences"  # Предпочтения
-    LEARNING = "learning"  # Что изучает
-    GOALS = "goals"  # Цели
-    INTERESTS = "interests"  # Интересы
-    TECHNICAL = "technical"  # Технические знания
-    BEHAVIORAL = "behavioral"  # Паттерны поведения
-
-
-class FactSource(str, Enum):
-    """Источник факта"""
-
-    EXTRACTED = "extracted"  # Автоматически извлечён из диалога
-    USER_PROVIDED = "user_provided"  # Добавлен пользователем вручную
-    IMPORTED = "imported"  # Импортирован из внешнего источника
-    INFERRED = "inferred"  # Выведен AI на основе нескольких фактов
 
 
 class Fact(Base):

@@ -27,6 +27,11 @@ async def upload_conversations_other_provider(
     file: UploadFile = File(...),
 ) -> dict[str, Any]:
     logger.info(f"Попытка загрузки файла: user_id={user_id}, provider={provider.value}, filename={file.filename}")
+
+    if file.filename is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Filename is required")
+    if file.content_type is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Content-Type is required")
     validate_file_extension(file.filename)
     validate_mime_type(file.content_type)
 

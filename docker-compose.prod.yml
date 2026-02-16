@@ -59,8 +59,8 @@ services:
     container_name: AI_chat_celery_worker
     command: >
       uv run celery -A app.configs.celery_config worker
-      --pool=gevent
-      --concurrency=10
+      --pool=prefork
+      --concurrency=2
       --loglevel=info
     env_file:
       - .env

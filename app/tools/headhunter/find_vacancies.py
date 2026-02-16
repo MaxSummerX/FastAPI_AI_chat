@@ -191,18 +191,20 @@ async def vacancies_create(
     all_ids = [vac.get("id") for vac in vacancies if vac.get("id")]
 
     # Проверяем какие вакансии уже есть в БД по hh_id
-    stmt = select(Vacancy.id, Vacancy.hh_id).where(Vacancy.hh_id.in_(all_ids))
-    result = await session.execute(stmt)
+    existing_vacancies_query = select(Vacancy.id, Vacancy.hh_id).where(Vacancy.hh_id.in_(all_ids))
+    result = await session.execute(existing_vacancies_query)
     existing_vacancies = {row.hh_id: row.id for row in result.all()}
 
     # Проверяем какие УЖЕ СВЯЗАНЫ с этим пользователем
-    stmt = select(Vacancy.hh_id).join(UserVacancies).where(UserVacancies.user_id == user_id, Vacancy.hh_id.in_(all_ids))
+    user_linked_query = (
+        select(Vacancy.hh_id).join(UserVacancies).where(UserVacancies.user_id == user_id, Vacancy.hh_id.in_(all_ids))
+    )
 
     # Разделяем на три категории:
     #    - new_vacancies: которых нет вообще в БД
     #    - new_links: есть в БД, но не связаны с пользователем
     #    - linked_ids: уже есть у пользователя
-    result = await session.execute(stmt)
+    result = await session.execute(user_linked_query)
     linked_ids = {row.hh_id for row in result.all()}
 
     new_vacancies = set(all_ids) - existing_vacancies.keys()

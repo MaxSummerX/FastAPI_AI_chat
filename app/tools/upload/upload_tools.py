@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import aiofiles
+import aiofiles.os as aios
 from fastapi import HTTPException, UploadFile, status
 from loguru import logger
 
@@ -58,12 +59,12 @@ async def save_file_with_validation(file: UploadFile, path: Path) -> int:
         return current_size
 
     except HTTPException:
-        if path.exists():
-            os.remove(path)
+        if await aios.path.exists(path):
+            await aios.remove(path)
         raise
 
     except Exception as e:
-        if path.exists():
-            os.remove(path)
+        if await aios.path.exists(path):
+            await aios.remove(path)
         logger.error(f"Error saving file to {path}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error saving file: {e}") from e

@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class Experience(str, Enum):
+class Experience(StrEnum):
     tier_0 = "noExperience"
     tier_1 = "between1And3"
     tier_2 = "between3And6"

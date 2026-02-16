@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class AnalysisType(str, Enum):
+class AnalysisType(StrEnum):
     """
     Типы анализа вакансии от LLM.
     """
@@ -11,9 +11,6 @@ class AnalysisType(str, Enum):
     PREPARATION = "preparation"  # Подготовка к собеседованию
     SKILL_GAP = "skill_gap"  # Анализ пробелов в навыках
     CUSTOM = "custom"  # Пользовательский промпт
-
-    def __str__(self) -> str:
-        return self.value
 
     @classmethod
     def builtin_types(cls) -> list["AnalysisType"]:

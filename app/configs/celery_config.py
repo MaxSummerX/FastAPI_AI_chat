@@ -1,25 +1,19 @@
-import os
+import asyncio
 from typing import Any
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import worker_shutdown
+from celery.signals import worker_process_init, worker_process_shutdown
 from dotenv import load_dotenv
+
+from app.utils.env import get_required_env
 
 
 load_dotenv()
 
-REDIS_URL = os.getenv("REDIS_URL")
-
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL") or (REDIS_URL + "/1" if REDIS_URL else None)
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND") or (REDIS_URL + "/2" if REDIS_URL else None)
-
-
-if not CELERY_BROKER_URL:
-    raise ValueError("CELERY_BROKER_URL не задан! Установи переменную окружения или REDIS_URL")
-
-if not CELERY_RESULT_BACKEND:
-    raise ValueError("CELERY_RESULT_BACKEND не задан! Установи переменную окружения или REDIS_URL")
+REDIS_URL = get_required_env("REDIS_URL")
+CELERY_BROKER_URL = get_required_env("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = get_required_env("CELERY_RESULT_BACKEND")
 
 
 celery = Celery(
@@ -63,7 +57,7 @@ celery.conf.update(
 )
 
 
-@celery.on_after_configure.connect
+@worker_process_init.connect
 def warmup_http_clients(**kwargs: Any) -> None:
     """
     Прогрев HTTP соединений при старте Celery воркера.
@@ -71,7 +65,6 @@ def warmup_http_clients(**kwargs: Any) -> None:
     Срабатывает после конфигурации Celery, но до обработки задач.
     Выполняет первый запрос к API hh.ru для установления TLS соединения.
     """
-    import asyncio
 
     async def _warmup() -> None:
         from app.tools.headhunter.headhunter_client import warmup_hh_client
@@ -81,7 +74,7 @@ def warmup_http_clients(**kwargs: Any) -> None:
     asyncio.run(_warmup())
 
 
-@worker_shutdown.connect
+@worker_process_shutdown.connect
 def shutdown_http_clients(**kwargs: Any) -> None:
     """
     Закрытие HTTP клиентов при shutdown воркера.
@@ -89,7 +82,6 @@ def shutdown_http_clients(**kwargs: Any) -> None:
     Срабатывает при корректном завершении работы Celery воркера
     (SIGTERM, SIGINT). Закрывает HTTP соединения для освобождения ресурсов.
     """
-    import asyncio
 
     async def _shutdown() -> None:
         from app.tools.headhunter.headhunter_client import close_hh_client

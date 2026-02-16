@@ -1,4 +1,5 @@
 import time
+from collections.abc import MutableMapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,7 +18,7 @@ class TimingMiddleware:
 
         start_time: float = time.time()
 
-        async def send_with_timing(message: dict[str, Any]) -> None:
+        async def send_with_timing(message: MutableMapping[str, Any]) -> None:
             if message["type"] == "http.response.start":
                 duration: float = time.time() - start_time
                 timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

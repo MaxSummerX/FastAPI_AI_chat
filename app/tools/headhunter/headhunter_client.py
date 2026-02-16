@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -35,7 +35,7 @@ HH_RETRY_MIN_WAIT = 1.0  # Минимальная задержка между п
 HH_RETRY_MAX_WAIT = 10.0  # Максимальная задержка между попытками (секунды)
 
 
-class HHApiEndpoint(str, Enum):
+class HHApiEndpoint(StrEnum):
     """
     Эндпоинты API hh.ru.
 
@@ -86,8 +86,8 @@ async def get_hh_client() -> httpx.AsyncClient:
         if _client is not None and not _client.is_closed:
             try:
                 await _client.aclose()
-            except Exception:
-                pass  # Игнорируем ошибки при закрытии старого клиента
+            except Exception as e:
+                logger.warning(f"Ошибка при закрытии клиента: {e}")
 
         _client = httpx.AsyncClient(
             base_url=HH_BASE_URL,

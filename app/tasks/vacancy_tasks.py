@@ -1,16 +1,16 @@
 import asyncio
-import os
 from typing import Any
 from uuid import UUID
 
 import redis
 from celery import Task
+from dotenv import load_dotenv
 from loguru import logger
 from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.configs.celery_config import celery
 from app.configs.llm_config import researcher_llm_config
+from app.database.postgres_db import async_session_maker
 from app.enum.analysis import AnalysisType
 from app.enum.experience import Experience
 from app.llms.openai import AsyncOpenAILLM
@@ -21,10 +21,13 @@ from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.schemas.vacancies import VacancyForAnalysis
 from app.tools.ai_research.analyzer import analyze_vacancy
 from app.tools.headhunter.find_vacancies import import_vacancies
+from app.utils.env import get_required_env
 
 
-database_url = os.getenv("POSTGRESQL")
-LOCK_REDIS_URL = os.getenv("LOCK_REDIS_URL")
+load_dotenv()
+
+LOCK_REDIS_URL = get_required_env("LOCK_REDIS_URL")
+
 
 redis_client = redis.from_url(LOCK_REDIS_URL, decode_responses=True)
 
@@ -49,7 +52,7 @@ def clear_lock(retval: Any, lock_key: str) -> dict[str, Any]:
 
 
 @celery.task(bind=True, max_retries=3)
-def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, user_id: UUID) -> dict[str, Any]:
+def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, user_id: str) -> dict[str, Any]:
     """
     Импортирует вакансии с hh.ru в фоновом режиме.
 
@@ -61,15 +64,13 @@ def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, 
     Returns:
         dict со статистикой импорта
     """
-    engine = create_async_engine(database_url, echo=False)
-    session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     async def run_import() -> dict[str, Any]:
-        async with session_maker() as session:
+        async with async_session_maker() as session:
             return await import_vacancies(
                 query=query,
                 tiers=tiers,
-                user_id=user_id,
+                user_id=UUID(user_id),
                 session=session,
             )
 
@@ -105,12 +106,11 @@ def ai_analyse_task(
     Returns:
         dict со статистикой анализа
     """
-    engine = create_async_engine(database_url, echo=False)
-    session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
     llm = AsyncOpenAILLM(researcher_llm_config)
 
     async def run_ai_analyse() -> dict[str, Any]:
-        async with session_maker() as session:
+        async with async_session_maker() as session:
             stmt = (
                 select(
                     VacancyModel.id,
@@ -153,9 +153,9 @@ def ai_analyse_task(
             # Конвертируем Row объекты в Pydantic схемы для типизации
             vacancies: list[VacancyForAnalysis] = [VacancyForAnalysis.model_validate(row) for row in rows_vacancies]
 
-        async with session_maker() as session:
+        async with async_session_maker() as session:
             analysis_to_add = []
-            index = len(vacancies)
+            REQUEST_DELAY: float = 0.2
 
             for vacancy in vacancies:
                 for analysis in type_analyze:
@@ -191,7 +191,7 @@ def ai_analyse_task(
                     )
 
                     analysis_to_add.append(analysis_vacancy)
-                    await asyncio.sleep(index * 0.2)
+                    await asyncio.sleep(REQUEST_DELAY)
 
             session.add_all(analysis_to_add)
             await session.commit()
