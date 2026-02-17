@@ -22,6 +22,7 @@ from app.models import Invite as InviteModel
 from app.models import Message as MessageModel
 from app.models import Vacancy as VacancyModel
 from app.models.base_model import Base
+from app.models.documents import Document as DocumentModel
 from app.models.prompts import Prompts as PromptModel
 from app.models.users import User as UserModel
 from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
@@ -1046,3 +1047,59 @@ async def test_invites(db_session: AsyncSession, test_user: UserModel, admin_use
         await db_session.refresh(invite)
 
     return invites
+
+
+# ============================================================
+# Фикстуры для Documents
+# ============================================================
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_document(db_session: AsyncSession, test_user: UserModel) -> DocumentModel:
+    """Создаёт тестовый документ."""
+    from app.enum.documents import DocumentCategory
+
+    document = DocumentModel(
+        user_id=test_user.id,
+        title="Test Document",
+        content="Test document content with enough length",
+        category=DocumentCategory.NOTE,
+        is_archived=False,
+    )
+    db_session.add(document)
+    await db_session.commit()
+    await db_session.refresh(document)
+
+    return document
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_documents(db_session: AsyncSession, test_user: UserModel) -> list[DocumentModel]:
+    """Создаёт несколько тестовых документов для пагинации."""
+    from asyncio import sleep
+
+    from app.enum.documents import DocumentCategory
+
+    documents = []
+    categories = list(DocumentCategory)
+
+    # Создаём 30 документов с разными категориями
+    for i in range(30):
+        document = DocumentModel(
+            user_id=test_user.id,
+            title=f"Document {i}",
+            content=f"Content for document number {i} with enough text length",
+            category=categories[i % len(categories)],
+            is_archived=False,
+        )
+        documents.append(document)
+        db_session.add(document)
+        # Небольшая задержка для разницы во времени
+        await sleep(0.001)
+
+    await db_session.commit()
+
+    for document in documents:
+        await db_session.refresh(document)
+
+    return documents
