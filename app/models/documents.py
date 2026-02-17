@@ -39,10 +39,12 @@ class Document(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
     # Метаданные документа (произвольные данные в формате JSON)
-    metadata_: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), name="metadata")
+    metadata_: Mapped[dict | None] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"), name="metadata", nullable=True
+    )
     # Тэги для организации и поиска документов
     tags: Mapped[list[str] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"), default=list, name="tags", nullable=True
+        JSON().with_variant(JSONB(), "postgresql"), name="tags", nullable=True
     )
     # ID векторного представления в Qdrant для семантического поиска
     summary_qdrant_id: Mapped[uuid.UUID | None] = mapped_column(types.Uuid, nullable=True)

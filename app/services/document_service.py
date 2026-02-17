@@ -132,7 +132,11 @@ async def update_user_document(
 
     result = await db.execute(
         update(DocumentModel)
-        .where(DocumentModel.id == document_id, DocumentModel.user_id == current_user.id)
+        .where(
+            DocumentModel.id == document_id,
+            DocumentModel.user_id == current_user.id,
+            DocumentModel.is_archived.is_(False),
+        )
         .values(**update_data)
         .returning(DocumentModel)
     )

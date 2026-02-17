@@ -26,7 +26,7 @@ class DocumentCreate(DocumentBase):
     title: str | None = Field(default=None, max_length=255, description="Название документа")
     content: str = Field(..., min_length=5, max_length=20000, description="Содержимое документа (основной текст)")
     category: DocumentCategory | None = Field(default=None, description="Категория документа")
-    metadata_: dict | None = Field(default=None, alias="metadata", description="Произвольные метаданные в формате JSON")
+    metadata_: dict | None = Field(default=None, description="Произвольные метаданные в формате JSON")
     tags: list[str] | None = Field(default=None, description="Тэги для организации и поиска документов")
 
 
@@ -38,7 +38,7 @@ class DocumentUpdate(DocumentBase):
         default=None, min_length=5, max_length=20000, description="Содержимое документа (основной текст)"
     )
     category: DocumentCategory | None = Field(default=None, description="Категория документа")
-    metadata_: dict | None = Field(default=None, alias="metadata", description="Произвольные метаданные в формате JSON")
+    metadata_: dict | None = Field(default=None, description="Произвольные метаданные в формате JSON")
     tags: list[str] | None = Field(default=None, description="Тэги для организации и поиска документов")
     is_archived: bool | None = Field(default=None, description="Архивирован ли документ (мягкое удаление)")
 
@@ -54,11 +54,11 @@ class DocumentResponse(BaseModel):
     is_archived: bool = Field(description="Архивирован ли документ (мягкое удаление)")
     created_at: datetime = Field(description="Дата создания документа")
     updated_at: datetime = Field(description="Дата последнего обновления")
-    metadata_: dict | None = Field(alias="metadata", description="Произвольные метаданные в формате JSON")
-    tags: list[str] | None = Field(description="Тэги для организации и поиска документов")
-    summary: str | None = Field(description="Краткое описание/саммари документа (генерируется AI)")
-    conversation_id: UUID | None = Field(description="ID связанной беседы (источник документа)")
-    message_id: UUID | None = Field(description="ID связанного сообщения (источник документа)")
+    metadata_: dict | None = Field(default=None, description="Произвольные метаданные в формате JSON")
+    tags: list[str] | None = Field(default=None, description="Тэги для организации и поиска документов")
+    summary: str | None = Field(default=None, description="Краткое описание/саммари документа (генерируется AI)")
+    conversation_id: UUID | None = Field(default=None, description="ID связанной беседы (источник документа)")
+    message_id: UUID | None = Field(default=None, description="ID связанного сообщения (источник документа)")
 
     model_config = ConfigDict(from_attributes=True, use_enum_values=True, populate_by_name=True)
 
