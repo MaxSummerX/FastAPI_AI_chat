@@ -9,6 +9,7 @@ from app.models.base_model import Base
 
 
 if TYPE_CHECKING:
+    from app.models.documents import Document
     from app.models.messages import Message
     from app.models.users import User
 
@@ -38,6 +39,10 @@ class Conversation(Base):
 
     messages: Mapped[list["Message"]] = relationship(
         "Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.timestamp"
+    )
+
+    documents: Mapped[list["Document"]] = relationship(
+        "Document", back_populates="conversation", order_by="Document.created_at"
     )
 
     # Индексы

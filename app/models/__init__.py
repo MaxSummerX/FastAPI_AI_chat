@@ -1,4 +1,5 @@
 from .conversations import Conversation
+from .documents import Document
 from .facts import Fact
 from .invites import Invite
 from .messages import Message
@@ -19,4 +20,5 @@ __all__ = [
     "Invite",
     "VacancyAnalysis",
     "UserVacancies",
+    "Document",
 ]

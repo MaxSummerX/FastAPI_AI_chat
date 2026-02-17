@@ -12,6 +12,7 @@ from app.models.base_model import Base
 
 if TYPE_CHECKING:
     from app.models.conversations import Conversation
+    from app.models.documents import Document
     from app.models.facts import Fact
     from app.models.prompts import Prompts
     from app.models.user_vacancies import UserVacancies
@@ -88,6 +89,8 @@ class User(Base):
     analyses: Mapped[list["VacancyAnalysis"]] = relationship(
         "VacancyAnalysis", back_populates="user", cascade="all, delete-orphan"
     )
+
+    documents: Mapped[list["Document"]] = relationship("Document", back_populates="user", cascade="all, delete-orphan")
 
     # Индексы
     __table_args__ = (

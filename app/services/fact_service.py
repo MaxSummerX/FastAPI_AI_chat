@@ -7,9 +7,9 @@ from mem0 import AsyncMemory
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.enum.facts import FactCategory, FactSource
 from app.models import User as UserModel
 from app.models.facts import Fact as FactModel
-from app.models.facts import FactCategory, FactSource
 from app.schemas.facts import FactCreate
 
 
@@ -108,7 +108,7 @@ async def create_user_fact(
             source_type=FactSource.USER_PROVIDED,
             confidence=data.confidence,
             metadata_=data.metadata_,
-            mem0_id=result["results"][0]["id"],
+            mem0_id=UUID(result["results"][0]["id"]),  # Конвертируем строку в UUID
         )
 
         db.add(new_fact)
@@ -175,7 +175,7 @@ async def update_user_fact(
         )
 
         update_data = data.model_dump(exclude_unset=True, by_alias=False)
-        update_data["mem0_id"] = result["results"][0]["id"]
+        update_data["mem0_id"] = UUID(result["results"][0]["id"])  # Конвертируем строку в UUID
         update_data["category"] = category
 
         # 3. Обновить факт в PostgreSQL

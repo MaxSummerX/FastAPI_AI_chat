@@ -34,7 +34,7 @@ class FactCreate(FactBase):
 class FactResponse(BaseModel):
     """Схема для возврата факта клиенту"""
 
-    id: UUID = Field(description="UUID пользователя")
+    id: UUID = Field(description="UUID факта")
     user_id: UUID = Field(description="UUID пользователя")
     content: str = Field(description="Факт о пользователе")
     category: FactCategory = Field(description="Категория факта")
