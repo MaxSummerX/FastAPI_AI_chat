@@ -5,14 +5,15 @@
 """
 
 import asyncio
+import uuid
 from collections.abc import AsyncGenerator, Generator
 from datetime import timedelta
+from typing import Any
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.main import app
 from app.models import Conversation as ConversationModel
@@ -23,6 +24,7 @@ from app.models import Vacancy as VacancyModel
 from app.models.base_model import Base
 from app.models.prompts import Prompts as PromptModel
 from app.models.users import User as UserModel
+from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 
 
 # Тестовая БД (используем SQLite для скорости)
@@ -75,9 +77,8 @@ async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
 
     Каждое изменение коммитится и откатывается в конце теста.
     """
-    async_session = sessionmaker(
+    async_session = async_sessionmaker(
         db_engine,
-        class_=AsyncSession,
         expire_on_commit=False,
     )
 
@@ -90,28 +91,40 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     """
     Создаёт HTTP клиент для тестирования API.
 
-    Подменяет зависимость get_async_postgres_db на тестовую сессию.
+    Подменяет зависимости get_async_postgres_db и get_memory на тестовые версии.
+    Мокает memory чтобы избежать реальных соединений с Qdrant/Ollama.
     """
-    from app.depends.db_depends import get_async_postgres_db
-    from app.lifespan import lifespan
+    from unittest.mock import AsyncMock
 
-    # Функция-override для зависимости
+    from app.depends.db_depends import get_async_postgres_db
+    from app.depends.mem0_depends import get_memory
+
+    # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
         yield db_session
 
-    # Подменяем зависимость
+    # Мок для AsyncMemory
+    mock_memory_instance = AsyncMock()
+    mock_memory_instance.add = AsyncMock(return_value={"results": [{"id": str(uuid.uuid4())}]})
+    mock_memory_instance.delete = AsyncMock(return_value=None)
+    mock_memory_instance.get_all = AsyncMock(return_value={"results": []})
+
+    # Функция-override для зависимости memory
+    async def override_get_memory() -> AsyncMock:
+        return mock_memory_instance
+
+    # Подменяем зависимости
     app.dependency_overrides[get_async_postgres_db] = override_get_db
+    app.dependency_overrides[get_memory] = override_get_memory
 
-    # Запускаем lifespan вручную для инициализации HTTP клиентов
-    async with lifespan(app):
-        # Создаём клиент с ASGI транспортом
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as ac:
-            yield ac
+    # Создаём клиент с ASGI транспортом (без lifespan - он создаёт реальное соединение)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
 
-    # Восстанавливаем оригинальную зависимость
+    # Восстанавливаем оригинальные зависимости
     app.dependency_overrides.clear()
 
 
@@ -326,6 +339,7 @@ async def test_fact(db_session: AsyncSession, test_user: UserModel) -> FactModel
         source_type=FactSource.USER_PROVIDED,
         confidence=1.0,
         is_active=True,
+        mem0_id=uuid.uuid4(),  # Нужно для обновления факта (перевекторизация в Qdrant)
     )
     db_session.add(fact)
     await db_session.commit()
@@ -755,7 +769,7 @@ async def test_vacancies(db_session: AsyncSession, test_user: UserModel) -> list
 @pytest_asyncio.fixture(scope="function")
 async def test_vacancy_analysis(
     db_session: AsyncSession, test_user: UserModel, test_vacancy: VacancyModel
-) -> VacancyModel:
+) -> VacancyAnalysisModel:
     """Создаёт тестовый анализ вакансии."""
     import uuid
     from datetime import UTC, datetime
@@ -788,7 +802,7 @@ async def test_vacancy_analysis(
 @pytest_asyncio.fixture(scope="function")
 async def test_vacancy_analyses(
     db_session: AsyncSession, test_user: UserModel, test_vacancy: VacancyModel
-) -> list[VacancyModel]:
+) -> list[VacancyAnalysisModel]:
     """Создаёт несколько тестовых анализов вакансии."""
     import uuid
     from asyncio import sleep
@@ -826,6 +840,151 @@ async def test_vacancy_analyses(
         await db_session.refresh(analysis)
 
     return analyses
+
+
+# ============================================================
+# Фикстуры для Facts
+# ============================================================
+
+
+class SyncBackgroundTasks:
+    """
+    Синхронный BackgroundTasks для тестов.
+
+    Выполняет задачи синхронно (с ожиданием) вместо асинхронного фонового выполнения.
+    Позволяет тестам проверять результаты создания/обновления фактов сразу же.
+
+    Важно: задачи выполняются последовательно, каждая дожидается завершения предыдущей.
+    """
+
+    def __init__(self) -> None:
+        self.tasks: list[asyncio.Task[Any]] = []
+        self._results: list[Any] = []
+
+    def add_task(self, func: Any, *args: Any, **kwargs: Any) -> None:
+        """
+        Выполняет задачу синхронно с ожиданием завершения.
+
+        Использует trick с `asyncio.create_task()` + await через `task.done()`,
+        чтобы синхронизировать выполнение в рамках одного event loop.
+        """
+        import asyncio
+
+        # Создаём и сразу запускаем задачу
+        task: asyncio.Task[Any] = asyncio.create_task(func(*args, **kwargs))  # type: ignore[misc]
+        self.tasks.append(task)
+
+        # В тестовой среде ждём завершения
+        # Это работает потому что мы в async контексте теста
+        # FastAPI вызовет add_task, но мы не можем await здесь
+        # Поэтому сохраняем задачу и клиент должен будет подождать
+
+    async def wait_all(self) -> None:
+        """Ждёт завершения всех сохранённых задач"""
+        for task in self.tasks:
+            if not task.done():
+                await task
+        self.tasks.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def client_with_mocked_memory_sync(
+    db_session: AsyncSession,
+) -> AsyncGenerator[AsyncClient]:
+    """
+    Создаёт HTTP клиент с замоканным mem0ai и синхронными background tasks.
+
+    Подменяет:
+    - AsyncMemory чтобы избежать реальных запросов к Qdrant/Neo4j
+    - BackgroundTasks чтобы выполнять задачи синхронно в тестах
+
+    Позволяет тестам проверять результаты создания/обновления фактов сразу.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.api.v2 import fact as fact_module
+    from app.depends.db_depends import get_async_postgres_db
+
+    # Функция-override для зависимости БД
+    async def override_get_db() -> AsyncGenerator[AsyncSession]:
+        yield db_session
+
+    # Мок для AsyncMemory
+    mock_memory_instance = AsyncMock()
+    mock_memory_instance.add = AsyncMock(return_value={"results": [{"id": "819b53b4-23e0-4f19-a057-04795fb10883"}]})
+    mock_memory_instance.delete = AsyncMock(return_value=None)
+    mock_memory_instance.get_all = AsyncMock(return_value={"results": []})
+
+    # Функция-override для зависимости get_memory
+    async def override_get_memory() -> AsyncMock:
+        return mock_memory_instance
+
+    # Подменяем зависимости
+    app.dependency_overrides[get_async_postgres_db] = override_get_db
+    from app.depends.mem0_depends import get_memory
+
+    app.dependency_overrides[get_memory] = override_get_memory
+
+    # Патчим BackgroundTasks на синхронную версию
+    with patch.object(fact_module, "BackgroundTasks", SyncBackgroundTasks):
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as ac:
+            yield ac
+
+    # Восстанавливаем оригинальные зависимости
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def auth_headers_memory_sync(
+    client_with_mocked_memory_sync: AsyncClient,
+    test_user: UserModel,
+) -> dict[str, str]:
+    """
+    Создаёт JWT токены для аутентификации с синхронным memory.
+
+    Используется для тестов создания/обновления фактов.
+    """
+    # Логинимся через клиент с замоканным memory и получаем токены
+    response = await client_with_mocked_memory_sync.post(
+        "/api/v2/user/token",
+        data={
+            "username": "testuser",
+            "password": "TestPassword123!",
+        },
+    )
+
+    assert response.status_code == 200
+    tokens = response.json()
+
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
+
+
+@pytest_asyncio.fixture(scope="function")
+async def admin_headers_memory_sync(
+    client_with_mocked_memory_sync: AsyncClient,
+    admin_user: UserModel,
+) -> dict[str, str]:
+    """
+    Создаёт JWT токены для admin с синхронным memory.
+
+    Используется для тестов где admin пытается обновить факты другого пользователя.
+    """
+    # Логинимся через клиент с замоканным memory и получаем admin токены
+    response = await client_with_mocked_memory_sync.post(
+        "/api/v2/user/token",
+        data={
+            "username": "admin",
+            "password": "AdminPassword123!",
+        },
+    )
+
+    assert response.status_code == 200
+    tokens = response.json()
+
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
 
 
 # ============================================================

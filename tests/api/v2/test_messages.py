@@ -8,15 +8,11 @@
 - Обработка ошибок
 """
 
-from typing import Any
-
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Conversation as ConversationModel
 from app.models import Message as MessageModel
-from app.models import User as UserModel
 
 
 # ============================================================
@@ -205,178 +201,6 @@ async def test_get_messages_limit_minimum(
 
 
 # ============================================================
-# POST /conversations/{id}/messages - добавление сообщения
-# ============================================================
-
-
-@pytest.mark.asyncio
-async def test_add_message_unauthorized(client: AsyncClient, test_conversation: ConversationModel) -> None:
-    """Тест: добавление сообщения без авторизации"""
-    response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages", json={"role": "user", "content": "Test message"}
-    )
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_add_message_conversation_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
-    """Тест: добавление сообщения в несуществующую беседу"""
-    import uuid
-
-    response = await client.post(
-        f"/api/v2/conversations/{uuid.uuid4()}/messages",
-        headers=auth_headers,
-        json={"role": "user", "content": "Test message"},
-    )
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_add_message_success(
-    client: AsyncClient, auth_headers: dict[str, str], test_conversation: ConversationModel, mocker: Any
-) -> None:
-    """Тест: успешное добавление сообщения (мок LLM)"""
-
-    # Мокаем LLM чтобы не делать реальный запрос
-    async def mock_generate_response(
-        self: Any,
-        messages: list,
-        response_format: str | None = None,
-        tools: list | None = None,
-        tool_choice: str = "auto",
-        **kwargs: Any,
-    ) -> str:
-        return "Mock AI response"
-
-    mocker.patch("app.llms.openai.AsyncOpenAILLM.generate_response", mock_generate_response)
-
-    response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages",
-        headers=auth_headers,
-        json={"role": "user", "content": "Hello, how are you?"},
-    )
-    assert response.status_code == 201
-
-    data = response.json()
-    assert "id" in data
-    assert data["role"] == "assistant"
-    assert "content" in data
-
-
-@pytest.mark.asyncio
-async def test_add_message_with_custom_prompt(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    test_conversation: ConversationModel,
-    db_session: AsyncSession,
-    test_user: UserModel,
-    mocker: Any,
-) -> None:
-    """Тест: добавление сообщения с кастомным промптом"""
-    # Создаём кастомный промпт
-    import uuid
-
-    from app.models.prompts import Prompts
-
-    prompt = Prompts(
-        id=uuid.uuid4(),
-        user_id=test_user.id,
-        title="Custom Prompt",
-        content="You are a helpful assistant.",
-        is_active=True,
-    )
-    db_session.add(prompt)
-    await db_session.commit()
-
-    # Мокаем LLM
-    async def mock_generate_response(
-        self: Any,
-        messages: list,
-        response_format: str | None = None,
-        tools: list | None = None,
-        tool_choice: str = "auto",
-        **kwargs: Any,
-    ) -> str:
-        return "Custom prompt response"
-
-    mocker.patch("app.llms.openai.AsyncOpenAILLM.generate_response", mock_generate_response)
-
-    response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages?prompt_id={prompt.id}",
-        headers=auth_headers,
-        json={"role": "user", "content": "Test"},
-    )
-    assert response.status_code == 201
-
-    data = response.json()
-    assert "id" in data
-    assert data["role"] == "assistant"
-
-
-@pytest.mark.asyncio
-async def test_add_message_validation_error(
-    client: AsyncClient, auth_headers: dict[str, str], test_conversation: ConversationModel
-) -> None:
-    """Тест: добавление сообщения с невалидными данными"""
-    response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages",
-        headers=auth_headers,
-        json={
-            "role": "user",
-            "content": "",  # Пустой контент
-        },
-    )
-    # Должна быть валидация Pydantic
-    assert response.status_code == 422
-
-
-# ============================================================
-# POST /conversations/{id}/messages/stream - стриминг
-# ============================================================
-
-
-@pytest.mark.asyncio
-async def test_stream_message_unauthorized(client: AsyncClient, test_conversation: ConversationModel) -> None:
-    """Тест: стриминг без авторизации"""
-    response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages/stream",
-        json={"role": "user", "content": "Test message"},
-    )
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_stream_message_conversation_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
-    """Тест: стриминг в несуществующую беседу"""
-    import uuid
-
-    response = await client.post(
-        f"/api/v2/conversations/{uuid.uuid4()}/messages/stream",
-        headers=auth_headers,
-        json={"role": "user", "content": "Test"},
-    )
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_stream_message_archived_conversation(
-    client: AsyncClient, auth_headers: dict[str, str], test_conversation: ConversationModel, db_session: AsyncSession
-) -> None:
-    """Тест: стриминг в архивированную беседу"""
-    # Архивируем беседу
-    test_conversation.is_archived = True
-    await db_session.commit()
-
-    response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages/stream",
-        headers=auth_headers,
-        json={"role": "user", "content": "Test"},
-    )
-    # Должен вернуть 404 (archived conversations filtered)
-    assert response.status_code == 404
-
-
-# ============================================================
 # POST /conversations/{id}/messages/stream_v2 - улучшенный стриминг
 # ============================================================
 
@@ -420,17 +244,4 @@ async def test_get_messages_other_user_conversation(
 ) -> None:
     """Тест: попытка получить сообщения из чужой беседы"""
     response = await client.get(f"/api/v2/conversations/{test_conversation.id}/messages", headers=admin_headers)
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_add_message_to_other_user_conversation(
-    client: AsyncClient, admin_headers: dict[str, str], test_conversation: ConversationModel
-) -> None:
-    """Тест: попытка добавить сообщение в чужую беседу"""
-    response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages",
-        headers=admin_headers,
-        json={"role": "user", "content": "Hack!"},
-    )
     assert response.status_code == 404

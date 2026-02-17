@@ -265,7 +265,7 @@ async def test_get_fact_other_user(
 
 
 # ============================================================
-# POST /facts - создание факта
+# POST /facts - создание факта (с BackgroundTasks)
 # ============================================================
 
 
@@ -283,60 +283,102 @@ async def test_create_fact_unauthorized(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_fact_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
-    """Тест: успешное создание факта"""
-    response = await client.post(
+async def test_create_fact_success(
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
+) -> None:
+    """Тест: успешное создание факта (через background task)"""
+    import asyncio
+
+    response = await client_with_mocked_memory_sync.post(
         "/api/v2/facts",
-        headers=auth_headers,
+        headers=auth_headers_memory_sync,
         json={
             "content": "User loves Python programming",
             "category": "professional",
             "confidence": 0.9,
         },
     )
-    assert response.status_code == 201
-
+    assert response.status_code == 202
     data = response.json()
-    assert "id" in data
-    assert data["content"] == "User loves Python programming"
-    assert data["category"] == "professional"
-    assert data["confidence"] == 0.9
-    assert data["source_type"] == "user_provided"
-    assert data["is_active"] is True
+    assert data["status"] == "processing"
+
+    # Ждём выполнения background task
+    await asyncio.sleep(0.1)
+
+    # Проверяем через GET всех фактов
+    response = await client_with_mocked_memory_sync.get("/api/v2/facts", headers=auth_headers_memory_sync)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) > 0
+
+    # Находим созданный факт
+    fact = next((f for f in data["items"] if f["content"] == "User loves Python programming"), None)
+    assert fact is not None
+    assert fact["category"] == "professional"
+    assert fact["confidence"] == 0.9
+    assert fact["source_type"] == "user_provided"
+    assert fact["is_active"] is True
 
 
 @pytest.mark.asyncio
-async def test_create_fact_default_category(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+async def test_create_fact_default_category(
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
+) -> None:
     """Тест: создание факта с категорией по умолчанию (personal)"""
-    response = await client.post(
+    import asyncio
+
+    response = await client_with_mocked_memory_sync.post(
         "/api/v2/facts",
-        headers=auth_headers,
+        headers=auth_headers_memory_sync,
         json={
             "content": "Another fact",
         },
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
 
+    # Ждём выполнения background task
+    await asyncio.sleep(0.1)
+
+    # Проверяем через GET всех фактов
+    response = await client_with_mocked_memory_sync.get("/api/v2/facts", headers=auth_headers_memory_sync)
+    assert response.status_code == 200
     data = response.json()
-    assert data["category"] == "personal"
+    fact = next((f for f in data["items"] if f["content"] == "Another fact"), None)
+    assert fact is not None
+    assert fact["category"] == "personal"
 
 
 @pytest.mark.asyncio
-async def test_create_fact_with_metadata(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+async def test_create_fact_with_metadata(
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
+) -> None:
     """Тест: создание факта с метаданными"""
-    response = await client.post(
+    import asyncio
+
+    response = await client_with_mocked_memory_sync.post(
         "/api/v2/facts",
-        headers=auth_headers,
+        headers=auth_headers_memory_sync,
         json={
             "content": "Fact with metadata",
             "category": "technical",
             "metadata_": {"source": "manual", "verified": True},
         },
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
 
+    # Ждём выполнения background task
+    await asyncio.sleep(0.1)
+
+    # Проверяем через GET всех фактов
+    response = await client_with_mocked_memory_sync.get("/api/v2/facts", headers=auth_headers_memory_sync)
+    assert response.status_code == 200
     data = response.json()
-    assert data["metadata_"] == {"source": "manual", "verified": True}
+    fact = next((f for f in data["items"] if f["content"] == "Fact with metadata"), None)
+    assert fact is not None
+    assert fact["metadata_"] == {"source": "manual", "verified": True}
 
 
 @pytest.mark.asyncio
@@ -381,14 +423,14 @@ async def test_create_fact_invalid_confidence(client: AsyncClient, auth_headers:
 
 
 # ============================================================
-# PATCH /facts/{fact_id} - обновление факта
+# PUT /facts/{fact_id} - обновление факта (с BackgroundTasks)
 # ============================================================
 
 
 @pytest.mark.asyncio
 async def test_update_fact_unauthorized(client: AsyncClient, test_fact: FactModel) -> None:
     """Тест: обновление факта без авторизации"""
-    response = await client.patch(
+    response = await client.put(
         f"/api/v2/facts/{test_fact.id}",
         json={"content": "Updated content"},
     )
@@ -397,21 +439,34 @@ async def test_update_fact_unauthorized(client: AsyncClient, test_fact: FactMode
 
 @pytest.mark.asyncio
 async def test_update_fact_success(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
     test_fact: FactModel,
 ) -> None:
-    """Тест: успешное обновление факта"""
-    response = await client.patch(
+    """Тест: успешное обновление факта (через background task)"""
+    import asyncio
+
+    response = await client_with_mocked_memory_sync.put(
         f"/api/v2/facts/{test_fact.id}",
-        headers=auth_headers,
+        headers=auth_headers_memory_sync,
         json={
             "content": "Updated fact content",
             "category": "learning",
         },
     )
-    assert response.status_code == 200
+    assert response.status_code == 202
+    data = response.json()
+    assert data["status"] == "processing"
 
+    # Ждём выполнения background task
+    await asyncio.sleep(0.1)
+
+    # Проверяем через GET
+    response = await client_with_mocked_memory_sync.get(
+        f"/api/v2/facts/{test_fact.id}",
+        headers=auth_headers_memory_sync,
+    )
+    assert response.status_code == 200
     data = response.json()
     assert data["id"] == str(test_fact.id)
     assert data["content"] == "Updated fact content"
@@ -419,34 +474,60 @@ async def test_update_fact_success(
 
 
 @pytest.mark.asyncio
-async def test_update_fact_partial(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
+async def test_update_fact_confidence(
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
     test_fact: FactModel,
 ) -> None:
-    """Тест: частичное обновление факта"""
-    original_content = test_fact.content
+    """
+    Тест: обновление confidence факта.
 
-    response = await client.patch(
+    При обновлении требуется отправить все поля (content обязателен),
+    т.к. происходит перевекторизация в Qdrant.
+    """
+    import asyncio
+
+    original_content = test_fact.content
+    original_category = test_fact.category
+
+    response = await client_with_mocked_memory_sync.put(
         f"/api/v2/facts/{test_fact.id}",
-        headers=auth_headers,
-        json={"confidence": 0.7},
+        headers=auth_headers_memory_sync,
+        json={
+            "content": original_content,  # Обязательно при обновлении (перевекторизация)
+            "category": original_category,
+            "confidence": 0.7,
+        },
+    )
+    assert response.status_code == 202
+
+    # Ждём выполнения background task
+    await asyncio.sleep(0.1)
+
+    # Проверяем через GET
+    response = await client_with_mocked_memory_sync.get(
+        f"/api/v2/facts/{test_fact.id}",
+        headers=auth_headers_memory_sync,
     )
     assert response.status_code == 200
-
     data = response.json()
     assert data["confidence"] == 0.7
+    # Content и category не изменились
     assert data["content"] == original_content
+    assert data["category"] == original_category
 
 
 @pytest.mark.asyncio
-async def test_update_fact_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+async def test_update_fact_not_found(
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
+) -> None:
     """Тест: обновление несуществующего факта"""
     import uuid
 
-    response = await client.patch(
+    response = await client_with_mocked_memory_sync.put(
         f"/api/v2/facts/{uuid.uuid4()}",
-        headers=auth_headers,
+        headers=auth_headers_memory_sync,
         json={"content": "Updated"},
     )
     assert response.status_code == 404
@@ -454,8 +535,8 @@ async def test_update_fact_not_found(client: AsyncClient, auth_headers: dict[str
 
 @pytest.mark.asyncio
 async def test_update_fact_inactive(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
     test_fact: FactModel,
     db_session: AsyncSession,
 ) -> None:
@@ -463,9 +544,9 @@ async def test_update_fact_inactive(
     test_fact.is_active = False
     await db_session.commit()
 
-    response = await client.patch(
+    response = await client_with_mocked_memory_sync.put(
         f"/api/v2/facts/{test_fact.id}",
-        headers=auth_headers,
+        headers=auth_headers_memory_sync,
         json={"content": "Try to update inactive"},
     )
     assert response.status_code == 404
@@ -473,15 +554,19 @@ async def test_update_fact_inactive(
 
 @pytest.mark.asyncio
 async def test_update_fact_other_user(
-    client: AsyncClient,
-    admin_headers: dict[str, str],
+    client_with_mocked_memory_sync: AsyncClient,
+    admin_headers_memory_sync: dict[str, str],
     test_fact: FactModel,
 ) -> None:
-    """Тест: попытка обновить факт другого пользователя"""
-    response = await client.patch(
+    """Тест: попытка обновить факт другого пользователя (admin обновляет факт пользователя)"""
+    # Admin не может обновлять факты других пользователей - вернёт 404
+    response = await client_with_mocked_memory_sync.put(
         f"/api/v2/facts/{test_fact.id}",
-        headers=admin_headers,
-        json={"content": "Hacked!"},
+        headers=admin_headers_memory_sync,  # Admin токен с замоканным memory
+        json={
+            "content": "Hacked!",
+            "category": test_fact.category,
+        },
     )
     assert response.status_code == 404
 
@@ -492,21 +577,23 @@ async def test_update_fact_other_user(
 
 
 @pytest.mark.asyncio
-async def test_delete_fact_unauthorized(client: AsyncClient, test_fact: FactModel) -> None:
+async def test_delete_fact_unauthorized(client_with_mocked_memory_sync: AsyncClient, test_fact: FactModel) -> None:
     """Тест: удаление факта без авторизации"""
-    response = await client.delete(f"/api/v2/facts/{test_fact.id}")
+    response = await client_with_mocked_memory_sync.delete(f"/api/v2/facts/{test_fact.id}")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_delete_fact_success(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
     test_fact: FactModel,
     db_session: AsyncSession,
 ) -> None:
     """Тест: успешное удаление факта (мягкое)"""
-    response = await client.delete(f"/api/v2/facts/{test_fact.id}", headers=auth_headers)
+    response = await client_with_mocked_memory_sync.delete(
+        f"/api/v2/facts/{test_fact.id}", headers=auth_headers_memory_sync
+    )
     assert response.status_code == 204
 
     # Проверяем что факт помечен как неактивный
@@ -515,18 +602,22 @@ async def test_delete_fact_success(
 
 
 @pytest.mark.asyncio
-async def test_delete_fact_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+async def test_delete_fact_not_found(
+    client_with_mocked_memory_sync: AsyncClient, auth_headers_memory_sync: dict[str, str]
+) -> None:
     """Тест: удаление несуществующего факта"""
     import uuid
 
-    response = await client.delete(f"/api/v2/facts/{uuid.uuid4()}", headers=auth_headers)
+    response = await client_with_mocked_memory_sync.delete(
+        f"/api/v2/facts/{uuid.uuid4()}", headers=auth_headers_memory_sync
+    )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_delete_fact_inactive(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
+    client_with_mocked_memory_sync: AsyncClient,
+    auth_headers_memory_sync: dict[str, str],
     test_fact: FactModel,
     db_session: AsyncSession,
 ) -> None:
@@ -534,16 +625,20 @@ async def test_delete_fact_inactive(
     test_fact.is_active = False
     await db_session.commit()
 
-    response = await client.delete(f"/api/v2/facts/{test_fact.id}", headers=auth_headers)
+    response = await client_with_mocked_memory_sync.delete(
+        f"/api/v2/facts/{test_fact.id}", headers=auth_headers_memory_sync
+    )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_delete_fact_other_user(
-    client: AsyncClient,
-    admin_headers: dict[str, str],
+    client_with_mocked_memory_sync: AsyncClient,
+    admin_headers_memory_sync: dict[str, str],
     test_fact: FactModel,
 ) -> None:
     """Тест: попытка удалить факт другого пользователя"""
-    response = await client.delete(f"/api/v2/facts/{test_fact.id}", headers=admin_headers)
+    response = await client_with_mocked_memory_sync.delete(
+        f"/api/v2/facts/{test_fact.id}", headers=admin_headers_memory_sync
+    )
     assert response.status_code == 404

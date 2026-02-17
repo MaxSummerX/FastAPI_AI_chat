@@ -438,6 +438,8 @@ async def test_add_to_favorites_success(
     assert response.status_code == 204
 
     # Проверяем, что вакансия помечена как избранная через UserVacancies
+    # link не может быть None, т.к. fixture создаёт UserVacancies
+    assert link is not None
     await db_session.refresh(link)
     assert link.is_favorite is True
 
@@ -510,6 +512,8 @@ async def test_remove_from_favorites_success(
     assert response.status_code == 204
 
     # Проверяем, что вакансия помечена как не избранная через UserVacancies
+    # link не может быть None, т.к. fixture создаёт UserVacancies
+    assert link is not None
     await db_session.refresh(link)
     assert link.is_favorite is False
 
