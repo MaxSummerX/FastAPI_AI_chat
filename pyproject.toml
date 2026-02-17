@@ -7,7 +7,7 @@ packages = ["app"]
 
 [project]
 name = "AI_chat_memo"
-version = "0.1.1"
+version = "0.2.1"
 description = "Учебный проект асинхронного чата с AI, извлекающего и использующего факты о пользователе для персонализированного контекста беседы"
 authors = [{ name = "MaxSummerX" }]
 readme = "README.md"
@@ -20,8 +20,6 @@ dependencies = [
     "celery>=5.6.2",
     "email-validator>=2.3.0",
     "fastapi>=0.120.0",
-    "gevent>=25.9.1",
-    "greenlet>=3.2.4",
     "langchain-neo4j>=0.6.0",
     "loguru>=0.7.3",
     "mem0ai>=1.0.1",
@@ -44,7 +42,6 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.0.0",
-    "httpx>=0.28.1",
     "aiosqlite>=0.20.0",
     "mypy>=1.18.2",
     "ruff>=0.15.0",
@@ -97,7 +94,7 @@ exclude = [
     'venv',
     '__pycache__',
     'alembic/',
-    'app/migration/'
+    'app/migrations/'
 ]
 
 [[tool.mypy.overrides]]

@@ -11,7 +11,7 @@ from app.middleware.timing_middleware import TimingMiddleware
 
 app = FastAPI(
     title="AI chat",
-    version="0.1.1",
+    version="0.2.1",
     lifespan=lifespan,
 )
 
