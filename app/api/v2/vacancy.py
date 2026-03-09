@@ -15,8 +15,8 @@ from app.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.models.users import User as UserModel
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.vacancies import VacancyPaginationResponse, VacancyResponse
-from app.tools.headhunter.find_vacancies import vacancy_create
-from app.tools.headhunter.headhunter_client import get_hh_client
+from app.services.headhunter.find_vacancies import vacancy_create
+from app.services.headhunter.headhunter_client import get_hh_client
 from app.utils.db_optimizer import optimized_query
 from app.utils.utils_for_pagination import (
     calculate_has_more,

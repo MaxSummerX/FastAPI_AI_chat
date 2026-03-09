@@ -6,7 +6,7 @@ from loguru import logger
 from app.auth.dependencies import get_current_user
 from app.enum.providers import ImportedProvider
 from app.models.users import User as UserModel
-from app.tools.upload.upload_conversations import upload_conversations_other_provider
+from app.services.upload.upload_conversations import upload_conversations_other_provider
 
 
 router = APIRouter(prefix="/upload", tags=["Imports_V2"])

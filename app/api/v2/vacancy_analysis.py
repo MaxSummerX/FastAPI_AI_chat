@@ -9,6 +9,12 @@ from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
 from app.depends.llm_depends import get_researcher_llm
 from app.enum.analysis import AnalysisType
+from app.exceptions.exceptions import (
+    InvalidAnalysisTypeError,
+    LLMGenerationError,
+    UserNotFoundError,
+    VacancyNotFoundError,
+)
 from app.llms.openai import AsyncOpenAILLM
 from app.models import Vacancy as VacancyModel
 from app.models.user_vacancies import UserVacancies as UserVacanciesModel
@@ -22,13 +28,7 @@ from app.schemas.vacancy_analysis import (
     VacancyListResponse,
     VacancyResponse,
 )
-from app.tools.ai_research import (
-    InvalidAnalysisTypeError,
-    LLMError,
-    UserNotFoundError,
-    VacancyNotFoundError,
-    analyze_vacancy_from_db,
-)
+from app.services.ai_research import analyze_vacancy_from_db
 
 
 router = APIRouter(prefix="/{id_vacancy}/analyses", tags=["Vacancy_analyses_V2"])
@@ -139,7 +139,7 @@ async def create_vacancy_analysis(
     except InvalidAnalysisTypeError as e:
         logger.warning(f"Invalid analysis type: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except LLMError as e:
+    except LLMGenerationError as e:
         logger.error(f"LLM error: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI service error. Please try again later."
