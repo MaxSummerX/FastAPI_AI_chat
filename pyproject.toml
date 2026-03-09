@@ -18,6 +18,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "bcrypt>=5.0.0",
     "celery>=5.6.2",
+    "ddgs>=9.10.0",
     "email-validator>=2.3.0",
     "fastapi>=0.120.0",
     "langchain-neo4j>=0.6.0",
@@ -31,6 +32,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "python-multipart>=0.0.20",
     "rank-bm25>=0.2.2",
+    "readability-lxml>=0.8.4.1",
     "redis>=7.1.1",
     "sqlalchemy[asyncio]>=2.0.44",
     "tenacity>=9.1.2",
@@ -99,6 +101,10 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = "mem0.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "readability.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
