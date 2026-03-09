@@ -14,12 +14,19 @@
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.enum.documents import DocumentCategory
 from app.models import User as UserModel
 from app.models.documents import Document as DocumentModel
-from app.schemas.documents import DocumentCreate, DocumentResponse, DocumentUpdate
+from app.schemas.documents import (
+    DocumentCreate,
+    DocumentResponse,
+    DocumentSearchResponse,
+    DocumentSearchResult,
+    DocumentUpdate,
+)
 
 
 class DocumentNotFoundError(Exception):
@@ -195,3 +202,58 @@ async def delete_user_document(document_id: UUID, current_user: UserModel, db: A
     await db.commit()
 
     logger.info(f"Документ {document_id} помечен как архивированный")
+
+
+async def search_user_documents(
+    query: str,
+    limit: int,
+    offset: int,
+    category: DocumentCategory | None,
+    current_user_id: UUID,
+    db: AsyncSession,
+) -> DocumentSearchResponse:
+    """
+    Поиск документов пользователя по тексту (PostgreSQL full-text search).
+
+    Выполняет полнотекстовый поиск по содержимому документа.
+    Поддерживает русский и английский языки одновременно.
+    Результаты сортируются по релевантности (ts_rank).
+
+    Args:
+        query: Поисковый запрос
+        limit: Максимальное количество результатов
+        offset: Смещение для пагинации
+        category: Фильтр по категории документа (опционально)
+        current_user_id: UUID аутентифицированного пользователя
+        db: Асинхронная сессия базы данных
+
+    Returns:
+        DocumentSearchResponse: Результаты поиска с метаданными запроса
+    """
+    ts_query = func.plainto_tsquery("russian", query).op("||")(func.plainto_tsquery("english", query))
+
+    conditions = [
+        DocumentModel.user_id == current_user_id,
+        DocumentModel.is_archived.is_(False),
+        DocumentModel.search_vector.op("@@")(ts_query),
+    ]
+
+    if category:
+        conditions.append(DocumentModel.category == category)
+
+    ts_rank = func.ts_rank(DocumentModel.search_vector, ts_query).label("relevance_score")
+
+    result = await db.execute(
+        select(DocumentModel, ts_rank).where(*conditions).order_by(ts_rank.desc()).limit(limit).offset(offset)
+    )
+
+    documents = [
+        DocumentSearchResult.model_validate({**doc.__dict__, "relevance_score": score}) for doc, score in result.all()
+    ]
+
+    return DocumentSearchResponse(
+        documents=documents,
+        query=query,
+        limit=limit,
+        offset=offset,
+    )

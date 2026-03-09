@@ -23,13 +23,14 @@ from app.depends.db_depends import get_async_postgres_db
 from app.enum.documents import DocumentCategory
 from app.models import User as UserModel
 from app.models.documents import Document as DocumentModel
-from app.schemas.documents import DocumentCreate, DocumentResponse, DocumentUpdate
+from app.schemas.documents import BaseResponse, DocumentCreate, DocumentResponse, DocumentSearchResponse, DocumentUpdate
 from app.schemas.pagination import PaginatedResponse
 from app.services.document_service import (
     DocumentNotFoundError,
     create_user_document,
     delete_user_document,
     get_user_document,
+    search_user_documents,
     update_user_document,
 )
 from app.utils.utils_for_pagination import (
@@ -46,6 +47,7 @@ router = APIRouter(prefix="/documents", tags=["Documents_v2"])
 DEFAULT_PER_PAGE = 20
 MINIMUM_PER_PAGE = 1
 MAXIMUM_PER_PAGE = 100
+DEFAULT_OFFSET = 0
 
 
 @router.get(
@@ -64,7 +66,7 @@ async def get_all_documents(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
     include_archived: bool = Query(False, description="Включать неактивные документы"),
-) -> PaginatedResponse[DocumentResponse]:
+) -> PaginatedResponse[BaseResponse]:
     """
     Получить документы текущего пользователя с курсорной пагинацией.
 
@@ -146,10 +148,42 @@ async def get_all_documents(
     )
 
     return PaginatedResponse(
-        items=[DocumentResponse.model_validate(document) for document in documents],
+        items=[BaseResponse.model_validate(document) for document in documents],
         next_cursor=next_cursor,
         has_next=has_next,
     )
+
+
+@router.get("/search", status_code=status.HTTP_200_OK, summary="Поиск документов по тексту")
+async def get_document_with_query(
+    query: str,
+    limit: int = Query(
+        default=DEFAULT_PER_PAGE, ge=MINIMUM_PER_PAGE, description="Размер страницы (1-100). По умолчанию: 20"
+    ),
+    offset: int = Query(default=DEFAULT_OFFSET, ge=0, description="Смещение для пагинации"),
+    category: DocumentCategory | None = None,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_postgres_db),
+) -> DocumentSearchResponse:
+    """
+    Полнотекстовый поиск документов текущего пользователя.
+
+    Выполняет поиск по содержимому документов с поддержкой русского и английского языков.
+    Результаты сортируются по релевантности.
+
+    Args:
+        query: Поисковый запрос (текст)
+        limit: Максимальное количество результатов (1-100)
+        offset: Смещение для пагинации
+        category: Фильтр по категории документа (опционально)
+        current_user: Текущий аутентифицированный пользователь
+        db: Сессия базы данных
+
+    Returns:
+        DocumentSearchResponse: Результаты поиска с оценками релевантности
+    """
+    logger.info(f"Поиск документов по запросу: '{query}' пользователя {current_user.id}")
+    return await search_user_documents(query, limit, offset, category, current_user.id, db)
 
 
 @router.get("/{document_id}", status_code=status.HTTP_200_OK, summary="Получить документ по ID")

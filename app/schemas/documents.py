@@ -63,10 +63,31 @@ class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, use_enum_values=True, populate_by_name=True)
 
 
-class DocumentListResponse(BaseModel):
-    """Схема для списка документов"""
+class BaseResponse(BaseModel):
+    """Базовая схема ответа с основными полями документа"""
 
-    documents: list[DocumentResponse] = Field(..., description="Список документов")
-    total: int = Field(..., description="Общее количество документов")
-    page: int = Field(..., description="Номер страницы")
-    size: int = Field(..., description="Размер страницы")
+    id: UUID = Field(description="UUID документа")
+    title: str | None = Field(description="Название документа")
+    category: DocumentCategory = Field(description="Категория документа")
+    created_at: datetime = Field(description="Дата создания документа")
+    updated_at: datetime = Field(description="Дата последнего обновления")
+    metadata_: dict | None = Field(default=None, description="Произвольные метаданные в формате JSON")
+    tags: list[str] | None = Field(default=None, description="Тэги для организации и поиска документов")
+    summary: str | None = Field(default=None, description="Краткое описание/саммари документа (генерируется AI)")
+
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True, populate_by_name=True)
+
+
+class DocumentSearchResult(BaseResponse):
+    """Результат поиска документов с метрикой релевантности"""
+
+    relevance_score: float = Field(description="Оценка релевантности (0.0 - 1.0)")
+
+
+class DocumentSearchResponse(BaseModel):
+    """Результаты поиска документов"""
+
+    documents: list[DocumentSearchResult] = Field(..., description="Список документов")
+    query: str = Field(..., description="Поисковый запрос")
+    limit: int = Field(..., description="Максимальное количество результатов")
+    offset: int = Field(..., description="Смещение для пагинации")
