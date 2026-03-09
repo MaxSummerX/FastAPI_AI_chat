@@ -47,3 +47,23 @@ class HistoryMessage(BaseModel):
     content: str = Field(description="Сообщение")
 
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class MessageStreamRequest(BaseModel):
+    """
+    Схема запроса для создания сообщения с поточным ответом.
+    """
+
+    message: MessageCreate = Field(description="Сообщение пользователя")
+    mem0ai_on: bool = Field(default=False, description="Использовать mem0ai для извлечения и поиска релевантных фактов")
+    mem0ai_save: bool = Field(default=True, description="")
+    prompt_id: UUID | None = Field(default=None, description="ID кастомного промпта (опционально)")
+    model: str | None = Field(
+        default=None, description="Название модели LLM (опционально, используется модель по умолчанию)"
+    )
+    sliding_window: int = Field(
+        default=10, ge=1, le=1000, description="Количество сообщений для контекста LLM (sliding window)"
+    )
+    memory_facts: int = Field(
+        default=5, ge=1, le=100, description="Количество релевантных фактов из памяти для добавления в контекст"
+    )
