@@ -1,27 +1,23 @@
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
-from mem0 import AsyncMemory
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.configs.llm_config import base_config_for_llm
 from app.depends.db_depends import get_async_postgres_db
-from app.depends.mem0_depends import get_memory
+from app.exceptions.exceptions import LLMGenerationError, NotFoundError, ValidationError  # TODO: настроить исключения
 from app.llms.openai import AsyncOpenAILLM
 from app.models import Conversation as ConversationModel
 from app.models import Message as MessageModel
 from app.models import User as UserModel
-from app.models.prompts import Prompts as PromptModel
-from app.prompts.prompts_base import START_PROMPT
-from app.schemas.facts import FactSource
-from app.schemas.messages import MessageCreate
 from app.schemas.messages import MessageResponse as MessageSchemas
+from app.schemas.messages import MessageStreamRequest
 from app.schemas.pagination import PaginatedResponse
-from app.utils.utils import get_conversation_history, get_conversation_history_with_mem0, stream_and_save_to_db
+from app.services.message_service import MessageService, get_message_service
 from app.utils.utils_for_pagination import (
     calculate_has_more,
     decode_cursor,
@@ -133,140 +129,52 @@ async def get_messages(
 @router.post("/stream_v2", status_code=status.HTTP_200_OK, summary="Добавить сообщение с поточным ответом (v2)")
 async def add_message_stream_v2(
     conversation_id: UUID,
-    message: MessageCreate,
-    background_tasks: BackgroundTasks,
-    mem0ai_on: bool = False,
-    prompt_id: UUID | None = None,
-    model: str | None = None,
-    sliding_window: int = 10,
-    memory_facts: int = 5,
-    memory: AsyncMemory = Depends(get_memory),
+    request: MessageStreamRequest,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    service: MessageService = Depends(get_message_service),
 ) -> StreamingResponse:
     """
-    Добавить сообщение в беседу и получить улучшенный поточный ответ.
+    Добавить сообщение в беседу и получить поточный ответ (v2).
 
     Дополнительно поддерживает:
     - Выборочное использование mem0ai
     - Кастомные промпты
+    - Настройку контекста (sliding window, memory facts)
 
     Args:
-        conversation_id: UUID беседы
-        message: Сообщение пользователя
-        background_tasks: FastAPI background tasks
-        mem0ai_on: Использовать ли mem0ai для контекста
-        prompt_id: ID кастомного промпта
-        model: Модель LLM
-        sliding_window: Размер истории для контекста LLM
-        memory_facts: Кол-во фактов добавляем вы контекст
-        memory: сервис для работы памяти(mem0ai)
-        current_user: Текущий пользователь
-        db: Сессия БД
+    - conversation_id: UUID беседы
+    - request: Запрос с сообщением и настройками (MessageStreamRequest)
+    - current_user: Текущий аутентифицированный пользователь
+    - service: Сервис для обработки сообщений (MessageService)
 
     Returns:
-        StreamingResponse: Потоковый ответ
+    - StreamingResponse: Потоковый ответ сгенерированный LLM
 
     Raises:
-        HTTPException 400: Если content пустой
-        HTTPException 404: Если беседа или промпт не найдены
-        HTTPException 500: При ошибке генерации ответа
+    - HTTPException 422: Если content сообщения пустой
+    - HTTPException 404: Если беседа или промпт не найдены
+    - HTTPException 500: При ошибке генерации ответа
     """
-    logger.info(
-        f"Запрос на добавление стримингового ответа v2 в беседу {conversation_id} пользователем {current_user.id}"
-    )
-
-    # Проверка существования беседы
-    conversation_result = await db.scalars(
-        select(ConversationModel).where(
-            ConversationModel.id == conversation_id,
-            ConversationModel.user_id == current_user.id,
-            ConversationModel.is_archived.is_(False),
-        )
-    )
-    conversation = conversation_result.first()
-
-    if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    if not message.content or not message.content.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Message content cannot be empty")
-
-    # Сохраняем сообщение пользователя
-    user_message = MessageModel(
-        conversation_id=conversation_id, role=message.role, content=message.content, model=llm.config.model
-    )
-    db.add(user_message)
-    await db.flush()  # Получаем ID сообщения для background task
-    await db.commit()
-
-    # Получаем промпт с улучшенными проверками
-    if prompt_id:
-        prompt_result = await db.scalars(
-            select(PromptModel).where(
-                PromptModel.id == prompt_id,
-                PromptModel.user_id == current_user.id,
-                PromptModel.is_active.is_(True),
-            )
-        )
-
-        prompt = prompt_result.first()
-        logger.info(f"Поиск промпта: id={prompt_id}, найден={prompt is not None}")
-        if not prompt:
-            logger.warning(f"Промпт не найден: id={prompt_id}, пользователь={current_user.id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"Prompt with id={prompt_id} not found or not accessible"
-            )
-
-        prompt_content = prompt.content
-    else:
-        prompt_content = START_PROMPT
-
-    if not mem0ai_on:
-        history = await get_conversation_history(
-            prompt=prompt_content, db=db, conversation_id=conversation_id, limit=sliding_window
-        )
-    else:
-        # Получаем историю с системным промптом и релевантными фактами для контекста
-        history = await get_conversation_history_with_mem0(
-            message=message.content,
-            user_id=current_user.id,
-            prompt=prompt_content,
-            db=db,
-            memory=memory,
-            conversation_id=conversation_id,
-            limit=sliding_window,
-            memory_limit=memory_facts,
-        )
-
-    # Передаём историю для генерации ответа
-    try:
-        stream, result_awaitable = await llm.generate_stream_response(messages=history, model=model)
-    except Exception as e:
-        logger.error(f"Ошибка при генерации стримингового ответа: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate response"
-        ) from e
-
-    # Создаём фоновую задачу для работы mem0ai
-    background_tasks.add_task(
-        memory.add,
-        messages=[message.model_dump()],
-        user_id=str(current_user.id),
-        run_id=str(user_message.id),
-        metadata={"source_type": FactSource.EXTRACTED.value},
-    )
-
-    logger.info(f"Сообщение добавлено в беседу {conversation_id}, стриминг запущен")
 
     # Возвращаем streaming ответ
-    return StreamingResponse(
-        stream_and_save_to_db(
-            stream=stream,
-            result_awaitable=result_awaitable,
-            db=db,
+    try:
+        data = await service.stream(
             conversation_id=conversation_id,
-            model=model if model is not None else llm.config.model or "gpt-4o-mini",
-        ),
-        media_type="text/event-stream",
-    )
+            message=request.message.content,
+            message_role=request.message.role,
+            mem0ai_on=request.mem0ai_on,
+            mem0ai_save=request.mem0ai_save,
+            prompt_id=request.prompt_id,
+            model=request.model,
+            sliding_window=request.sliding_window,
+            memory_facts=request.memory_facts,
+            user_id=current_user.id,
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except LLMGenerationError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return StreamingResponse(service.stream_generator(stream_data=data), media_type="text/event-stream")
