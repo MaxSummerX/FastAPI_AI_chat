@@ -1,15 +1,10 @@
 import re
-import time
-from collections.abc import AsyncIterator, Awaitable
-from uuid import UUID
 
 from loguru import logger
-from mem0 import AsyncMemory
 from sqlalchemy import select
 
-from app.database.postgres_db import AsyncSession
-from app.models.messages import Message as MessageModel
-from app.schemas.messages import HistoryMessage
+from app.database.postgres_db import async_session_maker
+from app.models.invites import Invite as InviteModel
 
 
 def extract_json(text: str) -> str:
@@ -27,108 +22,36 @@ def extract_json(text: str) -> str:
     return json_str
 
 
-def parse_facts_from_mem0(memory: dict) -> str:
-    data = []
+async def generate_invite_codes(count: int = 1) -> list[str]:
+    """Генерирует указанное количество invite кодов"""
 
-    # Добавляем факты
-    if results := memory.get("results"):
-        data.append("\n📝 Факты о пользователе:")
-        for item in results:
-            data.append(f" • {item['memory']} - {item['created_at'][:16]}")
+    async with async_session_maker() as session:
+        codes = []
 
-    # Добавляем связи
-    if relations := memory.get("relations"):
-        data.append("\n🔗 Связи:")
-        for relation in relations:
-            source = relation["source"].replace("user_id:_", "User").replace("_", " ")
-            dest = relation["destination"].replace("_", " ")
-            rel_type = relation["relationship"].replace("_", " ")
-            data.append(f"  • {source} → {rel_type} → {dest}")
+        for _ in range(count):
+            code = InviteModel.generate_code()
+            invite = InviteModel(code=code)
+            session.add(invite)
+            codes.append(code)
 
-    return "\n".join(data) if data else "Нет данных о пользователе"
+        await session.commit()
+
+        logger.info(f"✅ Создано {count} invite кодов:")
+
+        return codes
 
 
-async def get_conversation_history(prompt: str, db: AsyncSession, conversation_id: UUID, limit: int = 10) -> list[dict]:
-    """Получить историю в формате для LLM"""
+async def list_unused_codes() -> list[str]:
+    """Показывает все неиспользованные коды"""
 
-    result = await db.scalars(
-        select(MessageModel)
-        .where(MessageModel.conversation_id == conversation_id)
-        .order_by(MessageModel.timestamp.desc())
-        .limit(limit)
-    )
+    async with async_session_maker() as session:
+        result = await session.scalars(select(InviteModel.code).where(InviteModel.is_used.is_(False)))
 
-    messages = result.all()
+        codes = result.all()
 
-    # Нормализуем через Pydantic
-    history = [HistoryMessage.model_validate(msg).model_dump(mode="json") for msg in reversed(messages)]
+        if codes:
+            logger.info(f"📋 Неиспользованные коды ({len(codes)}):")
+        else:
+            logger.info("❌ Нет неиспользованных кодов")
 
-    # Преобразуем в формат для LLM
-    return [{"role": "system", "content": prompt}] + history
-
-
-async def get_conversation_history_with_mem0(
-    message: str,
-    user_id: UUID,
-    prompt: str,
-    db: AsyncSession,
-    memory: AsyncMemory,
-    conversation_id: UUID,
-    limit: int = 10,
-    memory_limit: int = 50,
-    fact_score: float = 0.3,
-) -> list[dict]:
-    """Получить историю в формате для LLM"""
-    start = time.time()
-
-    db_start = time.time()
-    result = await db.scalars(
-        select(MessageModel)
-        .where(MessageModel.conversation_id == conversation_id)
-        .order_by(MessageModel.timestamp.desc())
-        .limit(limit)
-    )
-    db_time = time.time() - db_start
-
-    messages = result.all()
-
-    mem_start = time.time()
-    facts = await memory.search(message, user_id=str(user_id), limit=memory_limit, threshold=fact_score)
-    mem_time = time.time() - mem_start
-
-    total_time = time.time() - start
-    logger.info(
-        f"Кол-во Фактов: {len(facts['results'])}, БД: {db_time:.3f}s, Mem0: {mem_time:.3f}s, Всего: {total_time:.3f}s"
-    )
-    new_prompt = prompt + parse_facts_from_mem0(facts)
-
-    # Нормализуем через Pydantic
-    history = [HistoryMessage.model_validate(msg).model_dump(mode="json") for msg in reversed(messages)]
-
-    # Преобразуем в формат для LLM
-    return [{"role": "system", "content": new_prompt}] + history
-
-
-async def save_message_to_db(db: AsyncSession, role: str, conversation_id: UUID, content: str, model: str) -> None:
-    """Сохранение сообщения в БД"""
-    message = MessageModel(conversation_id=conversation_id, role=role, content=content, model=model)
-    db.add(message)
-    await db.commit()
-
-
-async def stream_and_save_to_db(
-    stream: AsyncIterator[str], result_awaitable: Awaitable[str], db: AsyncSession, conversation_id: UUID, model: str
-) -> AsyncIterator[str]:
-    """Стримим сообщения пользователю и Сохранение сообщения от llm в БД после stream ответа"""
-    async for chunk in stream:
-        yield chunk
-
-    full_response = await result_awaitable
-
-    assistant_message = MessageModel(
-        conversation_id=conversation_id, role="assistant", content=full_response, model=model
-    )
-
-    db.add(assistant_message)
-
-    await db.commit()
+        return list(codes)
