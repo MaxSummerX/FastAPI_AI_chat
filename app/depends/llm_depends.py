@@ -7,7 +7,7 @@ Dependency injection для LLM инстансов.
 
 from collections.abc import AsyncGenerator
 
-from app.configs.llm_config import researcher_llm_config
+from app.configs.llm_config import base_config_for_llm, researcher_llm_config
 from app.llms.openai import AsyncOpenAILLM
 
 
@@ -30,3 +30,34 @@ async def get_researcher_llm() -> AsyncGenerator[AsyncOpenAILLM]:
     """
     llm = AsyncOpenAILLM(researcher_llm_config)
     yield llm
+
+
+async def get_base_llm() -> AsyncGenerator[AsyncOpenAILLM]:
+    """
+    Предоставляет базовый инстанс LLM для обработки сообщений.
+
+    Использует base_config_for_llm для конфигурации.
+    Создаёт новый инстанс для каждого запроса (stateless).
+
+    Yields:
+        AsyncOpenAILLM: Инстанс LLM для выполнения запросов
+
+    Example:
+        @router.post("/stream")
+        async def stream(
+            llm: Annotated[AsyncOpenAILLM, Depends(get_base_llm)]
+        ):
+            result = await llm.generate_stream_response(messages)
+    """
+    llm = AsyncOpenAILLM(base_config_for_llm)
+    yield llm
+
+
+_llm_instance: AsyncOpenAILLM | None = None
+
+
+async def get_base_llm_single() -> AsyncGenerator[AsyncOpenAILLM]:
+    global _llm_instance
+    if _llm_instance is None:
+        _llm_instance = AsyncOpenAILLM(base_config_for_llm)
+    yield _llm_instance
