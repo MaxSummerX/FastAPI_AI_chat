@@ -16,9 +16,11 @@ from app.exceptions.exceptions import LLMGenerationError, NotFoundError, PromptN
 from app.llms.openai import AsyncOpenAILLM
 from app.llms.tools import (
     CREATE_DOCUMENT_TOOL,
+    FILE_SEARCH_TOOL,
     WEB_FETCH_TOOL,
     WEB_SEARCH_TOOL,
     make_create_file_tool,
+    make_search_documents_tool,
     web_fetch,
     web_search,
 )
@@ -137,6 +139,7 @@ class MessageService:
             "web_search": web_search,
             "web_fetch": web_fetch,
             "create_file": make_create_file_tool(user_id),
+            "search_documents": make_search_documents_tool(user_id),
         }
 
         logger.info(f"Запрос на добавление стримингового ответа v2 в беседу {conversation_id} пользователем {user_id}")
@@ -202,7 +205,7 @@ class MessageService:
             stream, result_awaitable = await self.llm.generate_stream_response(
                 messages=history,
                 model=model,
-                tools=[WEB_SEARCH_TOOL, WEB_FETCH_TOOL, CREATE_DOCUMENT_TOOL],
+                tools=[WEB_SEARCH_TOOL, WEB_FETCH_TOOL, CREATE_DOCUMENT_TOOL, FILE_SEARCH_TOOL],
                 tool_choice="auto",
             )
         except Exception as e:
@@ -360,7 +363,7 @@ class MessageService:
             args = tool_call["function"]["arguments"]
 
             # Пропускаем tools с невалидными аргументами (пустые после ошибки парсинга)
-            if not args and name in ["create_file", "web_search", "web_fetch"]:
+            if not args and name in ["create_file", "web_search", "web_fetch", "search_documents"]:
                 error_msg = f"⚠️ Пропущен вызов {name}: пустые аргументы (невалидный JSON от модели)"
                 logger.warning(error_msg)
                 return {"role": "tool", "tool_call_id": tool_call["id"], "content": error_msg}

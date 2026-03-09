@@ -17,6 +17,62 @@ USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36"
 MAX_REDIRECTS = 5
 
 
+def _validate_url(url: str) -> tuple[bool, str]:
+    """Проверить URL: должен быть http(s) имея валидный домен."""
+    try:
+        p = urlparse(url)
+        if p.scheme not in ("http", "https"):
+            return False, f"Only http/https allowed, got '{p.scheme or 'none'}'"
+        if not p.netloc:
+            return False, "Missing domain"
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def _strip_tags(text: str) -> str:
+    """Удалить HTML-теги и декодировать entities."""
+
+    text = re.sub(r"<script[\s\S]*?</script>", "", text, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", "", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", "", text)
+    return html.unescape(text).strip()
+
+
+def _normalize(text: str) -> str:
+    """Нормализовать пробелы."""
+
+    text = re.sub(r"[ \t]+", " ", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _to_markdown(html_code: str) -> str:
+    """Конвертировать HTML в markdown."""
+
+    # Конвертировать ссылки, заголовки, перечни перед удалением тегов
+    text = re.sub(
+        r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>([\s\S]*?)</a>',
+        lambda m: f"[{_strip_tags(m[2])}]({m[1]})",
+        html_code,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"<h([1-6])[^>]*>([\s\S]*?)</h\1>",
+        lambda m: f"\n{'#' * int(m[1])} {_strip_tags(m[2])}\n",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"<li[^>]*>([\s\S]*?)</li>",
+        lambda m: f"\n- {_strip_tags(m[1])}",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(r"</(p|div|section|article)>", "\n\n", text, flags=re.I)
+    text = re.sub(r"<(br|hr)\s*/?>", "\n", text, flags=re.I)
+    return _normalize(_strip_tags(text))
+
+
 async def web_search(query: str, max_results: int = 5) -> str | None:
     """Поиск через DuckDuckGo (бесплатно, без ключа)."""
     try:
@@ -103,62 +159,6 @@ async def web_fetch(
         return json.dumps({"error": str(e), "url": url}, ensure_ascii=False)
 
 
-def _validate_url(url: str) -> tuple[bool, str]:
-    """Проверить URL: должен быть http(s) имея валидный домен."""
-    try:
-        p = urlparse(url)
-        if p.scheme not in ("http", "https"):
-            return False, f"Only http/https allowed, got '{p.scheme or 'none'}'"
-        if not p.netloc:
-            return False, "Missing domain"
-        return True, ""
-    except Exception as e:
-        return False, str(e)
-
-
-def _strip_tags(text: str) -> str:
-    """Удалить HTML-теги и декодировать entities."""
-
-    text = re.sub(r"<script[\s\S]*?</script>", "", text, flags=re.I)
-    text = re.sub(r"<style[\s\S]*?</style>", "", text, flags=re.I)
-    text = re.sub(r"<[^>]+>", "", text)
-    return html.unescape(text).strip()
-
-
-def _normalize(text: str) -> str:
-    """Нормализовать пробелы."""
-
-    text = re.sub(r"[ \t]+", " ", text)
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
-
-
-def _to_markdown(html_code: str) -> str:
-    """Конвертировать HTML в markdown."""
-
-    # Конвертировать ссылки, заголовки, перечни перед удалением тегов
-    text = re.sub(
-        r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>([\s\S]*?)</a>',
-        lambda m: f"[{_strip_tags(m[2])}]({m[1]})",
-        html_code,
-        flags=re.I,
-    )
-    text = re.sub(
-        r"<h([1-6])[^>]*>([\s\S]*?)</h\1>",
-        lambda m: f"\n{'#' * int(m[1])} {_strip_tags(m[2])}\n",
-        text,
-        flags=re.I,
-    )
-    text = re.sub(
-        r"<li[^>]*>([\s\S]*?)</li>",
-        lambda m: f"\n- {_strip_tags(m[1])}",
-        text,
-        flags=re.I,
-    )
-    text = re.sub(r"</(p|div|section|article)>", "\n\n", text, flags=re.I)
-    text = re.sub(r"<(br|hr)\s*/?>", "\n", text, flags=re.I)
-    return _normalize(_strip_tags(text))
-
-
 def make_create_file_tool(user_id: str | UUID) -> Callable[..., Awaitable[str]]:
     """Создаёт функцию create_file с захваченным user_id.
     db передаётся только для совместимости, но не используется напрямую."""
@@ -215,6 +215,57 @@ def make_create_file_tool(user_id: str | UUID) -> Callable[..., Awaitable[str]]:
             return f"Документ создан с ID: {document.id}, заголовок: {title}"
 
     return create_file
+
+
+def make_search_documents_tool(user_id: UUID) -> Callable[..., Awaitable[str]]:
+    """Создаёт функцию search_documents с захваченным user_id."""
+    from app.database.postgres_db import async_session_maker
+
+    async def search_documents(
+        query: str,
+        category: str | None = None,
+        limit: int = 5,
+        offset: int = 0,
+    ) -> str:
+        """Поиск по документам пользователя."""
+        from app.enum.documents import DocumentCategory
+        from app.services.document_service import search_user_documents
+
+        category_enum = None
+        if category:
+            try:
+                category_enum = DocumentCategory(category.lower())
+            except ValueError:
+                pass
+
+        async with async_session_maker() as session:
+            response = await search_user_documents(
+                query=query,
+                limit=limit,
+                offset=offset,
+                category=category_enum,
+                current_user_id=user_id,
+                db=session,
+            )
+
+        if not response.documents:
+            return f"Документы по запросу '{query}' не найдены"
+
+        lines = [f"Найдено {len(response.documents)} документов по запросу '{query}':\n"]
+        for doc in response.documents:
+            lines.append(f"ID: {doc.id}")
+            lines.append(f"Заголовок: {doc.title or 'Без названия'}")
+            lines.append(f"Категория: {doc.category}")
+            lines.append(f"Релевантность: {doc.relevance_score:.2f}")
+            if doc.summary:
+                lines.append(f"Описание: {doc.summary}")
+            if doc.tags:
+                lines.append(f"Теги: {', '.join(doc.tags)}")
+            lines.append("---")
+
+        return "\n".join(lines)
+
+    return search_documents
 
 
 # --- Схема инструмента ---
@@ -298,5 +349,35 @@ CREATE_DOCUMENT_TOOL = {
         },
     },
 }
+
+FILE_SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "search_documents",
+        "description": "Search through user's documents, notes, guides and other saved materials. Use when user asks to find, recall or look up something from their knowledge base.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query — what to find (e.g., 'asyncio tasks', 'meeting notes')",
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["note", "document", "plan", "code", "research", "summary", "template"],
+                    "description": "Optional filter by document type",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of results to return (default: 5)",
+                    "minimum": 1,
+                    "maximum": 20,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+}
+
 
 TOOLS = {"web_search": web_search, "web_fetch": web_fetch}
