@@ -2,9 +2,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, types
+from sqlalchemy import JSON, Computed, DateTime, ForeignKey, Index, String, Text, types
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.enum.documents import DocumentCategory
@@ -52,6 +52,27 @@ class Document(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Флаг отвечающий за актуальность саммари
     summary_outdated: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+    # Векторное поле для BM25 полнотекстового поиска (ru + en)
+    # Веса: A=title, B=summary, C=content
+    # coalesce защищает от NULL — пустые поля просто игнорируются
+    # persisted=True — хранится на диске, пересчитывается автоматически при изменении title/summary/content
+    search_vector = mapped_column(
+        TSVECTOR,
+        Computed(
+            """
+            setweight(to_tsvector('russian', coalesce(title, '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+            setweight(to_tsvector('russian', coalesce(summary, '')), 'B') ||
+            setweight(to_tsvector('english', coalesce(summary, '')), 'B') ||
+            setweight(to_tsvector('russian', coalesce(content, '')), 'C') ||
+            setweight(to_tsvector('english', coalesce(content, '')), 'C')
+            """,
+            persisted=True,
+        ),
+        nullable=True,
+    )
+
     # ID диалога-источника (если документ создан из диалога)
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         types.Uuid, ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
@@ -73,4 +94,5 @@ class Document(Base):
         Index("ix_documents_pagination", "user_id", "created_at", "id"),
         Index("ix_documents_conversation", "conversation_id"),
         Index("ix_documents_tags", "tags", postgresql_using="gin"),
+        Index("ix_documents_search_vector", "search_vector", postgresql_using="gin"),
     )
