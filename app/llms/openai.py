@@ -5,6 +5,7 @@ import os
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any
 
+from loguru import logger
 from openai import AsyncOpenAI
 
 from app.configs.llms.base import BaseLlmConfig
@@ -58,7 +59,8 @@ class AsyncOpenAILLM(LLMBase):
 
             self.client = AsyncOpenAI(api_key=api_key, base_url=openai_base_url)
 
-    def _parse_response(self, response: Any, tools: list[dict[str, Any]] | None) -> str | dict[str, Any]:
+    @staticmethod
+    def _parse_response(response: Any, tools: list[dict[str, Any]] | None) -> str | dict[str, Any]:
         """
         Обработка ответа с учетом того, использовались ли tools или нет.
 
@@ -90,8 +92,11 @@ class AsyncOpenAILLM(LLMBase):
                 for tool_call in first_choice.message.tool_calls:
                     processed_response["tool_calls"].append(
                         {
-                            "name": tool_call.function.name,
-                            "arguments": json.loads(extract_json(tool_call.function.arguments)),
+                            "id": tool_call.id,
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": json.loads(extract_json(tool_call.function.arguments)),
+                            },
                         }
                     )
 
@@ -109,7 +114,7 @@ class AsyncOpenAILLM(LLMBase):
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str = "auto",
         **kwargs: Any,
-    ) -> str | dict[str, Any]:  # TODO: Переработать для сбора данных об ответе или разделить функциональность
+    ) -> str | dict[str, Any]:
         """
         Сгенерировать ответ JSON на основе предоставленных сообщений с помощью OpenAI.
 
@@ -178,14 +183,21 @@ class AsyncOpenAILLM(LLMBase):
         return parsed_response
 
     async def generate_stream_response(
-        self, messages: list[dict[str, str]], model: str | None = None, **kwargs: Any
-    ) -> tuple[AsyncIterator[str], Awaitable[str]]:
+        self,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str = "auto",
+        **kwargs: Any,
+    ) -> tuple[AsyncIterator[str], Awaitable[dict[str, Any]]]:
         """
         Сгенерировать ответ JSON на основе предоставленных сообщений с помощью OpenAI.
 
         Args:
             messages (list): Список(list) содержащий словари(dict) 'role' и 'content'.
             model (str, optional): Модель LLM. Если None - используется self.config.model.
+            tools (list, optional): Список(list) tools что модель может вызвать. По умолчанию — None.
+            tool_choice (str, optional): Метод выбора tools. По умолчанию — "auto".
             **kwargs: Дополнительные параметры, специфичные для OpenAI.
 
         Returns:
@@ -225,9 +237,14 @@ class AsyncOpenAILLM(LLMBase):
                 if hasattr(self.config, param):
                     params[param] = getattr(self.config, param)
 
+        if tools:
+            params["tools"] = tools
+            params["tool_choice"] = tool_choice
+
         response = await self.client.chat.completions.create(**params)
 
         chunks: list[str] = []
+        tool_calls_buffer: dict[int, dict[str, Any]] = {}  # index -> {id, function: {name, arguments}}
         stream_completed = asyncio.Event()
 
         async def stream_generator() -> AsyncIterator[str]:
@@ -236,17 +253,86 @@ class AsyncOpenAILLM(LLMBase):
             """
             try:
                 async for chunk in response:
+                    # Пропускаем chunks без choices (финальные, служебные)
+                    if not chunk.choices:
+                        continue
+
+                    # Текстовый контент
                     if chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
                         chunks.append(content)
                         yield content
+
+                    # Tool calls (приходят кусками)
+                    if hasattr(chunk.choices[0].delta, "tool_calls") and chunk.choices[0].delta.tool_calls:
+                        for tool_call_chunk in chunk.choices[0].delta.tool_calls:
+                            idx = tool_call_chunk.index
+
+                            # Инициализация при первом появлении
+                            if idx not in tool_calls_buffer:
+                                tool_calls_buffer[idx] = {
+                                    "id": tool_call_chunk.id or "",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+
+                            # Накопление данных
+                            if tool_call_chunk.id:
+                                tool_calls_buffer[idx]["id"] = tool_call_chunk.id
+                            if hasattr(tool_call_chunk, "function") and tool_call_chunk.function:
+                                if tool_call_chunk.function.name:
+                                    tool_calls_buffer[idx]["function"]["name"] = tool_call_chunk.function.name
+                                if tool_call_chunk.function.arguments:
+                                    tool_calls_buffer[idx]["function"]["arguments"] += (
+                                        tool_call_chunk.function.arguments
+                                    )
             finally:
-                # Сигнализируем о завершении стрима
                 stream_completed.set()
 
-        async def get_result() -> str:
-            """Ожидает завершения стрима и возвращает полный ответ."""
+        async def get_result() -> dict[str, Any]:
+            """
+            Ожидает завершения стрима и возвращает полный ответ.
+            Returns:
+                dict: {"content": str, "tool_calls": list[dict]}
+            """
             await stream_completed.wait()
-            return "".join(chunks)
+
+            result: dict[str, Any] = {"content": "".join(chunks), "tool_calls": []}
+
+            # Конвертируем накопленные tool_calls в нужный формат
+            for idx in sorted(tool_calls_buffer.keys()):
+                tc = tool_calls_buffer[idx]
+                args_str = tc["function"]["arguments"]
+
+                # Парсим JSON с обработкой ошибок (некоторые модели генерируют невалидный JSON)
+                try:
+                    args = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON in tool call arguments: {e}, args: {args_str[:100]}...")
+                    # Попытка исправить обрезанный JSON - добавляем закрывающие скобки
+                    try:
+                        # Если строка обрезана внутри строки, закрываем её и объект
+                        if args_str.count('"') % 2 == 1:  # Нечётное количество кавычек
+                            # Находим последний незакрытый ключ
+                            last_quote = args_str.rfind('"')
+                            if last_quote != -1:
+                                # Пытаемся закрыть значение и объект
+                                fixed = args_str + '"}'
+                                try:
+                                    args = json.loads(fixed)
+                                    logger.info("Fixed JSON by adding closing quote/brace")
+                                except (json.JSONDecodeError, ValueError, TypeError):
+                                    args = {}
+                            else:
+                                args = {}
+                        else:
+                            args = {}
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        args = {}
+
+                result["tool_calls"].append(
+                    {"id": tc["id"], "function": {"name": tc["function"]["name"], "arguments": args}}
+                )
+
+            return result
 
         return stream_generator(), get_result()
