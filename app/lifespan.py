@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from app.depends.mem0_depends import close_memory, init_memory
-from app.tools.headhunter.headhunter_client import close_hh_client, get_hh_client, warmup_hh_client
+from app.services.headhunter.headhunter_client import close_hh_client, get_hh_client, warmup_hh_client
 
 
 @asynccontextmanager

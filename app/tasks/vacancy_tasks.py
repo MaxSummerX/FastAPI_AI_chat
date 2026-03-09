@@ -20,8 +20,8 @@ from app.models.users import User as UserModel
 from app.models.vacancies import Vacancy as VacancyModel
 from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.schemas.vacancies import VacancyForAnalysis
-from app.tools.ai_research.analyzer import analyze_vacancy
-from app.tools.headhunter.find_vacancies import import_vacancies
+from app.services.ai_research.analyzer import analyze_vacancy
+from app.services.headhunter.find_vacancies import import_vacancies
 from app.utils.env import get_required_env
 
 

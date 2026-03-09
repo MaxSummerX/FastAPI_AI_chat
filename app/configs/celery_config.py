@@ -67,7 +67,7 @@ def warmup_http_clients(**kwargs: Any) -> None:
     """
 
     async def _warmup() -> None:
-        from app.tools.headhunter.headhunter_client import warmup_hh_client
+        from app.services.headhunter.headhunter_client import warmup_hh_client
 
         await warmup_hh_client()
 
@@ -84,7 +84,7 @@ def shutdown_http_clients(**kwargs: Any) -> None:
     """
 
     async def _shutdown() -> None:
-        from app.tools.headhunter.headhunter_client import close_hh_client
+        from app.services.headhunter.headhunter_client import close_hh_client
 
         await close_hh_client()
 
