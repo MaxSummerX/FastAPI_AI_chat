@@ -3,8 +3,8 @@ from typing import Any
 from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.exceptions.exceptions import LLMGenerationError
 from app.llms.openai import AsyncOpenAILLM
-from app.tools.ai_research.exceptions import LLMError
 
 
 @retry(
@@ -21,7 +21,7 @@ async def _call_llm_with_retry(
     Вызывает LLM с автоматическим retry при транзиентных ошибках.
 
     Retry только на TimeoutError / ConnectionError с экспоненциальным backoff.
-    LLMError (пустой ответ, бизнес-логика) — не ретраится, пробрасывается сразу.
+    LLMGenerationError (пустой ответ, бизнес-логика) — не ретраится, пробрасывается сразу.
 
     Args:
         llm: Инстанс LLM (получается через dependency injection)
@@ -31,17 +31,17 @@ async def _call_llm_with_retry(
         Текстовый ответ от LLM или dict (для structured output)
 
     Raises:
-        LLMError: Пустой ответ или исчерпаны все попытки
+        LLMGenerationError: Пустой ответ или исчерпаны все попытки
     """
     try:
         result = await llm.generate_response(messages)
 
         if not result:
-            raise LLMError("LLM вернул пустой ответ")
+            raise LLMGenerationError("LLM вернул пустой ответ")
 
         return result
 
-    except LLMError:
+    except LLMGenerationError:
         raise
 
     except (TimeoutError, ConnectionError):
@@ -50,4 +50,4 @@ async def _call_llm_with_retry(
 
     except Exception as e:
         logger.error(f"Неожиданная ошибка при вызове LLM: {e}")
-        raise LLMError(f"Не удалось получить ответ от LLM: {e}") from e
+        raise LLMGenerationError(f"Не удалось получить ответ от LLM: {e}") from e

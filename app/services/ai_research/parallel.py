@@ -3,10 +3,10 @@ from typing import Any
 
 from loguru import logger
 
+from app.exceptions.exceptions import LLMGenerationError
 from app.llms.openai import AsyncOpenAILLM
 from app.prompts.prompts_for_analysis import PREPARATION_PROMPT
-from app.tools.ai_research.exceptions import LLMError
-from app.tools.ai_research.llm import _call_llm_with_retry
+from app.services.ai_research.llm import _call_llm_with_retry
 
 
 async def ai_response_with_semaphore(
@@ -36,7 +36,7 @@ async def ai_response_with_semaphore(
             ]
             result: str | dict[str, Any] = await _call_llm_with_retry(llm, request)
             return result
-        except LLMError as e:
+        except LLMGenerationError as e:
             logger.error(f"Ошибка при выполнении запроса {index}: {e}")
             return None
         except Exception as e:

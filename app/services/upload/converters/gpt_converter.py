@@ -12,7 +12,7 @@ from app.database.postgres_db import async_session_maker
 from app.models.conversations import Conversation as ConversationModel
 from app.models.messages import Message as MessageModel
 from app.models.messages import MessageRole
-from app.utils.gpt_history_converter import split_conversations_async
+from app.services.upload.converters.gpt_history_converter import split_conversations_async
 
 
 async def convert_gtp(user_id: UUID, provider: str, path: Path, input_file: str, output_dir: str) -> None:

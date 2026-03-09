@@ -7,9 +7,9 @@ from fastapi import BackgroundTasks, File, HTTPException, UploadFile, status
 from loguru import logger
 
 from app.enum.providers import ImportedProvider
-from app.tools.upload.upload_tools import save_file_with_validation, validate_file_extension, validate_mime_type
-from app.utils.claude_history_converter import convert
-from app.utils.gpt_converter import convert_gtp
+from app.services.upload.converters.claude_history_converter import convert
+from app.services.upload.converters.gpt_converter import convert_gtp
+from app.services.upload.upload_tools import save_file_with_validation, validate_file_extension, validate_mime_type
 
 
 SUCCESS_FILE_UPLOADED = "File successfully uploaded"

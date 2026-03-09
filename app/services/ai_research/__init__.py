@@ -9,16 +9,9 @@ AI-анализ вакансий через LLM.
 - custom: пользовательский промпт
 """
 
-from app.tools.ai_research.analyzer import analyze_vacancy_from_db
-from app.tools.ai_research.exceptions import (
-    AnalysisError,
-    InvalidAnalysisTypeError,
-    LLMError,
-    UserNotFoundError,
-    VacancyNotFoundError,
-)
-from app.tools.ai_research.parallel import ai_response_gather
-from app.tools.ai_research.prompts import prompt_choice
+from app.services.ai_research.analyzer import analyze_vacancy_from_db
+from app.services.ai_research.parallel import ai_response_gather
+from app.services.ai_research.prompts import prompt_choice
 
 
 __all__ = [
@@ -28,10 +21,4 @@ __all__ = [
     "prompt_choice",
     # Параллельные запросы
     "ai_response_gather",
-    # Исключения
-    "AnalysisError",
-    "VacancyNotFoundError",
-    "UserNotFoundError",
-    "LLMError",
-    "InvalidAnalysisTypeError",
 ]
