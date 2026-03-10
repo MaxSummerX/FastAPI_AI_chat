@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
 from app.depends.mem0_depends import get_memory
+from app.exceptions import InvalidCursorError
 from app.models import Fact as FactModel
 from app.models import User as UserModel
 from app.models.facts import FactCategory, FactSource
@@ -23,20 +24,14 @@ from app.services.fact_service import (
     import_from_mem0ai_to_postgres_db,
     update_user_fact,
 )
-from app.utils.utils_for_pagination import (
-    calculate_has_more,
-    decode_cursor,
-    encode_cursor,
-    trim_excess_item,
-    validate_pagination_limit,
+from app.utils.pagination import (
+    DEFAULT_PER_PAGE,
+    MINIMUM_PER_PAGE,
+    paginate_with_cursor,
 )
 
 
 router = APIRouter(prefix="/facts", tags=["Facts_v2"])
-
-DEFAULT_PER_PAGE = 20
-MINIMUM_PER_PAGE = 1
-MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
@@ -80,11 +75,7 @@ async def get_all_facts(
         f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
     )
 
-    # Валидируем limit
-    limit = validate_pagination_limit(limit, default=DEFAULT_PER_PAGE, maximum=MAXIMUM_PER_PAGE)
-
     # Формируем базовый запрос
-
     conditions = [FactModel.user_id == current_user.id]
 
     if category:
@@ -98,43 +89,16 @@ async def get_all_facts(
 
     query = select(FactModel).where(*conditions)
 
-    # Применяем курсор если указан
-    if cursor:
-        try:
-            # Используем составной ключ (timestamp, id_uuid) для точного позиционирования
-            timestamp, cursor_id_str = decode_cursor(cursor)
-            id_uuid = UUID(cursor_id_str)
-
-            query = query.where(
-                (FactModel.created_at < timestamp) | ((FactModel.created_at == timestamp) & (FactModel.id < id_uuid))
-            )
-            logger.debug(f"Применён курсор: timestamp={timestamp}, id={id_uuid}")
-        except ValueError as e:
-            logger.warning(f"Невалидный курсор от пользователя {current_user.id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid cursor format: {str(e)}"
-            ) from None
-
-    # Используем составную сортировку для стабильности результатов
-    query = query.order_by(FactModel.created_at.desc(), FactModel.id.desc())
-
-    # Берём на один элемент больше для проверки has_next
-    result = await db.scalars(query.limit(limit + 1))
-    facts = list(result.all())
-
-    # Проверяем наличие следующей страницы
-    has_next = calculate_has_more(facts, limit)
-
-    # Убираем лишний элемент если он есть
-    facts = trim_excess_item(facts, limit, reverse=False)
-
-    # Формируем курсор для следующей страницы
-    next_cursor = None
-
-    if facts and has_next:
-        last_fact = facts[-1]
-        next_cursor = encode_cursor(last_fact.created_at, last_fact.id)
-        logger.debug(f"Сформирован курсор для следующей страницы на основе факта {last_fact.id}")
+    try:
+        facts, next_cursor, has_next = await paginate_with_cursor(
+            db=db,
+            query=query,
+            cursor=cursor,
+            limit=limit,
+            model=FactModel,
+        )
+    except InvalidCursorError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     logger.info(f"Возвращено {len(facts)} фактов, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}")
 

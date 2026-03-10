@@ -8,26 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v2 import message
 from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
+from app.exceptions import InvalidCursorError
 from app.models import Conversation as ConversationModel
 from app.models import User as UserModel
 from app.schemas.conversations import ConversationCreate, ConversationUpdate
 from app.schemas.conversations import ConversationResponse as ConversationSchemas
 from app.schemas.pagination import PaginatedResponse
-from app.utils.utils_for_pagination import (
-    calculate_has_more,
-    decode_cursor,
-    encode_cursor,
-    trim_excess_item,
-    validate_pagination_limit,
+from app.utils.pagination import (
+    DEFAULT_PER_PAGE,
+    MINIMUM_PER_PAGE,
+    paginate_with_cursor,
 )
 
 
 router = APIRouter(prefix="/conversations")
 
 TAGS = "Conversations_V2"
-DEFAULT_PER_PAGE = 20
-MINIMUM_PER_PAGE = 1
-MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
@@ -54,50 +50,19 @@ async def get_conversations(
         f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
     )
 
-    # Валидируем limit
-    limit = validate_pagination_limit(limit, default=DEFAULT_PER_PAGE, maximum=MAXIMUM_PER_PAGE)
-
     # Формируем базовый запрос
     query = select(ConversationModel).where(ConversationModel.user_id == current_user.id)
 
-    # Применяем курсор если указан
-    if cursor:
-        try:
-            # Используем составной ключ (timestamp, id_uuid) для точного позиционирования
-            timestamp, cursor_id_str = decode_cursor(cursor)
-            id_uuid = UUID(cursor_id_str)
-
-            query = query.where(
-                (ConversationModel.created_at < timestamp)
-                | ((ConversationModel.created_at == timestamp) & (ConversationModel.id < id_uuid))
-            )
-            logger.debug(f"Применён курсор: timestamp={timestamp}, id={id_uuid}")
-        except ValueError as e:
-            logger.warning(f"Невалидный курсор от пользователя {current_user.id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid cursor format: {str(e)}"
-            ) from None
-
-    # Используем составную сортировку для стабильности результатов
-    query = query.order_by(ConversationModel.created_at.desc(), ConversationModel.id.desc())
-
-    # Берём на один элемент больше для проверки has_next
-    result = await db.scalars(query.limit(limit + 1))
-    conversations = list(result.all())
-
-    # Проверяем наличие следующей страницы
-    has_next = calculate_has_more(conversations, limit)
-
-    # Убираем лишний элемент если он есть
-    conversations = trim_excess_item(conversations, limit, reverse=False)
-
-    # Формируем курсор для следующей страницы
-    next_cursor = None
-
-    if conversations and has_next:
-        last_conv = conversations[-1]
-        next_cursor = encode_cursor(last_conv.created_at, last_conv.id)
-        logger.debug(f"Сформирован курсор для следующей страницы на основе беседы {last_conv.id}")
+    try:
+        conversations, next_cursor, has_next = await paginate_with_cursor(
+            db=db,
+            query=query,
+            cursor=cursor,
+            limit=limit,
+            model=ConversationModel,
+        )
+    except InvalidCursorError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     logger.info(
         f"Возвращено {len(conversations)} бесед, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}"

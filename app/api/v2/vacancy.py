@@ -18,7 +18,10 @@ from app.schemas.vacancies import VacancyPaginationResponse, VacancyResponse
 from app.services.headhunter.find_vacancies import vacancy_create
 from app.services.headhunter.headhunter_client import get_hh_client
 from app.utils.db_optimizer import optimized_query
-from app.utils.utils_for_pagination import (
+from app.utils.pagination import (
+    DEFAULT_PER_PAGE,
+    MAXIMUM_PER_PAGE,
+    MINIMUM_PER_PAGE,
     calculate_has_more,
     decode_cursor,
     encode_cursor,
@@ -30,9 +33,6 @@ from app.utils.utils_for_pagination import (
 router = APIRouter(prefix="/vacancies")
 
 TAGS = "Vacancies_v2"
-DEFAULT_PER_PAGE = 20
-MINIMUM_PER_PAGE = 1
-MAXIMUM_PER_PAGE = 100
 
 
 @router.get(

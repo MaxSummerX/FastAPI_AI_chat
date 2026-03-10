@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
+from app.exceptions import InvalidCursorError
 from app.models.prompts import Prompts as PromptModel
 from app.models.users import User as UserModel
 from app.schemas.pagination import PaginatedResponse
@@ -15,20 +16,14 @@ from app.schemas.prompts import (
     PromptResponse,
     PromptUpdate,
 )
-from app.utils.utils_for_pagination import (
-    calculate_has_more,
-    decode_cursor,
-    encode_cursor,
-    trim_excess_item,
-    validate_pagination_limit,
+from app.utils.pagination import (
+    DEFAULT_PER_PAGE,
+    MINIMUM_PER_PAGE,
+    paginate_with_cursor,
 )
 
 
 router = APIRouter(prefix="/prompts", tags=["Prompts_v2"])
-
-DEFAULT_PER_PAGE = 20
-MINIMUM_PER_PAGE = 1
-MAXIMUM_PER_PAGE = 100
 
 
 @router.get(
@@ -55,9 +50,6 @@ async def get_user_prompts(
         f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
     )
 
-    # Валидируем limit
-    limit = validate_pagination_limit(limit, default=DEFAULT_PER_PAGE, maximum=MAXIMUM_PER_PAGE)
-
     # Базовое условие - промпты текущего пользователя
     conditions = [PromptModel.user_id == current_user.id]
 
@@ -68,44 +60,16 @@ async def get_user_prompts(
     # Формируем базовый запрос
     query = select(PromptModel).where(*conditions)
 
-    # Применяем курсор если указан
-    if cursor:
-        try:
-            # Используем составной ключ (timestamp, id_uuid) для точного позиционирования
-            timestamp, cursor_id_str = decode_cursor(cursor)
-            id_uuid = UUID(cursor_id_str)
-
-            query = query.where(
-                (PromptModel.created_at < timestamp)
-                | ((PromptModel.created_at == timestamp) & (PromptModel.id < id_uuid))
-            )
-            logger.debug(f"Применён курсор: timestamp={timestamp}, id={id_uuid}")
-        except ValueError as e:
-            logger.warning(f"Невалидный курсор от пользователя {current_user.id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid cursor format: {str(e)}"
-            ) from None
-
-    # Используем составную сортировку для стабильности результатов
-    query = query.order_by(PromptModel.created_at.desc(), PromptModel.id.desc())
-
-    # Берём на один элемент больше для проверки has_next
-    result = await db.scalars(query.limit(limit + 1))
-    prompts = list(result.all())
-
-    # Проверяем наличие следующей страницы
-    has_next = calculate_has_more(prompts, limit)
-
-    # Убираем лишний элемент если он есть
-    prompts = trim_excess_item(prompts, limit, reverse=False)
-
-    # Формируем курсор для следующей страницы
-    next_cursor = None
-
-    if prompts and has_next:
-        last_prompt = prompts[-1]
-        next_cursor = encode_cursor(last_prompt.created_at, last_prompt.id)
-        logger.debug(f"Сформирован курсор для следующей страницы на основе промпта {last_prompt.id}")
+    try:
+        prompts, next_cursor, has_next = await paginate_with_cursor(
+            db=db,
+            query=query,
+            cursor=cursor,
+            limit=limit,
+            model=PromptModel,
+        )
+    except InvalidCursorError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     logger.info(
         f"Возвращено {len(prompts)} промптов, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}"
