@@ -214,8 +214,10 @@ async def test_stream_v2_message_empty_content(
         f"/api/v2/conversations/{test_conversation.id}/messages/stream_v2",
         headers=auth_headers,
         json={
-            "role": "user",
-            "content": "",  # Пустой
+            "message": {
+                "role": "user",
+                "content": "",  # Пустой
+            }
         },
     )
     # Pydantic валидация возвращает 422 для пустого контента
@@ -228,7 +230,7 @@ async def test_stream_v2_invalid_conversation_id(client: AsyncClient, auth_heade
     response = await client.post(
         "/api/v2/conversations/00000000-0000-0000-0000-000000000000/messages/stream_v2",
         headers=auth_headers,
-        json={"role": "user", "content": "Test"},
+        json={"message": {"role": "user", "content": "Test"}},
     )
     assert response.status_code == 404
 

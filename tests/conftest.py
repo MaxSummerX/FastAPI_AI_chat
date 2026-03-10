@@ -5,6 +5,9 @@
 """
 
 import asyncio
+
+# Тестовая БД (SQLite по умолчанию, можно переопределить через TEST_DATABASE_URL)
+import os
 import uuid
 from collections.abc import AsyncGenerator, Generator
 from datetime import timedelta
@@ -28,8 +31,17 @@ from app.models.users import User as UserModel
 from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 
 
-# Тестовая БД (используем SQLite для скорости)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "sqlite+aiosqlite:///:memory:",
+)
+
+# Показываем какая БД используется
+if "@" in TEST_DATABASE_URL:
+    db_name = TEST_DATABASE_URL.split("@")[1].split("/")[1]
+    print(f"🧪 Test Database: PostgreSQL ({db_name})")
+else:
+    print("🧪 Test Database: SQLite (in-memory)")
 
 
 @pytest.fixture(scope="session")
@@ -466,8 +478,8 @@ def mock_background_tasks() -> Generator[None]:
 
     # Патчим функцию конвертации, которая вызывается в background task
     with (
-        patch("app.tools.upload.upload_conversations.convert"),
-        patch("app.tools.upload.upload_conversations.convert_gtp"),
+        patch("app.services.upload.upload_conversations.convert"),
+        patch("app.services.upload.upload_conversations.convert_gtp"),
     ):
         yield
 
@@ -492,8 +504,8 @@ async def client_with_mocked_background(db_session: AsyncSession) -> AsyncGenera
 
     # Создаём клиент с ASGI транспортом и замоканными background функциями
     with (
-        patch("app.tools.upload.upload_conversations.convert"),
-        patch("app.tools.upload.upload_conversations.convert_gtp"),
+        patch("app.services.upload.upload_conversations.convert"),
+        patch("app.services.upload.upload_conversations.convert_gtp"),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -609,7 +621,7 @@ async def client_with_mocked_llm(db_session: AsyncSession) -> AsyncGenerator[Asy
         )
 
     # Патчим функцию анализа в модуле, где она используется (vacancy_analysis.py)
-    with patch("app.tools.ai_research.analyze_vacancy_from_db", side_effect=mock_analyze):
+    with patch("app.services.ai_research.analyze_vacancy_from_db", side_effect=mock_analyze):
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
