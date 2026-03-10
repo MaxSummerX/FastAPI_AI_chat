@@ -49,6 +49,12 @@ class UserNotFoundError(NotFoundError):
     pass
 
 
+class DocumentNotFoundError(Exception):
+    """Исключение, возникающее когда документ не найден или недоступен пользователю."""
+
+    pass
+
+
 # =============================================================================
 # Исключения для ошибок валидации (422)
 # =============================================================================
@@ -79,5 +85,11 @@ class LLMError(BaseAppException):
 
 class LLMGenerationError(LLMError):
     """Ошибка генерации ответа LLM."""
+
+    pass
+
+
+class InvalidCursorError(ValueError):
+    """Невалидный формат курсора"""
 
     pass

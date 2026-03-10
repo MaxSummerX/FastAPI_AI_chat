@@ -1,7 +1,9 @@
 """Исключения приложения."""
 
 from app.exceptions.exceptions import (
+    DocumentNotFoundError,
     InvalidAnalysisTypeError,
+    InvalidCursorError,
     LLMError,
     LLMGenerationError,
     NotFoundError,
@@ -21,4 +23,6 @@ __all__ = [
     "InvalidAnalysisTypeError",
     "LLMError",
     "LLMGenerationError",
+    "DocumentNotFoundError",
+    "InvalidCursorError",
 ]
