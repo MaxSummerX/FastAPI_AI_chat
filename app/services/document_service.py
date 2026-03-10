@@ -18,7 +18,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enum.documents import DocumentCategory
-from app.models import User as UserModel
+from app.exceptions import DocumentNotFoundError
 from app.models.documents import Document as DocumentModel
 from app.schemas.documents import (
     DocumentCreate,
@@ -29,231 +29,223 @@ from app.schemas.documents import (
 )
 
 
-class DocumentNotFoundError(Exception):
-    """
-    Исключение, возникающее когда документ не найден или недоступен пользователю.
-    """
+class DocumentService:
+    def __init__(self, db: AsyncSession) -> None:
+        """
+        Конструктор получает зависимости через Dependency Injection.
 
-    pass
+        Args:
+            db: Сессия БД (инжектится FastAPI)
+        """
+        self.db = db
 
+    async def get_user_document(self, document_id: UUID, current_user_id: UUID) -> DocumentResponse:
+        """
+        Получить документ пользователя по ID.
 
-async def get_user_document(document_id: UUID, current_user: UserModel, db: AsyncSession) -> DocumentResponse:
-    """
-    Получить документ пользователя по ID.
+        Выполняет поиск документа с проверкой прав доступа и статуса архива.
+        Возвращает только активные (не архивированные) документы текущего пользователя.
 
-    Выполняет поиск документа с проверкой прав доступа и статуса архива.
-    Возвращает только активные (не архивированные) документы текущего пользователя.
+        Args:
+            document_id: UUID искомого документа
+            current_user_id: Текущий id пользователя
 
-    Args:
-        document_id: UUID искомого документа
-        current_user: Текущий аутентифицированный пользователь
-        db: Асинхронная сессия базы данных
+        Returns:
+            DocumentResponse: Данные найденного документа
 
-    Returns:
-        DocumentResponse: Данные найденного документа
-
-    Raises:
-        DocumentNotFoundError: Если документ не найден, принадлежит другому
-            пользователю или архивирован
-    """
-    result = await db.scalars(
-        select(DocumentModel).where(
-            DocumentModel.id == document_id,
-            DocumentModel.user_id == current_user.id,
-            DocumentModel.is_archived.is_(False),
+        Raises:
+            DocumentNotFoundError: Если документ не найден, принадлежит другому
+                пользователю или архивирован
+        """
+        result = await self.db.scalars(
+            select(DocumentModel).where(
+                DocumentModel.id == document_id,
+                DocumentModel.user_id == current_user_id,
+                DocumentModel.is_archived.is_(False),
+            )
         )
-    )
 
-    document = result.first()
+        document = result.first()
 
-    if not document:
-        raise DocumentNotFoundError(f"Document {document_id} not found")
-
-    return DocumentResponse.model_validate(document)
-
-
-async def create_user_document(
-    document_data: DocumentCreate, current_user: UserModel, db: AsyncSession
-) -> DocumentResponse:
-    """
-    Создать новый документ для пользователя.
-
-    Создаёт документ с указанными параметрами и сохраняет его в базу данных.
-    Категория документа по умолчанию устанавливается в NOTE.
-
-    Args:
-        document_data: Данные для создания документа (заголовок, содержимое,
-            категория, теги, метаданные)
-        current_user: Текущий аутентифицированный пользователь - владелец документа
-        db: Асинхронная сессия базы данных
-
-    Returns:
-        DocumentResponse: Данные созданного документа с присвоенным UUID
-    """
-    document = DocumentModel(
-        user_id=current_user.id,
-        title=document_data.title,
-        content=document_data.content,
-        metadata_=document_data.metadata_,
-        category=document_data.category,
-        tags=document_data.tags,
-    )
-
-    db.add(document)
-    await db.commit()
-    await db.refresh(document)
-
-    logger.info(f"Документ {document.id} успешно создан")
-    return DocumentResponse.model_validate(document)
-
-
-async def update_user_document(
-    document_id: UUID, document_data: DocumentUpdate, current_user: UserModel, db: AsyncSession
-) -> DocumentResponse:
-    """
-    Обновить данные существующего документа.
-
-    Выполняет частичное обновление документа - обновляются только переданные поля.
-    Проверяет право доступа перед изменением. Если данные для обновления не переданы,
-    возвращает текущее состояние документа.
-
-    Args:
-        document_id: UUID обновляемого документа
-        document_data: Данные для обновления (частичные - только изменяемые поля)
-        current_user: Текущий аутентифицированный пользователь
-        db: Асинхронная сессия базы данных
-
-    Returns:
-        DocumentResponse: Обновлённые данные документа
-
-    Raises:
-        DocumentNotFoundError: Если документ не найден или принадлежит другому пользователю
-    """
-    update_data = document_data.model_dump(exclude_unset=True, by_alias=False)
-
-    if not update_data:
-        document = await db.get(DocumentModel, document_id)
-        if not document or document.user_id != current_user.id:
+        if not document:
             raise DocumentNotFoundError(f"Document {document_id} not found")
+
         return DocumentResponse.model_validate(document)
 
-    result = await db.execute(
-        update(DocumentModel)
-        .where(
-            DocumentModel.id == document_id,
-            DocumentModel.user_id == current_user.id,
-            DocumentModel.is_archived.is_(False),
+    async def create_user_document(self, document_data: DocumentCreate, current_user_id: UUID) -> DocumentResponse:
+        """
+        Создать новый документ для пользователя.
+
+        Создаёт документ с указанными параметрами и сохраняет его в базу данных.
+        Категория документа по умолчанию устанавливается в NOTE.
+
+        Args:
+            document_data: Данные для создания документа (заголовок, содержимое,
+                категория, теги, метаданные)
+            current_user_id: Текущий id пользователя
+
+        Returns:
+            DocumentResponse: Данные созданного документа с присвоенным UUID
+        """
+        document = DocumentModel(
+            user_id=current_user_id,
+            title=document_data.title,
+            content=document_data.content,
+            metadata_=document_data.metadata_,
+            category=document_data.category,
+            tags=document_data.tags,
         )
-        .values(**update_data)
-        .returning(DocumentModel)
-    )
 
-    document = result.scalar_one_or_none()
+        self.db.add(document)
+        await self.db.commit()
+        await self.db.refresh(document)
 
-    if not document:
-        raise DocumentNotFoundError(f"Document {document_id} not found")
+        logger.info(f"Документ {document.id} успешно создан")
+        return DocumentResponse.model_validate(document)
 
-    await db.commit()
+    async def update_user_document(
+        self, document_id: UUID, document_data: DocumentUpdate, current_user_id: UUID
+    ) -> DocumentResponse:
+        """
+        Обновить данные существующего документа.
 
-    logger.info(f"Документ пользователя успешно обновлён: {document_id}")
+        Выполняет частичное обновление документа - обновляются только переданные поля.
+        Проверяет право доступа перед изменением. Если данные для обновления не переданы,
+        возвращает текущее состояние документа.
 
-    return DocumentResponse.model_validate(document)
+        Args:
+            document_id: UUID обновляемого документа
+            document_data: Данные для обновления (частичные - только изменяемые поля)
+            current_user_id: Текущий id пользователя
 
+        Returns:
+            DocumentResponse: Обновлённые данные документа
 
-async def delete_user_document(document_id: UUID, current_user: UserModel, db: AsyncSession) -> None:
-    """
-    Удалить документ (мягкое удаление).
+        Raises:
+            DocumentNotFoundError: Если документ не найден или принадлежит другому пользователю
+        """
+        update_data = document_data.model_dump(exclude_unset=True, by_alias=False)
 
-    Документ помечается как архивированный (is_archived=True) и исключается
-    из основного списка, но остаётся в базе данных. Мягкое удаление позволяет
-    восстановить документ при необходимости.
+        if not update_data:
+            document = await self.db.get(DocumentModel, document_id)
+            if not document or document.user_id != current_user_id:
+                raise DocumentNotFoundError(f"Document {document_id} not found")
+            return DocumentResponse.model_validate(document)
 
-    Args:
-        document_id: UUID удаляемого документа
-        current_user: Текущий аутентифицированный пользователь
-        db: Асинхронная сессия базы данных
-
-    Returns:
-        None
-
-    Raises:
-        DocumentNotFoundError: Если документ не найден, уже архивирован
-            или принадлежит другому пользователю
-
-    Note:
-        Функция выполняет мягкое удаление - документ физически остаётся
-        в базе данных, но помечается как is_archived=True
-    """
-    result = await db.scalars(
-        select(DocumentModel).where(
-            DocumentModel.id == document_id,
-            DocumentModel.user_id == current_user.id,
-            DocumentModel.is_archived.is_(False),
+        result = await self.db.execute(
+            update(DocumentModel)
+            .where(
+                DocumentModel.id == document_id,
+                DocumentModel.user_id == current_user_id,
+                DocumentModel.is_archived.is_(False),
+            )
+            .values(**update_data)
+            .returning(DocumentModel)
         )
-    )
 
-    document = result.first()
+        document = result.scalar_one_or_none()
 
-    if not document:
-        raise DocumentNotFoundError(f"Document {document_id} not found")
+        if not document:
+            raise DocumentNotFoundError(f"Document {document_id} not found")
 
-    document.is_archived = True
+        await self.db.commit()
 
-    await db.commit()
+        logger.info(f"Документ пользователя успешно обновлён: {document_id}")
 
-    logger.info(f"Документ {document_id} помечен как архивированный")
+        return DocumentResponse.model_validate(document)
 
+    async def delete_user_document(self, document_id: UUID, current_user_id: UUID) -> None:
+        """
+        Удалить документ (мягкое удаление).
 
-async def search_user_documents(
-    query: str,
-    limit: int,
-    offset: int,
-    category: DocumentCategory | None,
-    current_user_id: UUID,
-    db: AsyncSession,
-) -> DocumentSearchResponse:
-    """
-    Поиск документов пользователя по тексту (PostgreSQL full-text search).
+        Документ помечается как архивированный (is_archived=True) и исключается
+        из основного списка, но остаётся в базе данных. Мягкое удаление позволяет
+        восстановить документ при необходимости.
 
-    Выполняет полнотекстовый поиск по содержимому документа.
-    Поддерживает русский и английский языки одновременно.
-    Результаты сортируются по релевантности (ts_rank).
+        Args:
+            document_id: UUID удаляемого документа
+            current_user_id: Текущий id пользователя
 
-    Args:
-        query: Поисковый запрос
-        limit: Максимальное количество результатов
-        offset: Смещение для пагинации
-        category: Фильтр по категории документа (опционально)
-        current_user_id: UUID аутентифицированного пользователя
-        db: Асинхронная сессия базы данных
+        Returns:
+            None
 
-    Returns:
-        DocumentSearchResponse: Результаты поиска с метаданными запроса
-    """
-    ts_query = func.plainto_tsquery("russian", query).op("||")(func.plainto_tsquery("english", query))
+        Raises:
+            DocumentNotFoundError: Если документ не найден, уже архивирован
+                или принадлежит другому пользователю
 
-    conditions = [
-        DocumentModel.user_id == current_user_id,
-        DocumentModel.is_archived.is_(False),
-        DocumentModel.search_vector.op("@@")(ts_query),
-    ]
+        Note:
+            Функция выполняет мягкое удаление - документ физически остаётся
+            в базе данных, но помечается как is_archived=True
+        """
+        result = await self.db.scalars(
+            select(DocumentModel).where(
+                DocumentModel.id == document_id,
+                DocumentModel.user_id == current_user_id,
+                DocumentModel.is_archived.is_(False),
+            )
+        )
 
-    if category:
-        conditions.append(DocumentModel.category == category)
+        document = result.first()
 
-    ts_rank = func.ts_rank(DocumentModel.search_vector, ts_query).label("relevance_score")
+        if not document:
+            raise DocumentNotFoundError(f"Document {document_id} not found")
 
-    result = await db.execute(
-        select(DocumentModel, ts_rank).where(*conditions).order_by(ts_rank.desc()).limit(limit).offset(offset)
-    )
+        document.is_archived = True
 
-    documents = [
-        DocumentSearchResult.model_validate({**doc.__dict__, "relevance_score": score}) for doc, score in result.all()
-    ]
+        await self.db.commit()
 
-    return DocumentSearchResponse(
-        documents=documents,
-        query=query,
-        limit=limit,
-        offset=offset,
-    )
+        logger.info(f"Документ {document_id} помечен как архивированный")
+
+    async def search_user_documents(
+        self,
+        query: str,
+        limit: int,
+        offset: int,
+        category: DocumentCategory | None,
+        current_user_id: UUID,
+    ) -> DocumentSearchResponse:
+        """
+        Поиск документов пользователя по тексту (PostgreSQL full-text search).
+
+        Выполняет полнотекстовый поиск по содержимому документа.
+        Поддерживает русский и английский языки одновременно.
+        Результаты сортируются по релевантности (ts_rank).
+
+        Args:
+            query: Поисковый запрос
+            limit: Максимальное количество результатов
+            offset: Смещение для пагинации
+            category: Фильтр по категории документа (опционально)
+            current_user_id: UUID аутентифицированного пользователя
+
+        Returns:
+            DocumentSearchResponse: Результаты поиска с метаданными запроса
+        """
+        ts_query = func.plainto_tsquery("russian", query).op("||")(func.plainto_tsquery("english", query))
+
+        conditions = [
+            DocumentModel.user_id == current_user_id,
+            DocumentModel.is_archived.is_(False),
+            DocumentModel.search_vector.op("@@")(ts_query),
+        ]
+
+        if category:
+            conditions.append(DocumentModel.category == category)
+
+        ts_rank = func.ts_rank(DocumentModel.search_vector, ts_query).label("relevance_score")
+
+        result = await self.db.execute(
+            select(DocumentModel, ts_rank).where(*conditions).order_by(ts_rank.desc()).limit(limit).offset(offset)
+        )
+
+        documents = [
+            DocumentSearchResult.model_validate({**doc.__dict__, "relevance_score": score})
+            for doc, score in result.all()
+        ]
+
+        return DocumentSearchResponse(
+            documents=documents,
+            query=query,
+            limit=limit,
+            offset=offset,
+        )

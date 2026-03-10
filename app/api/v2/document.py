@@ -20,34 +20,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
+from app.depends.service_depends import get_document_service
 from app.enum.documents import DocumentCategory
+from app.exceptions import DocumentNotFoundError, InvalidCursorError
 from app.models import User as UserModel
 from app.models.documents import Document as DocumentModel
 from app.schemas.documents import BaseResponse, DocumentCreate, DocumentResponse, DocumentSearchResponse, DocumentUpdate
 from app.schemas.pagination import PaginatedResponse
-from app.services.document_service import (
-    DocumentNotFoundError,
-    create_user_document,
-    delete_user_document,
-    get_user_document,
-    search_user_documents,
-    update_user_document,
-)
-from app.utils.utils_for_pagination import (
-    calculate_has_more,
-    decode_cursor,
-    encode_cursor,
-    trim_excess_item,
-    validate_pagination_limit,
-)
+from app.services.document_service import DocumentService
+from app.utils.pagination import DEFAULT_OFFSET, DEFAULT_PER_PAGE, MINIMUM_PER_PAGE, paginate_with_cursor
 
 
 router = APIRouter(prefix="/documents", tags=["Documents_v2"])
-
-DEFAULT_PER_PAGE = 20
-MINIMUM_PER_PAGE = 1
-MAXIMUM_PER_PAGE = 100
-DEFAULT_OFFSET = 0
 
 
 @router.get(
@@ -89,11 +73,7 @@ async def get_all_documents(
         f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
     )
 
-    # Валидируем limit
-    limit = validate_pagination_limit(limit, default=DEFAULT_PER_PAGE, maximum=MAXIMUM_PER_PAGE)
-
     # Формируем базовый запрос
-
     conditions = [DocumentModel.user_id == current_user.id]
 
     if category:
@@ -104,44 +84,16 @@ async def get_all_documents(
 
     query = select(DocumentModel).where(*conditions)
 
-    # Применяем курсор если указан
-    if cursor:
-        try:
-            # Используем составной ключ (timestamp, id_uuid) для точного позиционирования
-            timestamp, cursor_id_str = decode_cursor(cursor)
-            id_uuid = UUID(cursor_id_str)
-
-            query = query.where(
-                (DocumentModel.created_at < timestamp)
-                | ((DocumentModel.created_at == timestamp) & (DocumentModel.id < id_uuid))
-            )
-            logger.debug(f"Применён курсор: timestamp={timestamp}, id={id_uuid}")
-        except ValueError as e:
-            logger.warning(f"Невалидный курсор от пользователя {current_user.id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid cursor format: {str(e)}"
-            ) from None
-
-    # Используем составную сортировку для стабильности результатов
-    query = query.order_by(DocumentModel.created_at.desc(), DocumentModel.id.desc())
-
-    # Берём на один элемент больше для проверки has_next
-    result = await db.scalars(query.limit(limit + 1))
-    documents = list(result.all())
-
-    # Проверяем наличие следующей страницы
-    has_next = calculate_has_more(documents, limit)
-
-    # Убираем лишний элемент если он есть
-    documents = trim_excess_item(documents, limit, reverse=False)
-
-    # Формируем курсор для следующей страницы
-    next_cursor = None
-
-    if documents and has_next:
-        last_document = documents[-1]
-        next_cursor = encode_cursor(last_document.created_at, last_document.id)
-        logger.debug(f"Сформирован курсор для следующей страницы на основе документа {last_document.id}")
+    try:
+        documents, next_cursor, has_next = await paginate_with_cursor(
+            db=db,
+            query=query,
+            cursor=cursor,
+            limit=limit,
+            model=DocumentModel,
+        )
+    except InvalidCursorError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
     logger.info(
         f"Возвращено {len(documents)} документов, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}"
@@ -163,7 +115,7 @@ async def get_document_with_query(
     offset: int = Query(default=DEFAULT_OFFSET, ge=0, description="Смещение для пагинации"),
     category: DocumentCategory | None = None,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    service: DocumentService = Depends(get_document_service),
 ) -> DocumentSearchResponse:
     """
     Полнотекстовый поиск документов текущего пользователя.
@@ -177,20 +129,20 @@ async def get_document_with_query(
         offset: Смещение для пагинации
         category: Фильтр по категории документа (опционально)
         current_user: Текущий аутентифицированный пользователь
-        db: Сессия базы данных
+        service:
 
     Returns:
         DocumentSearchResponse: Результаты поиска с оценками релевантности
     """
     logger.info(f"Поиск документов по запросу: '{query}' пользователя {current_user.id}")
-    return await search_user_documents(query, limit, offset, category, current_user.id, db)
+    return await service.search_user_documents(query, limit, offset, category, current_user.id)
 
 
 @router.get("/{document_id}", status_code=status.HTTP_200_OK, summary="Получить документ по ID")
 async def get_document(
     document_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
     Получить документ по ID.
@@ -198,7 +150,7 @@ async def get_document(
     Args:
         document_id: UUID документа
         current_user: Текущий аутентифицированный пользователь
-        db: Сессия базы данных
+        service:
 
     Returns:
         DocumentResponse: Данные запрошенного документа
@@ -209,7 +161,7 @@ async def get_document(
     logger.info(f"Запрос на получение документа {document_id} пользователя {current_user.id}")
 
     try:
-        return await get_user_document(document_id, current_user, db)
+        return await service.get_user_document(document_id, current_user.id)
 
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
@@ -219,7 +171,7 @@ async def get_document(
 async def create_document(
     document_data: DocumentCreate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
     Создать новый документ пользователя.
@@ -227,7 +179,7 @@ async def create_document(
     Args:
         document_data: Данные для создания документа
         current_user: Текущий аутентифицированный пользователь
-        db: Сессия базы данных
+        service:
 
     Returns:
         DocumentResponse: Данные созданного документа
@@ -237,7 +189,7 @@ async def create_document(
     """
     logger.info(f"Запрос на создание документа пользователем {current_user.id}")
 
-    return await create_user_document(document_data, current_user, db)
+    return await service.create_user_document(document_data, current_user.id)
 
 
 @router.patch("/{document_id}", status_code=status.HTTP_202_ACCEPTED, summary="Обновить документ")
@@ -245,7 +197,7 @@ async def update_document(
     document_id: UUID,
     document_data: DocumentUpdate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
     Обновить документ пользователя
@@ -254,7 +206,7 @@ async def update_document(
         document_id: UUID документа для обновления
         document_data: Новые данные документа
         current_user: Текущий аутентифицированный пользователь
-        db: Сессия базы данных
+        service:
 
     Returns:
         DocumentResponse: Данные обновлённого документа
@@ -265,7 +217,7 @@ async def update_document(
     logger.info(f"Запрос на обновление документа {document_id} пользователя {current_user.id}")
 
     try:
-        return await update_user_document(document_id, document_data, current_user, db)
+        return await service.update_user_document(document_id, document_data, current_user.id)
 
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
@@ -275,7 +227,7 @@ async def update_document(
 async def delete_document(
     document_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    service: DocumentService = Depends(get_document_service),
 ) -> None:
     """
     Удалить документ (мягкое удаление).
@@ -286,7 +238,7 @@ async def delete_document(
     Args:
         document_id: UUID документа для удаления
         current_user: Текущий аутентифицированный пользователь
-        db: Сессия базы данных
+        service:
 
     Returns:
         None (HTTP 204 No Content)
@@ -297,7 +249,7 @@ async def delete_document(
     logger.info(f"Запрос на удаление документа {document_id} пользователя {current_user.id}")
 
     try:
-        await delete_user_document(document_id, current_user, db)
+        await service.delete_user_document(document_id, current_user.id)
 
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None

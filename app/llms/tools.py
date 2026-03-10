@@ -229,7 +229,7 @@ def make_search_documents_tool(user_id: UUID) -> Callable[..., Awaitable[str]]:
     ) -> str:
         """Поиск по документам пользователя."""
         from app.enum.documents import DocumentCategory
-        from app.services.document_service import search_user_documents
+        from app.services.document_service import DocumentService
 
         category_enum = None
         if category:
@@ -239,13 +239,13 @@ def make_search_documents_tool(user_id: UUID) -> Callable[..., Awaitable[str]]:
                 pass
 
         async with async_session_maker() as session:
-            response = await search_user_documents(
+            service = DocumentService(session)
+            response = await service.search_user_documents(
                 query=query,
                 limit=limit,
                 offset=offset,
                 category=category_enum,
                 current_user_id=user_id,
-                db=session,
             )
 
         if not response.documents:
