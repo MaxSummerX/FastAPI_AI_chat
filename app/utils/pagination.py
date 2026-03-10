@@ -4,10 +4,16 @@ from datetime import datetime
 from uuid import UUID
 
 from loguru import logger
+from sqlalchemy import Select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.exceptions import InvalidCursorError
 
 
 DEFAULT_PER_PAGE = 20
+MINIMUM_PER_PAGE = 1
 MAXIMUM_PER_PAGE = 100
+DEFAULT_OFFSET = 0
 
 
 def encode_cursor(timestamp: datetime, id_uuid: UUID) -> str:
@@ -155,3 +161,61 @@ def trim_excess_item(items: list, limit: int, reverse: bool = False) -> list:
         result = list(reversed(result))
 
     return result
+
+
+async def paginate_with_cursor[T](
+    db: AsyncSession,
+    query: Select,
+    cursor: str | None,
+    limit: int,
+    model: type[T],
+    timestamp_field: str = "created_at",
+) -> tuple[list[T], str | None, bool]:
+    """
+    Универсальная курсорная пагинация для моделей с timestamp полем + id.
+
+    Args:
+        db: Сессия БД
+        query: Базовый запрос с фильтрами (без order_by/limit)
+        cursor: Курсор из предыдущего ответа
+        limit: Размер страницы
+        model: Модель SQLAlchemy (должна иметь timestamp_field и id)
+        timestamp_field: Имя поля с timestamp (по умолчанию "created_at",
+                        для MessageModel использовать "timestamp")
+
+    Returns:
+        (items, next_cursor, has_next)
+    """
+    limit = validate_pagination_limit(limit)
+
+    # Получаем атрибут timestamp из модели динамически
+    timestamp_attr = getattr(model, timestamp_field)
+
+    # 1. Применяем курсор (если есть)
+    if cursor:
+        try:
+            timestamp, cursor_id_str = decode_cursor(cursor)
+            cursor_uuid = UUID(cursor_id_str)
+            query = query.where(
+                (timestamp_attr < timestamp) | ((timestamp_attr == timestamp) & (model.id < cursor_uuid))  # type: ignore[attr-defined]
+            )
+        except (ValueError, KeyError) as e:
+            raise InvalidCursorError(f"Invalid cursor format: {e}") from e
+
+    # 2. Сортировка
+    query = query.order_by(timestamp_attr.desc(), model.id.desc())  # type: ignore[attr-defined]
+
+    result = await db.scalars(query.limit(limit + 1))
+    items = list(result.all())
+
+    # 4. Обрезка и next_cursor
+    has_next = calculate_has_more(items, limit)
+    items = trim_excess_item(items, limit, reverse=False)
+
+    next_cursor = None
+    if items and has_next:
+        last_item = items[-1]
+        last_timestamp = getattr(last_item, timestamp_field)
+        next_cursor = encode_cursor(last_timestamp, last_item.id)
+
+    return items, next_cursor, has_next
