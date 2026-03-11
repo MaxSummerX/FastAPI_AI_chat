@@ -3,13 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from httpx import AsyncClient
 from loguru import logger
-from sqlalchemy import select, update
+from sqlalchemy import asc, desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v2 import vacancy_analysis
 from app.auth.dependencies import get_current_user
 from app.depends.db_depends import get_async_postgres_db
-from app.enum.experience import Experience
+from app.enum.experience import Experience, OrderField
 from app.models import Vacancy as VacancyModel
 from app.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.models.users import User as UserModel
@@ -56,6 +56,8 @@ async def get_all_vacancies(
     cursor: str | None = Query(
         default=None, description="Курсор для следующей страницы. Берётся из предыдущего ответа"
     ),
+    order_by: OrderField | None = Query(default=None, description="Поле для сортировки"),
+    order_desc: bool = Query(default=False, description="Сортировка по убыванию"),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_postgres_db),
 ) -> PaginatedResponse[VacancyPaginationResponse]:
@@ -82,6 +84,10 @@ async def get_all_vacancies(
 
     if favorite is not None:
         query = query.where(UserVacanciesModel.is_favorite == favorite)
+
+    if order_by:
+        direction = desc if order_desc else asc
+        query = query.order_by(direction(getattr(VacancyModel, order_by.value)))
 
     # Применяем курсор если указан
     if cursor:

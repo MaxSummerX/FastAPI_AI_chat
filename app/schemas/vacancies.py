@@ -53,6 +53,7 @@ class VacancyPaginationResponse(VacancyBase):
     query_request: str = Field(description="Поисковый запрос, по которому была найдена вакансия")
     title: str = Field(description="Название вакансии")
     created_at: datetime = Field(description="Дата создания записи в БД")
+    schedule_id: str | None = Field(default=None, description="ID графика работы (fullDay, remote, etc.)")
     employer_name: str | None = Field(default=None, description="Название компании-работодателя")
     salary_from: int | None = Field(default=None, description="Зарплата от")
     salary_to: int | None = Field(default=None, description="Зарплата до")
