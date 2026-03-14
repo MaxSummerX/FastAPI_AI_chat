@@ -163,7 +163,6 @@ async def hh_vacancy(
     result = await db.scalars(
         base_query.where(
             VacancyModel.hh_id == hh_id_vacancy,
-            UserVacanciesModel.is_active.is_(True),
         )
     )
 
@@ -178,7 +177,7 @@ async def hh_vacancy(
             db.add(vacancy_obj)
             await db.flush()
 
-            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy_obj.id)
+            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy_obj.id, is_active=True)
             db.add(link)
             await db.commit()
 
@@ -197,7 +196,7 @@ async def hh_vacancy(
         )
         if not link_check.one_or_none():
             # Связи нет - создаём
-            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy.id)
+            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy.id, is_active=True)
             db.add(link)
             await db.commit()
 
