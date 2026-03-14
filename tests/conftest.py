@@ -147,7 +147,7 @@ async def test_user(db_session: AsyncSession) -> UserModel:
     Создаёт тестового пользователя в БД.
 
     Returns:
-        UserModel: Созданный пользователь с хешем пароля 'TestPassword123!'
+        UserModel: Созданный пользователь с хешем пароля 'TestPassword123!' и резюме
     """
     from app.auth.auth import hash_password
 
@@ -157,6 +157,8 @@ async def test_user(db_session: AsyncSession) -> UserModel:
         password_hash=hash_password("TestPassword123!"),
         is_active=True,
         is_verified=True,
+        resume="This is a test resume with enough content to pass the 300 character minimum validation requirement. "
+        * 3,
     )
 
     db_session.add(user)
@@ -172,7 +174,7 @@ async def auth_headers(client: AsyncClient, test_user: UserModel) -> dict[str, s
     Создаёт JWT токены для аутентификации.
 
     Returns:
-        dict: Заголовки Authorization с Bearer токеном
+        dict: Заголовки Authorization с Bearer токеном и user_id
     """
     # Логинимся и получаем токены
     response = await client.post(
@@ -186,7 +188,7 @@ async def auth_headers(client: AsyncClient, test_user: UserModel) -> dict[str, s
     assert response.status_code == 200
     tokens = response.json()
 
-    return {"Authorization": f"Bearer {tokens['access_token']}"}
+    return {"Authorization": f"Bearer {tokens['access_token']}", "_user_id": str(test_user.id)}
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -688,7 +690,6 @@ async def test_vacancy(db_session: AsyncSession, test_user: UserModel) -> Vacanc
         employer_name="Test Company",
         hh_url="https://hh.ru/vacancy/12345678",
         apply_url="https://hh.ru/vacancy/12345678?apply=true",
-        is_active=True,
         is_archived=False,
         published_at=datetime.now(UTC),
         created_at=datetime.now(UTC),
@@ -745,7 +746,6 @@ async def test_vacancies(db_session: AsyncSession, test_user: UserModel) -> list
             employer_name=f"Company {i % 5}",
             hh_url=f"https://hh.ru/vacancy/{i}",
             apply_url=f"https://hh.ru/vacancy/{i}?apply=true",
-            is_active=True,
             is_archived=i % 10 == 0,  # Каждая 10-я архивная
             published_at=datetime.now(UTC) - timedelta(days=i),
             created_at=datetime.now(UTC) - timedelta(seconds=i * 0.1),

@@ -12,9 +12,11 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enum.analysis import AnalysisType
+from app.models.users import User as UserModel
 from app.models.vacancies import Vacancy as VacancyModel
 from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 
@@ -71,10 +73,20 @@ async def test_get_all_analyses_vacancy_not_found(client: AsyncClient, auth_head
 
 @pytest.mark.asyncio
 async def test_get_all_analyses_inactive_vacancy(
-    client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel, db_session: AsyncSession
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_vacancy: VacancyModel,
+    test_user: UserModel,
+    db_session: AsyncSession,
 ) -> None:
     """Тест: попытка получить анализы для неактивной вакансии"""
-    test_vacancy.is_active = False
+    from app.models.user_vacancies import UserVacancies
+
+    user_vacancy = await db_session.execute(
+        select(UserVacancies).where(UserVacancies.user_id == test_user.id, UserVacancies.vacancy_id == test_vacancy.id)
+    )
+    user_vacancy = user_vacancy.scalar_one()
+    user_vacancy.is_active = False
     await db_session.commit()
 
     response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}/analyses", headers=auth_headers)

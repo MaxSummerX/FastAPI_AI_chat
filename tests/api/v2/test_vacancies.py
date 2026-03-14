@@ -250,8 +250,16 @@ async def test_get_vacancy_by_id_inactive(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel, db_session: AsyncSession
 ) -> None:
     """Тест: попытка получить неактивную вакансию"""
-    # Делаем вакансию неактивной
-    test_vacancy.is_active = False
+    # Делаем вакансию неактивной для пользователя
+    from app.models.user_vacancies import UserVacancies
+
+    user_vacancy = await db_session.execute(
+        select(UserVacancies).where(
+            UserVacancies.user_id == auth_headers["_user_id"], UserVacancies.vacancy_id == test_vacancy.id
+        )
+    )
+    user_vacancy = user_vacancy.scalar_one()
+    user_vacancy.is_active = False
     await db_session.commit()
 
     response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}", headers=auth_headers)
@@ -334,7 +342,6 @@ async def test_get_vacancy_by_hh_id_with_import(
         apply_url=f"https://hh.ru/vacancy/{hh_id}?apply=true",
         is_archived=False,
         published_at=datetime.now(UTC),
-        is_active=True,
     )
 
     with patch("app.api.v2.vacancy.vacancy_create", new_callable=AsyncMock, return_value=mock_vacancy):
@@ -373,15 +380,22 @@ async def test_get_vacancy_by_hh_id_unauthorized(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_delete_vacancy_success(
-    client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel, db_session: AsyncSession
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_vacancy: VacancyModel,
+    test_user: UserModel,
+    db_session: AsyncSession,
 ) -> None:
     """Тест: успешное мягкое удаление вакансии"""
     response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}", headers=auth_headers)
     assert response.status_code == 204
 
-    # Проверяем, что вакансия помечена как неактивная
-    await db_session.refresh(test_vacancy)
-    assert test_vacancy.is_active is False
+    # Проверяем, что вакансия помечена как неактивная через UserVacancies
+    user_vacancy = await db_session.execute(
+        select(UserVacancies).where(UserVacancies.user_id == test_user.id, UserVacancies.vacancy_id == test_vacancy.id)
+    )
+    user_vacancy = user_vacancy.scalar_one()
+    assert user_vacancy.is_active is False
 
 
 @pytest.mark.asyncio
