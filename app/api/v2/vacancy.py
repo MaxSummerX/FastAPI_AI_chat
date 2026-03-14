@@ -76,7 +76,7 @@ async def get_all_vacancies(
 
     query = base_query.join(UserVacanciesModel).where(
         UserVacanciesModel.user_id == current_user.id,
-        VacancyModel.is_active.is_(True),
+        UserVacanciesModel.is_active.is_(True),
     )
 
     if tier:
@@ -163,7 +163,7 @@ async def hh_vacancy(
     result = await db.scalars(
         base_query.where(
             VacancyModel.hh_id == hh_id_vacancy,
-            VacancyModel.is_active.is_(True),
+            UserVacanciesModel.is_active.is_(True),
         )
     )
 
@@ -228,7 +228,7 @@ async def get_vacancy(
         .where(
             UserVacanciesModel.user_id == current_user.id,
             VacancyModel.id == id_vacancy,
-            VacancyModel.is_active.is_(True),
+            UserVacanciesModel.is_active.is_(True),
         )
         .add_columns(UserVacanciesModel.is_favorite.label("is_favorite"))
     )
@@ -260,21 +260,11 @@ async def delete_vacancy(
     """
     logger.info(f"Запрос на удаление вакансии {id_vacancy} пользователя {current_user.id}")
 
-    # Проверяем что пользователь связан с вакансией
-    link_check = await db.execute(
-        select(UserVacanciesModel).where(
-            UserVacanciesModel.user_id == current_user.id,
-            UserVacanciesModel.vacancy_id == id_vacancy,
-        )
-    )
-    if not link_check.one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
-
     result = await db.execute(
-        update(VacancyModel)
-        .where(VacancyModel.id == id_vacancy, VacancyModel.is_active.is_(True))
+        update(UserVacanciesModel)
+        .where(UserVacanciesModel.user_id == current_user.id, UserVacanciesModel.vacancy_id == id_vacancy)
         .values(is_active=False)
-        .returning(VacancyModel.id)
+        .returning(UserVacanciesModel.id)
     )
 
     deleted_vacancy = result.scalar_one_or_none()

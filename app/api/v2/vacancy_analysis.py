@@ -31,6 +31,8 @@ from app.schemas.vacancy_analysis import (
 from app.services.ai_research import analyze_vacancy_from_db
 
 
+MIN_SIZE_RESUME = 300
+
 router = APIRouter(prefix="/{id_vacancy}/analyses", tags=["Vacancy_analyses_V2"])
 
 
@@ -52,7 +54,7 @@ async def get_all_vacancy_analyses(
         .where(
             UserVacanciesModel.user_id == current_user.id,
             VacancyModel.id == id_vacancy,
-            VacancyModel.is_active.is_(True),
+            UserVacanciesModel.is_active.is_(True),
         )
     )
 
@@ -108,16 +110,32 @@ async def create_vacancy_analysis(
         # Системные анализы - title из enum
         title = data.analysis_type.display_name
 
-    # Проверяем существующий анализ
+    # Проверяем существующий анализ у этого пользователя
     is_exists = await db.scalar(
         select(VacancyAnalysisModel.id).where(
-            VacancyAnalysisModel.vacancy_id == id_vacancy, VacancyAnalysisModel.analysis_type == data.analysis_type
+            VacancyAnalysisModel.vacancy_id == id_vacancy,
+            VacancyAnalysisModel.analysis_type == data.analysis_type,
+            VacancyAnalysisModel.user_id == current_user.id,
         )
     )
 
     if is_exists:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=f"Analysis {data.analysis_type.value} already exists"
+        )
+
+    resume = current_user.resume
+
+    if resume is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Resume not found. Please upload your resume first.",
+        )
+
+    if len(resume) < MIN_SIZE_RESUME:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Resume is too short. Minimum {MIN_SIZE_RESUME} characters required.",
         )
 
     try:

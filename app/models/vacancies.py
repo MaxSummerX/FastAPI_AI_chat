@@ -60,8 +60,6 @@ class Vacancy(Base):
     hh_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Ссылка для отклика на вакансию
     apply_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Активна ли вакансия (для внутренней логики)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     # Архивная ли вакансия (на hh.ru)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # Json данные
@@ -97,7 +95,7 @@ class Vacancy(Base):
         # Композитные индексы для частых запросов
         Index("ix_vacancies_new_salary_area", "salary_from", "area_id"),
         Index("ix_vacancies_new_experience_schedule", "experience_id", "schedule_id"),
-        Index("ix_vacancies_new_published", "published_at", "is_active"),
+        Index("ix_vacancies_new_published", "published_at"),
         Index("ix_vacancies_pagination_created", "created_at", "id"),
         Index("ix_vacancies_pagination_published", "published_at", "id"),
     )

@@ -25,6 +25,7 @@ class UserVacancies(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     vacancy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vacancies.id", ondelete="CASCADE"), nullable=False)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime().with_variant(TIMESTAMP(timezone=True), "postgresql"), default=lambda: datetime.now(UTC)
     )
@@ -36,5 +37,6 @@ class UserVacancies(Base):
         UniqueConstraint("user_id", "vacancy_id", name="uq_user_vacancy"),
         Index("ix_user_vacancies_user_id", "user_id"),
         Index("ix_user_vacancies_vacancy_id", "vacancy_id"),
+        Index("ix_user_vacancies_vacancy_id_is_active", "vacancy_id", "is_active"),
         Index("ix_user_vacancies_favorite", "user_id", "is_favorite"),
     )

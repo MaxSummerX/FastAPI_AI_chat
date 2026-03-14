@@ -162,7 +162,7 @@ def ai_analyse_task(
                 .where(
                     VacancyAnalysisModel.id.is_(None),
                     VacancyModel.experience_id.in_(tiers),
-                    VacancyModel.is_active.is_(True),
+                    UserVacanciesModel.is_active.is_(True),
                     UserVacanciesModel.user_id == user_id,
                 )
                 .order_by(VacancyModel.created_at.desc())

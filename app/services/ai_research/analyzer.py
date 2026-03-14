@@ -103,7 +103,7 @@ async def analyze_vacancy_from_db(
         .where(
             UserVacanciesModel.user_id == user_id,
             VacancyModel.id == vacancy_id,
-            VacancyModel.is_active.is_(True),
+            UserVacanciesModel.is_active.is_(True),
         )
     )
 
