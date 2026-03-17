@@ -74,7 +74,9 @@ async def get_all_vacancies(
     # Формируем базовый запрос
     base_query = optimized_query(VacancyModel, VacancyPaginationResponse)
 
-    query = base_query.join(UserVacanciesModel).where(
+    query = base_query.where(VacancyModel.is_archived.is_(False))
+
+    query = query.join(UserVacanciesModel).where(
         UserVacanciesModel.user_id == current_user.id,
         UserVacanciesModel.is_active.is_(True),
     )
