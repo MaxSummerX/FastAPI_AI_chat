@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v2 import analysis, conversation, document, fact, invite, prompt, task, upload, users, vacancy
+from app.api.admin import experiment, invite, role, statistics
+from app.api.v2 import analysis, conversation, document, fact, prompt, task, upload, users, vacancy
 from app.configs.settings import settings
 from app.lifespan import lifespan
 from app.middleware.logging import log_middleware
@@ -34,10 +35,14 @@ app.include_router(conversation.router, prefix="/api/v2")
 app.include_router(fact.router, prefix="/api/v2")
 app.include_router(prompt.router, prefix="/api/v2")
 app.include_router(vacancy.router, prefix="/api/v2")
-app.include_router(invite.router, prefix="/api/v2")
 app.include_router(analysis.router, prefix="/api/v2")
 app.include_router(task.router, prefix="/api/v2")
 app.include_router(document.router, prefix="/api/v2")
+# Admin routes
+app.include_router(statistics.router, prefix="/api/admin")
+app.include_router(invite.router, prefix="/api/admin")
+app.include_router(role.router, prefix="/api/admin")
+app.include_router(experiment.router, prefix="/api/admin")
 
 
 @app.get("/health", tags=["Health Check"])

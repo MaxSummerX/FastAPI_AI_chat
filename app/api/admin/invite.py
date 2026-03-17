@@ -10,7 +10,7 @@ from app.models.users import User as UserModel
 from app.schemas.invites import InviteCodeResponse, InviteCreateResponse, InviteListResponse
 
 
-router = APIRouter(prefix="/invites", tags=["Invites_V2"])
+router = APIRouter(prefix="/invites", tags=["Invites"])
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="Сгенерировать инвайт-коды")
