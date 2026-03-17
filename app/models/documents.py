@@ -53,7 +53,7 @@ class Document(Base):
     # Флаг отвечающий за актуальность саммари
     summary_outdated: Mapped[bool] = mapped_column(default=False, nullable=False)
 
-    # Векторное поле для BM25 полнотекстового поиска (ru + en)
+    # Векторное поле для полнотекстового поиска PostgreSQL TSVECTOR (ru + en)
     # Веса: A=title, B=summary, C=content
     # coalesce защищает от NULL — пустые поля просто игнорируются
     # persisted=True — хранится на диске, пересчитывается автоматически при изменении title/summary/content
