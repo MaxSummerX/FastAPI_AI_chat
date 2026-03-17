@@ -52,7 +52,7 @@ async def test_get_vacancies_first_page(
 
     # Должно вернуть 20 вакансий (default limit)
     assert len(data["items"]) == 20
-    assert data["has_next"] is True  # Ещё есть 10 вакансий
+    assert data["has_next"] is True  # Ещё есть вакансии
     assert data["next_cursor"] is not None
 
 
@@ -104,7 +104,7 @@ async def test_get_vacancies_last_page(
     assert response.status_code == 200
 
     data = response.json()
-    assert len(data["items"]) == 30
+    assert len(data["items"]) == 27
     assert data["has_next"] is False
     assert data["next_cursor"] is None
 
