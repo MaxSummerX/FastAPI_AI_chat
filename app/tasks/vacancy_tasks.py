@@ -21,14 +21,16 @@ from app.models.vacancies import Vacancy as VacancyModel
 from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.schemas.vacancies import VacancyForAnalysis
 from app.services.ai_research.analyzer import analyze_vacancy
-from app.services.headhunter.find_vacancies import import_vacancies
+from app.services.headhunter import VacancyArchiveSync, import_vacancies
 from app.utils.env import get_required_env
 
 
 load_dotenv()
 
 LOCK_REDIS_URL = get_required_env("LOCK_REDIS_URL")
-
+REQUEST_DELAY: float = 0.3
+REQUEST_DELAY_ARCHIVE: float = 2.0
+SEMAPHORE_COUNT: int = 2
 
 redis_client = redis.from_url(LOCK_REDIS_URL, decode_responses=True)
 
@@ -43,6 +45,7 @@ def init_worker(**kwargs: Any) -> None:
     Engine создаётся уже в правильном процессе без привязки к старому loop.
     """
     from app.database.session import create_session_factory
+    from app.services.headhunter.headhunter_client import get_hh_client
 
     # Сначала создаём loop
     loop = asyncio.new_event_loop()
@@ -51,6 +54,11 @@ def init_worker(**kwargs: Any) -> None:
     # Потом engine — он создаётся внутри этого loop
     _worker_resources["session_factory"] = create_session_factory()
     _worker_resources["loop"] = loop
+
+    async def init_hh() -> None:
+        _worker_resources["hh_client"] = await get_hh_client()
+
+    loop.run_until_complete(init_hh())
 
 
 @celery.task
@@ -177,7 +185,6 @@ def ai_analyse_task(
 
         async with async_session_maker() as session:
             analysis_to_add = []
-            REQUEST_DELAY: float = 0.2
 
             for vacancy in vacancies:
                 for analysis in type_analyze:
@@ -230,4 +237,44 @@ def ai_analyse_task(
         return result
     except Exception as e:
         logger.error(f"❌ Ошибка: {e}")
+        raise self.retry(exc=e, countdown=60) from e
+
+
+@celery.task(bind=True, max_retries=3)
+def sync_archive_statuses_task(self: Task) -> dict:
+    """
+    Celery задача для синхронизации архивных статусов вакансий с hh.ru.
+
+    Проверяет все активные вакансии в БД и обновляет их статус (archived=True/False)
+    через API hh.ru. Использует VacancyArchiveSync сервис для выполнения синхронизации.
+
+    Args:
+        self: Экземпляр Celery задачи (автоматически передаётся при bind=True)
+
+    Returns:
+        Словарь со статистикой выполнения:
+        - processed: количество успешно обновлённых вакансий
+        - skipped: количество пропущенных (ошибки API)
+        - total: общее количество проверенных вакансий
+
+    Raises:
+        Exception: При ошибке синхронизации с автоматическим retry через 60 секунд
+    """
+
+    async def _run() -> dict:
+        async with _worker_resources["session_factory"]() as session:
+            service = VacancyArchiveSync(
+                db_session=session,
+                hh_client=_worker_resources["hh_client"],
+                semaphore_count=SEMAPHORE_COUNT,
+                request_delay=REQUEST_DELAY_ARCHIVE,
+            )
+            return await service.sync_archive_statuses()
+
+    try:
+        result: dict = _worker_resources["loop"].run_until_complete(_run())
+        logger.success(f"✅ Синхронизация завершена: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"❌ Ошибка синхронизации: {e}")
         raise self.retry(exc=e, countdown=60) from e
