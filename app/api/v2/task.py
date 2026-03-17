@@ -1,3 +1,4 @@
+# TODO: Переработать модуль. Использовать redis.asyncio
 import os
 from typing import Any
 
@@ -6,21 +7,58 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_admin_user, get_current_user
 from app.configs.celery_config import celery
 from app.enum.analysis import AnalysisType
 from app.enum.experience import Experience
 from app.models.users import User as UserModel
-from app.tasks.vacancy_tasks import ai_analyse_task, clear_lock, import_vacancy_task
+from app.tasks.vacancy_tasks import ai_analyse_task, clear_lock, import_vacancy_task, sync_archive_statuses_task
 
 
 router = APIRouter(prefix="/tasks")
 
 TAGS = "Tasks_v2"
-
+TIME_LOCK = 300
 
 LOCK_REDIS_URL = os.getenv("LOCK_REDIS_URL")
 redis_client = redis.from_url(LOCK_REDIS_URL, decode_responses=True)
+
+
+@router.patch(
+    "/update_archive_status/{task_run_name}",
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=[TAGS],
+    summary="Тестовый эндпойнт для проверки работы задачи",
+)
+async def update_archive_status(
+    task_run_name: str,
+    current_user: UserModel = Depends(get_current_admin_user),
+) -> dict[str, str]:
+    # Формируем уникальный task_id и lock_key
+    task_id = f"update:{current_user.id}:{task_run_name}"
+    lock_key = f"active:{task_id}"
+    active_lock = await redis_client.get(lock_key)
+    if active_lock:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "Обновление уже запущено",
+                "message": "Дождитесь завершения текущей задачи или повторите запрос позже",
+                "task_id": task_id,
+            },
+        )
+    # Ставим блокировку
+    redis_client.setex(lock_key, TIME_LOCK, "1")
+
+    task = sync_archive_statuses_task.apply_async(
+        task_id=task_id,
+        link=clear_lock.s(lock_key),
+    )
+
+    return {
+        "task_id": task.id,
+        "status": task.state,
+    }
 
 
 @router.post(
