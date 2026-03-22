@@ -43,6 +43,7 @@ class StreamData:
 
 
 def parse_facts_from_mem0(memory: dict) -> str:
+    """Извлечь и отформатировать факты из ответа mem0."""
     data = []
 
     # Добавляем факты
@@ -64,6 +65,7 @@ def parse_facts_from_mem0(memory: dict) -> str:
 
 
 def _handle_memory_result(ts: asyncio.Task) -> None:
+    """Обработать результат фоновой задачи mem0ai."""
     if ts.cancelled():
         logger.warning("Задача mem0ai отменена")
     elif ts.exception():
@@ -73,6 +75,8 @@ def _handle_memory_result(ts: asyncio.Task) -> None:
 
 
 class MessageService:
+    """Сервис для обработки сообщений с поддержкой multi-round tool calls."""
+
     def __init__(
         self,
         memory: AsyncMemory,
@@ -324,9 +328,13 @@ class MessageService:
         model: str,
         history: list[dict] | None = None,
         tools: dict[str, Callable[..., Any]] | None = None,
+        max_tool_rounds: int = 5,
     ) -> AsyncIterator[str]:
         """
         Стримим сообщения пользователю, выполняем tools если есть, и сохраняем в БД.
+
+        НОВОЕ: Поддержка множественных раундов tool calls (multi-round).
+        Модель может вызывать инструменты последовательно несколько раз.
 
         Args:
             stream: Асинхронный итератор текстовых chunks
@@ -335,96 +343,143 @@ class MessageService:
             model: Название модели
             history: История сообщений для выполнения tools (опционально)
             tools: Словарь доступных tools функций (опционально)
+            max_tool_rounds: Максимальное количество раундов tool calls (защита от зацикливания)
+
+        Raises:
+            ValueError: Если превышено максимальное количество раундов tools
         """
-        async for chunk in stream:
-            yield chunk
+        if history is None:
+            history = []
+        if tools is None:
+            tools = {}
 
-        result = await result_awaitable
-        content = result.get("content", "")
-        tool_calls = result.get("tool_calls", [])
+        # Цикл для multi-round tool calls
+        for round_num in range(max_tool_rounds + 1):
+            # Стримим ответ от LLM
+            async for chunk in stream:
+                yield chunk
 
-        # Если нет tool_calls или нет данных для выполнения — сохраняем и выходим
-        if not tool_calls or not history or not tools:
+            # Получаем результат
+            result = await result_awaitable
+            content = result.get("content", "")
+            tool_calls = result.get("tool_calls", [])
+
+            # Логирование раунда
             if tool_calls:
-                logger.warning("Получены tool_calls но нет history/llm/tools для выполнения")
+                logger.info(f"🔄 Раунд {round_num + 1}: {len(tool_calls)} tool calls")
 
-            assistant_message = MessageModel(
-                conversation_id=conversation_id, role="assistant", content=content, model=model
-            )
-            self.db.add(assistant_message)
-            await self.db.commit()
-            return
+            # Если нет tool_calls или нет данных для выполнения — сохраняем и выходим
+            if not tool_calls or not tools:
+                if tool_calls:
+                    logger.warning("Получены tool_calls но нет history/llm/tools для выполнения")
 
-        # Выполняем tools
-        logger.info(f"Выполняем {len(tool_calls)} tools...")
+                # Сохраняем финальный ответ в БД
+                assistant_message = MessageModel(
+                    conversation_id=conversation_id, role="assistant", content=content, model=model
+                )
+                self.db.add(assistant_message)
+                await self.db.commit()
+                return
 
-        async def execute_tool(tool_call: dict) -> dict:
-            name = tool_call["function"]["name"]
-            args = tool_call["function"]["arguments"]
+            # Форматируем tool_calls для OpenAI API и сохраняем в БД
+            formatted_tool_calls = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["function"]["name"],
+                        "arguments": json.dumps(tc["function"]["arguments"], ensure_ascii=False),
+                    },
+                }
+                for tc in tool_calls
+            ]
 
-            # Пропускаем tools с невалидными аргументами (пустые после ошибки парсинга)
-            if not args and name in ["create_file", "web_search", "web_fetch", "search_documents"]:
-                error_msg = f"⚠️ Пропущен вызов {name}: пустые аргументы (невалидный JSON от модели)"
-                logger.warning(error_msg)
-                return {"role": "tool", "tool_call_id": tool_call["id"], "content": error_msg}
+            if content:
+                assistant_message = MessageModel(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=content,
+                    model=model,
+                    metadata_={"tool_calls": formatted_tool_calls},  # Сохраняем metadata
+                )
+                self.db.add(assistant_message)
+                await self.db.commit()
 
-            logger.info(f"🔧 {name}({args})")
+            # Выполняем tools
+            logger.info(f"Выполняем {len(tool_calls)} tools...")
+
+            async def execute_tool(tool_call: dict, formatted_calls: list) -> dict:
+                """Выполнить один tool call."""
+                func_name = tool_call["function"]["name"]
+                func_args = tool_call["function"]["arguments"]
+
+                # Пропускаем tools с невалидными аргументами
+                if not func_args and func_name in ["create_file", "web_search", "web_fetch", "search_documents"]:
+                    error_msg = f"⚠️ Пропущен вызов {func_name}: пустые аргументы (невалидный JSON от модели)"
+                    logger.warning(error_msg)
+                    return {"role": "tool", "tool_call_id": tool_call["id"], "content": error_msg}
+
+                logger.info(f"🔧 {func_name}({func_args})")
+                try:
+                    result = await tools[func_name](**func_args)
+                    logger.info(f"📦 {result}")
+
+                    # Сохраняем reuslt с tool_calls в БД
+                    tool_call_results = MessageModel(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=result,
+                        model=model,
+                        metadata_={"tool_calls": formatted_calls},  # Сохраняем metadata
+                    )
+                    self.db.add(tool_call_results)
+                    await self.db.commit()
+
+                except Exception as e:
+                    error_msg = f"Ошибка выполнения {func_name}: {e}"
+                    logger.error(error_msg)
+                    result = error_msg
+                return {"role": "tool", "tool_call_id": tool_call["id"], "content": str(result)}
+
+            tool_results = await asyncio.gather(*[execute_tool(tc, formatted_tool_calls) for tc in tool_calls])
+
+            # Добавляем в историю assistant message и tool results
+            assistant_msg = {"role": "assistant", "content": content, "tool_calls": formatted_tool_calls}
+            history.append(assistant_msg)
+            history.extend(tool_results)
+
+            # Стримим результаты tools пользователю
+            if round_num == 0:
+                yield "\n\n🔧 Выполняю инструменты:\n"
+            else:
+                yield f"\n\n🔧 Раунд {round_num + 1} - Выполняю инструменты:\n"
+
+            for i, (tool_call, result) in enumerate(zip(tool_calls, tool_results, strict=True), 1):
+                name = tool_call["function"]["name"]
+                args = tool_call["function"]["arguments"]
+                yield f"{i}. {name}({args})\n"
+                yield f"   Результат:\n{result['content']}\n\n"
+
+            # Следующий запрос к LLM с результатами tools
             try:
-                result = await tools[name](**args)
-                logger.info(f"📦 {result}")
+                stream, result_awaitable = await self.llm.generate_stream_response(
+                    messages=history,
+                    model=model,
+                )
             except Exception as e:
-                error_msg = f"Ошибка выполнения {name}: {e}"
-                logger.error(error_msg)
-                result = error_msg
-            return {"role": "tool", "tool_call_id": tool_call["id"], "content": str(result)}
+                logger.error(f"Ошибка при запросе: {e}")
+                yield f"\n[Ошибка: {e}]"
+                return
 
-        tool_results = await asyncio.gather(*[execute_tool(tc) for tc in tool_calls])
+            # Продолжаем цикл - stream и result_awaitable обновлены для следующей итерации
 
-        # Добавляем в историю assistant message и tool results
-        # Форматируем tool_calls для OpenAI API (требуется поле "type")
-        formatted_tool_calls = [
-            {
-                "id": tc["id"],
-                "type": "function",
-                "function": {
-                    "name": tc["function"]["name"],
-                    "arguments": json.dumps(tc["function"]["arguments"], ensure_ascii=False),
-                },
-            }
-            for tc in tool_calls
-        ]
+        # Если вышли из цикла по превышению max_tool_rounds
+        logger.error(f"Превышено максимальное количество раундов tool calls: {max_tool_rounds}")
+        yield "\n\n[Ошибка: Превышено максимальное количество операций]"
 
-        assistant_msg = {"role": "assistant", "content": content, "tool_calls": formatted_tool_calls}
-        history.append(assistant_msg)
-        history.extend(tool_results)
-
-        # Стримим результаты tools пользователю
-        yield "\n\n🔧 Выполняю инструменты:\n"
-        for i, (tool_call, result) in enumerate(zip(tool_calls, tool_results, strict=True), 1):
-            name = tool_call["function"]["name"]
-            args = tool_call["function"]["arguments"]
-            yield f"{i}. {name}({args})\n"
-            yield f"   Результат:\n{result['content']}\n\n"
-
-        # Второй запрос к LLM с результатами tools
-        try:
-            stream2, result2_awaitable = await self.llm.generate_stream_response(
-                messages=history,
-                model=model,
-            )
-        except Exception as e:
-            logger.error(f"Ошибка при втором запросе: {e}")
-            yield f"\n[Ошибка: {e}]"
-            return
-
-        # Стримим финальный ответ
-        async for chunk in stream2:
-            yield chunk
-
-        # Сохраняем финальный ответ
-        result2 = await result2_awaitable
-        final_content = result2.get("content", "")
-
+        # Сохраняем последний результат
+        result = await result_awaitable
+        final_content = result.get("content", "")
         assistant_message = MessageModel(
             conversation_id=conversation_id, role="assistant", content=final_content, model=model
         )
