@@ -37,7 +37,7 @@ async def update_archive_status(
     # Формируем уникальный task_id и lock_key
     task_id = f"update:{current_user.id}:{task_run_name}"
     lock_key = f"active:{task_id}"
-    active_lock = await redis_client.get(lock_key)
+    active_lock = redis_client.get(lock_key)
     if active_lock:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
