@@ -149,7 +149,7 @@ async def test_user(db_session: AsyncSession) -> UserModel:
     Returns:
         UserModel: Созданный пользователь с хешем пароля 'TestPassword123!' и резюме
     """
-    from app.auth.auth import hash_password
+    from app.auth import hash_password
 
     user = UserModel(
         username="testuser",
@@ -196,7 +196,7 @@ async def admin_user(db_session: AsyncSession) -> UserModel:
     """
     Создаёт пользователя-администратора для тестов.
     """
-    from app.auth.auth import hash_password
+    from app.auth import hash_password
     from app.enum.roles import UserRole
 
     user = UserModel(

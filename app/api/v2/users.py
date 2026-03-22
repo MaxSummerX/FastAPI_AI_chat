@@ -8,7 +8,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.auth import create_access_token, create_refresh_token, hash_password, verify_password
+from app.auth import create_access_token, create_refresh_token, hash_password, verify_password
 from app.auth.dependencies import get_current_user
 from app.auth.jwt_config import ALGORITHM, SECRET_KEY
 from app.auth.tokens import ACCESS_TOKEN_EXPIRE_MINUTES

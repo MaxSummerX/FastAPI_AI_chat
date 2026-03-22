@@ -454,7 +454,7 @@ async def test_cannot_use_other_users_invite(
     # Создаём второго пользователя
     from datetime import UTC, datetime
 
-    from app.auth.auth import hash_password
+    from app.auth import hash_password
     from app.models.users import User
 
     user2 = User(
