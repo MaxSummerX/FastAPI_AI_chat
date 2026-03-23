@@ -25,18 +25,22 @@ async def log_middleware(request: Request, call_next: Callable[[Request], Awaita
     with logger.contextualize(log_id=log_id):
         try:
             # Логируем входящий запрос с log_id
-            logger.info(f"[{log_id}] -> {request.method} {request.url.path}")
+            logger.info("[{}] -> {} {}", log_id, request.method, request.url.path)
 
             # Обрабатываем запрос
             response = await call_next(request)
 
             if response.status_code >= 400:
-                logger.warning(f"[{log_id}] <- {request.method} {request.url.path} [{response.status_code}] FAILED")
+                logger.warning(
+                    "[{}] <- {} {} [{}] FAILED", log_id, request.method, request.url.path, response.status_code
+                )
             else:
-                logger.info(f"[{log_id}] <- {request.method} {request.url.path} [{response.status_code}] SUCCESS")
+                logger.info(
+                    "[{}] <- {} {} [{}] SUCCESS", log_id, request.method, request.url.path, response.status_code
+                )
 
             return response
 
         except Exception as ex:
-            logger.error(f"[{log_id}] ✗ {request.method} {request.url.path} ERROR: {ex}", exc_info=True)
+            logger.error("[{}] ✗ {} {} ERROR: {}", log_id, request.method, request.url.path, ex, exc_info=True)
             return JSONResponse(content={"success": False, "error": str(ex)}, status_code=500)
