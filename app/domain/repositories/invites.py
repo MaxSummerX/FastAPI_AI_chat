@@ -86,7 +86,7 @@ class IInviteRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete_if_not_used(self, invite: Invite) -> None:
+    async def delete_if_not_used(self, invite: Invite) -> bool:
         """
         Удалить инвайт, только если он не был использован.
 
@@ -94,6 +94,9 @@ class IInviteRepository(ABC):
 
         Args:
             invite: Объект Invite для удаления
+
+        Returns:
+            True если инвайт удалён, False если уже был использован
         """
         pass
 
