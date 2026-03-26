@@ -2,7 +2,7 @@ from uuid import UUID
 
 from loguru import logger
 
-from app.application.schemas.invites import (
+from app.application.schemas.invite import (
     InviteCodeResponse,
     InviteDeleteResponse,
     InviteListResponse,

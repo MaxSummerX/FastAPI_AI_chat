@@ -162,7 +162,7 @@ async def web_fetch(
 def make_create_file_tool(user_id: str | UUID) -> Callable[..., Awaitable[str]]:
     """Создаёт функцию create_file с захваченным user_id.
     db передаётся только для совместимости, но не используется напрямую."""
-    from app.database.postgres_db import async_session_maker
+    from app.infrastructure.database.dependencies import async_session_maker
 
     async def create_file(
         title: str,
@@ -172,8 +172,8 @@ def make_create_file_tool(user_id: str | UUID) -> Callable[..., Awaitable[str]]:
         tags: list[str] | None = None,
     ) -> str:
         """Создать документ в БД для текущего пользователя."""
-        from app.enum.documents import DocumentCategory
-        from app.models.documents import Document as DocumentModel
+        from app.domain.enums.document import DocumentCategory
+        from app.domain.models.document import Document as DocumentModel
 
         # Конвертируем category из строки в enum (case-insensitive + fallback)
         category_enum = None
@@ -219,7 +219,7 @@ def make_create_file_tool(user_id: str | UUID) -> Callable[..., Awaitable[str]]:
 
 def make_search_documents_tool(user_id: UUID) -> Callable[..., Awaitable[str]]:
     """Создаёт функцию search_documents с захваченным user_id."""
-    from app.database.postgres_db import async_session_maker
+    from app.infrastructure.database.dependencies import async_session_maker
 
     async def search_documents(
         query: str,
@@ -228,7 +228,7 @@ def make_search_documents_tool(user_id: UUID) -> Callable[..., Awaitable[str]]:
         offset: int = 0,
     ) -> str:
         """Поиск по документам пользователя."""
-        from app.enum.documents import DocumentCategory
+        from app.domain.enums.document import DocumentCategory
         from app.services.document_service import DocumentService
 
         category_enum = None

@@ -14,10 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.services.auth_service import AuthService
 from app.application.services.invite_service import InviteService
 from app.application.services.user_service import UserService
+from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
 from app.domain.repositories.invites import IInviteRepository
 from app.domain.repositories.users import IUserRepository
-from app.enum.roles import UserRole
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.sqlalchemy.invite_repository import InviteSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository

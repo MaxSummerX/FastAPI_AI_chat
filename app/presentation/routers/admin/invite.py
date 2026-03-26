@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status
 
-from app.application.schemas.invites import (
+from app.application.schemas.invite import (
     InviteDeleteResponse,
     InviteListResponse,
 )

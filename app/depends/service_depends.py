@@ -2,7 +2,7 @@ from fastapi import Depends
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.depends.db_depends import get_async_postgres_db
+from app.infrastructure.database.dependencies import get_db
 from app.services.document_service import DocumentService
 from app.services.headhunter.headhunter_client import get_hh_client
 from app.services.headhunter.vacancy_status import VacancyArchiveSync
@@ -12,13 +12,13 @@ REQUEST_DELAY_ARCHIVE: float = 2.0
 SEMAPHORE_COUNT: int = 2
 
 
-def get_document_service(db: AsyncSession = Depends(get_async_postgres_db)) -> DocumentService:
+def get_document_service(db: AsyncSession = Depends(get_db)) -> DocumentService:
     """Фабрика для создания DocumentService через Dependency Injection."""
     return DocumentService(db)
 
 
 async def get_vacancy_archive_sync(
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
     hh_client: AsyncClient = Depends(get_hh_client),
 ) -> VacancyArchiveSync:
     """
