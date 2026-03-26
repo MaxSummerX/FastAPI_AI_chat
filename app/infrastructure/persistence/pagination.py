@@ -7,7 +7,11 @@ from loguru import logger
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions import InvalidCursorError
+
+class InvalidCursorError(ValueError):
+    """Невалидный формат курсора"""
+
+    pass
 
 
 DEFAULT_PER_PAGE = 20
