@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class InviteCodeResponse(BaseModel):
@@ -15,6 +15,8 @@ class InviteCodeResponse(BaseModel):
     code: str = Field(description="Инвайт-код")
     is_used: bool = Field(description="Флаг использования")
     created_at: datetime = Field(description="Дата создания")
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InviteListResponse(BaseModel):

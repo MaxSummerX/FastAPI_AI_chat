@@ -253,7 +253,7 @@ class UserService:
             logger.warning("email уже занят: {}", email)
             raise EmailAlreadyExistsException("Email already registered")
 
-    async def promote_to_admin(self, user_id: UUID) -> UserResponseFull:
+    async def promote_to_admin(self, user_id: UUID) -> UserResponseBase:
         """
         Повысить пользователя до роли администратора.
 
@@ -279,7 +279,7 @@ class UserService:
         user.role = UserRole.ADMIN
         await self.user_repo.save(user)
         logger.info("Пользователь {} повышен до роли -> admin", user_id)
-        return UserResponseFull.model_validate(user)
+        return UserResponseBase.model_validate(user)
 
     async def active_users(self) -> int:
         """
