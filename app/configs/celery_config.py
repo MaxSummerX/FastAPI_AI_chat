@@ -4,16 +4,13 @@ from typing import Any
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
-from dotenv import load_dotenv
 
-from app.utils.env import get_required_env
+from app.infrastructure.settings.settings import settings
 
 
-load_dotenv()
-
-REDIS_URL = get_required_env("REDIS_URL")
-CELERY_BROKER_URL = get_required_env("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = get_required_env("CELERY_RESULT_BACKEND")
+REDIS_URL = settings.REDIS_URL
+CELERY_BROKER_URL = settings.CELERY_BROKER_URL
+CELERY_RESULT_BACKEND = settings.CELERY_RESULT_BACKEND
 
 
 celery = Celery(
