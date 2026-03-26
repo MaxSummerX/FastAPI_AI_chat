@@ -17,16 +17,21 @@ from loguru import logger
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enum.documents import DocumentCategory
-from app.exceptions import DocumentNotFoundError
-from app.models.documents import Document as DocumentModel
-from app.schemas.documents import (
+from app.application.schemas.document import (
     DocumentCreate,
     DocumentResponse,
     DocumentSearchResponse,
     DocumentSearchResult,
     DocumentUpdate,
 )
+from app.domain.enums.document import DocumentCategory
+from app.domain.models.document import Document as DocumentModel
+
+
+class DocumentNotFoundError(Exception):
+    """Исключение, возникающее когда документ не найден или недоступен пользователю."""
+
+    pass
 
 
 class DocumentService:
