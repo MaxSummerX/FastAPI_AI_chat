@@ -5,29 +5,26 @@ from uuid import UUID
 import redis
 from celery import Task
 from celery.signals import worker_process_init
-from dotenv import load_dotenv
 from loguru import logger
 from sqlalchemy import and_, select
 
+from app.application.schemas.vacancy import VacancyForAnalysis
 from app.configs.celery_config import celery
 from app.configs.llm_config import researcher_llm_config
-from app.database.postgres_db import async_session_maker
-from app.enum.analysis import AnalysisType
-from app.enum.experience import Experience
+from app.domain.enums.analysis import AnalysisType
+from app.domain.enums.experience import Experience
+from app.domain.models.user import User as UserModel
+from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
+from app.domain.models.vacancy import Vacancy as VacancyModel
+from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
+from app.infrastructure.database.dependencies import async_session_maker
+from app.infrastructure.settings.settings import settings
 from app.llms.openai import AsyncOpenAILLM
-from app.models.user_vacancies import UserVacancies as UserVacanciesModel
-from app.models.users import User as UserModel
-from app.models.vacancies import Vacancy as VacancyModel
-from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
-from app.schemas.vacancies import VacancyForAnalysis
 from app.services.ai_research.analyzer import analyze_vacancy
 from app.services.headhunter import VacancyArchiveSync, import_vacancies
-from app.utils.env import get_required_env
 
 
-load_dotenv()
-
-LOCK_REDIS_URL = get_required_env("LOCK_REDIS_URL")
+LOCK_REDIS_URL = settings.LOCK_REDIS_URL
 REQUEST_DELAY: float = 0.3
 REQUEST_DELAY_ARCHIVE: float = 2.0
 SEMAPHORE_COUNT: int = 2
@@ -44,7 +41,7 @@ def init_worker(**kwargs: Any) -> None:
     Выполняется в каждом воркер-процессе ПОСЛЕ fork.
     Engine создаётся уже в правильном процессе без привязки к старому loop.
     """
-    from app.database.session import create_session_factory
+    from app.infrastructure.database.connection import create_session_factory
     from app.services.headhunter.headhunter_client import get_hh_client
 
     # Сначала создаём loop
