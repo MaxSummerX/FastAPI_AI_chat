@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any
 
@@ -11,7 +12,21 @@ from openai import AsyncOpenAI
 from app.configs.llms.base import BaseLlmConfig
 from app.configs.llms.openai import OpenAIConfig
 from app.llms.base import LLMBase
-from app.utils.utils import extract_json
+
+
+def extract_json(text: str) -> str:
+    """
+    Извлекает JSON-контент из строки, удаляя тройные обратные кавычки и необязательный тег «json», если он есть.
+    Если блок кода не найден, возвращает текст как есть.
+    """
+    text = text.strip()
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if match:
+        json_str = match.group(1)
+    else:
+        json_str = text
+
+    return json_str
 
 
 class AsyncOpenAILLM(LLMBase):
