@@ -38,6 +38,12 @@ class Settings(BaseSettings):
         description="Требовать инвайт-код для регистрации (True - только по инвайтам, False - открытая регистрация)",
     )
 
+    # REDIS
+    LOCK_REDIS_URL: str = Field(..., description="")
+    REDIS_URL: str = Field(..., description="")
+    CELERY_BROKER_URL: str = Field(..., description="")
+    CELERY_RESULT_BACKEND: str = Field(..., description="")
+
     # CORS
     CORS_PRODUCTION: list[str] = Field(
         default=["https://mydomain.com"],  # В продакшене нужны конкретные домены
