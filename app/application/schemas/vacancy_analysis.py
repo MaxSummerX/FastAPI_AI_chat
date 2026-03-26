@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.enum.analysis import AnalysisType
+from app.domain.enums.analysis import AnalysisType
 
 
 class VacancyAnalysisCreate(BaseModel):
