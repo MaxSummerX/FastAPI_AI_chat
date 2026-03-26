@@ -2,7 +2,7 @@
 from fastapi import Request, Response
 from starlette.middleware.base import RequestResponseEndpoint
 
-from app.configs.settings import settings
+from app.infrastructure.settings.settings import settings
 
 
 async def add_security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
