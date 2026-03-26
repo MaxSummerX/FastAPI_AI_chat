@@ -17,9 +17,9 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enum.experience import Experience
-from app.models.user_vacancies import UserVacancies
-from app.models.vacancies import Vacancy
+from app.domain.enums.experience import Experience
+from app.domain.models.user_vacancies import UserVacancies
+from app.domain.models.vacancy import Vacancy
 from app.services.headhunter.headhunter_client import (
     HH_CONCURRENT_REQUESTS,
     HH_MAX_PAGES,

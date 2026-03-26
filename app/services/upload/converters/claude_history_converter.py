@@ -7,10 +7,10 @@ import aiofiles.os as aios
 from loguru import logger
 from sqlalchemy import select
 
-from app.database.postgres_db import async_session_maker
-from app.models.conversations import Conversation as ConversationModel
-from app.models.messages import Message as MessageModel
-from app.models.messages import MessageRole
+from app.domain.models.conversation import Conversation as ConversationModel
+from app.domain.models.message import Message as MessageModel
+from app.domain.models.message import MessageRole
+from app.infrastructure.database.dependencies import async_session_maker
 from app.services.upload.converters.claude_split_conversations_async import split_conversations_async
 
 

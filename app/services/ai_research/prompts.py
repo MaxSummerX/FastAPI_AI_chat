@@ -1,4 +1,4 @@
-from app.enum.analysis import AnalysisType
+from app.domain.enums.analysis import AnalysisType
 from app.exceptions.exceptions import InvalidAnalysisTypeError
 from app.prompts.prompts_for_analysis import (
     MATCHING_PROMPT,

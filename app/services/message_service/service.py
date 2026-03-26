@@ -12,6 +12,11 @@ from mem0 import AsyncMemory
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.schemas.fact import FactSource
+from app.application.schemas.message import HistoryMessage
+from app.domain.models import Message as MessageModel
+from app.domain.models.conversation import Conversation as ConversationModel
+from app.domain.models.prompt import Prompts as PromptModel
 from app.exceptions.exceptions import LLMGenerationError, NotFoundError, PromptNotFoundError
 from app.llms.openai import AsyncOpenAILLM
 from app.llms.tools import (
@@ -24,12 +29,7 @@ from app.llms.tools import (
     web_fetch,
     web_search,
 )
-from app.models import Conversation as ConversationModel
-from app.models import Message as MessageModel
-from app.models.prompts import Prompts as PromptModel
 from app.prompts.prompts_base import START_PROMPT
-from app.schemas.facts import FactSource
-from app.schemas.messages import HistoryMessage
 
 
 @dataclass

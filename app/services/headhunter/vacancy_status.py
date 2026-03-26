@@ -5,7 +5,7 @@ from loguru import logger
 from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.vacancies import Vacancy as VacancyModel
+from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.services.headhunter.exceptions import RateLimitError
 from app.services.headhunter.headhunter_client import HHApiEndpoint
 

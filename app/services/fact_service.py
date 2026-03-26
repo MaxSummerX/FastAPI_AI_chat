@@ -7,10 +7,10 @@ from mem0 import AsyncMemory
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enum.facts import FactCategory, FactSource
-from app.models import User as UserModel
-from app.models.facts import Fact as FactModel
-from app.schemas.facts import FactCreate
+from app.application.schemas.fact import FactCreate
+from app.domain.enums.fact import FactCategory, FactSource
+from app.domain.models import User as UserModel
+from app.domain.models.fact import Fact as FactModel
 
 
 class FactNotFoundException(Exception):
@@ -231,8 +231,8 @@ async def import_from_mem0ai_to_postgres_db(
         - Категоризирует факты через LLM если нет категории в metadata
     """
     from app.configs.llm_config import parse_llm_config
+    from app.domain.models.message import Message as MessageModel
     from app.llms.openai import AsyncOpenAILLM
-    from app.models.messages import Message as MessageModel
     from app.prompts.prompts_for_parse import PARSE_CATEGORY
 
     llm = AsyncOpenAILLM(parse_llm_config)
