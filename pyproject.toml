@@ -96,7 +96,7 @@ exclude = [
     'venv',
     '__pycache__',
     'alembic/',
-    'app/migrations/'
+    'app/infrastructure/database/migrations/'
 ]
 
 [[tool.mypy.overrides]]
