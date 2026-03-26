@@ -18,17 +18,28 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
-from app.depends.db_depends import get_async_postgres_db
+from app.application.schemas.document import (
+    BaseResponse,
+    DocumentCreate,
+    DocumentResponse,
+    DocumentSearchResponse,
+    DocumentUpdate,
+)
+from app.application.schemas.pagination import PaginatedResponse
 from app.depends.service_depends import get_document_service
-from app.enum.documents import DocumentCategory
+from app.domain.enums.document import DocumentCategory
+from app.domain.models.document import Document as DocumentModel
+from app.domain.models.user import User as UserModel
 from app.exceptions import DocumentNotFoundError, InvalidCursorError
-from app.models import User as UserModel
-from app.models.documents import Document as DocumentModel
-from app.schemas.documents import BaseResponse, DocumentCreate, DocumentResponse, DocumentSearchResponse, DocumentUpdate
-from app.schemas.pagination import PaginatedResponse
+from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.pagination import (
+    DEFAULT_OFFSET,
+    DEFAULT_PER_PAGE,
+    MINIMUM_PER_PAGE,
+    paginate_with_cursor,
+)
+from app.presentation.dependencies import get_current_user
 from app.services.document_service import DocumentService
-from app.utils.pagination import DEFAULT_OFFSET, DEFAULT_PER_PAGE, MINIMUM_PER_PAGE, paginate_with_cursor
 
 
 router = APIRouter(prefix="/documents", tags=["Documents_v2"])
@@ -48,7 +59,7 @@ async def get_all_documents(
         default=None, description="Курсор для следующей страницы. Берётся из предыдущего ответа"
     ),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
     include_archived: bool = Query(False, description="Включать неактивные документы"),
 ) -> PaginatedResponse[BaseResponse]:
     """

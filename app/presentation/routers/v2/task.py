@@ -7,11 +7,11 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 
-from app.auth.dependencies import get_current_admin_user, get_current_user
 from app.configs.celery_config import celery
-from app.enum.analysis import AnalysisType
-from app.enum.experience import Experience
-from app.models.users import User as UserModel
+from app.domain.enums.analysis import AnalysisType
+from app.domain.enums.experience import Experience
+from app.domain.models.user import User as UserModel
+from app.presentation.dependencies import get_current_admin_user, get_current_user
 from app.tasks.vacancy_tasks import ai_analyse_task, clear_lock, import_vacancy_task, sync_archive_statuses_task
 
 

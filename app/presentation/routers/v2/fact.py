@@ -7,15 +7,20 @@ from mem0 import AsyncMemory
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
-from app.depends.db_depends import get_async_postgres_db
+from app.application.schemas.fact import FactCreate, FactResponse
+from app.application.schemas.pagination import PaginatedResponse
 from app.depends.mem0_depends import get_memory
+from app.domain.models.fact import Fact as FactModel
+from app.domain.models.fact import FactCategory, FactSource
+from app.domain.models.user import User as UserModel
 from app.exceptions import InvalidCursorError
-from app.models import Fact as FactModel
-from app.models import User as UserModel
-from app.models.facts import FactCategory, FactSource
-from app.schemas.facts import FactCreate, FactResponse
-from app.schemas.pagination import PaginatedResponse
+from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.pagination import (
+    DEFAULT_PER_PAGE,
+    MINIMUM_PER_PAGE,
+    paginate_with_cursor,
+)
+from app.presentation.dependencies import get_current_user
 from app.services.fact_service import (
     FactNotFoundException,
     UserProvidedException,
@@ -23,11 +28,6 @@ from app.services.fact_service import (
     get_fact_or_404_or_403,
     import_from_mem0ai_to_postgres_db,
     update_user_fact,
-)
-from app.utils.pagination import (
-    DEFAULT_PER_PAGE,
-    MINIMUM_PER_PAGE,
-    paginate_with_cursor,
 )
 
 
@@ -49,7 +49,7 @@ async def get_all_facts(
         default=None, description="Курсор для следующей страницы. Берётся из предыдущего ответа"
     ),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
     include_inactive: bool = Query(False, description="Включать неактивные факты"),
 ) -> PaginatedResponse[FactResponse]:
     """
@@ -113,7 +113,7 @@ async def get_all_facts(
 async def get_fact(
     fact_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> FactResponse:
     """
     Получить факт по ID.
@@ -150,7 +150,7 @@ async def create_fact(
     background_tasks: BackgroundTasks,
     memory: AsyncMemory = Depends(get_memory),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Создать новый факт о пользователе.
@@ -186,7 +186,7 @@ async def update_fact(
     background_tasks: BackgroundTasks,
     memory: AsyncMemory = Depends(get_memory),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Полностью обновить факт (PostgreSQL + Qdrant).
@@ -229,7 +229,7 @@ async def delete_fact(
     fact_id: UUID,
     memory: AsyncMemory = Depends(get_memory),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Удалить факт (мягкое удаление).
@@ -272,7 +272,7 @@ async def import_facts(
     background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     memory: AsyncMemory = Depends(get_memory),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
     Импортировать факты из mem0ai в PostgreSQL.

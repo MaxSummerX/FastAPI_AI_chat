@@ -5,22 +5,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
-from app.depends.db_depends import get_async_postgres_db
-from app.depends.llm_depends import get_researcher_llm
-from app.enum.analysis import AnalysisType
-from app.exceptions.exceptions import (
-    InvalidAnalysisTypeError,
-    LLMGenerationError,
-    UserNotFoundError,
-    VacancyNotFoundError,
-)
-from app.llms.openai import AsyncOpenAILLM
-from app.models import Vacancy as VacancyModel
-from app.models.user_vacancies import UserVacancies as UserVacanciesModel
-from app.models.users import User as UserModel
-from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
-from app.schemas.vacancy_analysis import (
+from app.application.schemas.vacancy_analysis import (
     AnalysisTypeInfo,
     AvailableAnalysesResponse,
     VacancyAnalysisCreate,
@@ -28,6 +13,21 @@ from app.schemas.vacancy_analysis import (
     VacancyListResponse,
     VacancyResponse,
 )
+from app.depends.llm_depends import get_researcher_llm
+from app.domain.enums.analysis import AnalysisType
+from app.domain.models.user import User as UserModel
+from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
+from app.domain.models.vacancy import Vacancy as VacancyModel
+from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
+from app.exceptions.exceptions import (
+    InvalidAnalysisTypeError,
+    LLMGenerationError,
+    UserNotFoundError,
+    VacancyNotFoundError,
+)
+from app.infrastructure.database.dependencies import get_db
+from app.llms.openai import AsyncOpenAILLM
+from app.presentation.dependencies import get_current_user
 from app.services.ai_research import analyze_vacancy_from_db
 
 
@@ -40,7 +40,7 @@ router = APIRouter(prefix="/{id_vacancy}/analyses", tags=["Vacancy_analyses_V2"]
 async def get_all_vacancy_analyses(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> VacancyListResponse:
     """
     Возвращает все анализы вакансии по id вакансии.
@@ -82,7 +82,7 @@ async def create_vacancy_analysis(
     id_vacancy: UUID,
     data: VacancyAnalysisCreate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
     llm: AsyncOpenAILLM = Depends(get_researcher_llm),
 ) -> VacancyResponse:
     """

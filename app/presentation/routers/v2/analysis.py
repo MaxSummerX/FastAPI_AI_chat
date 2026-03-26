@@ -5,11 +5,11 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
-from app.depends.db_depends import get_async_postgres_db
-from app.models.users import User as UserModel
-from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
-from app.schemas.vacancy_analysis import VacancyResponse
+from app.application.schemas.vacancy_analysis import VacancyResponse
+from app.domain.models.user import User as UserModel
+from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
+from app.infrastructure.database.dependencies import get_db
+from app.presentation.dependencies import get_current_user
 
 
 router = APIRouter(prefix="/analyses", tags=["Analyses_V2"])
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/analyses", tags=["Analyses_V2"])
 async def get_analysis(
     id_analysis: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> VacancyResponse:
     """
     Возвращает анализ по его ID.
@@ -43,7 +43,7 @@ async def get_analysis(
 async def delete_analysis(
     id_analysis: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Удаляет анализ по ID.

@@ -5,22 +5,22 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
-from app.depends.db_depends import get_async_postgres_db
-from app.exceptions import InvalidCursorError
-from app.models.prompts import Prompts as PromptModel
-from app.models.users import User as UserModel
-from app.schemas.pagination import PaginatedResponse
-from app.schemas.prompts import (
+from app.application.schemas.pagination import PaginatedResponse
+from app.application.schemas.prompt import (
     PromptCreate,
     PromptResponse,
     PromptUpdate,
 )
-from app.utils.pagination import (
+from app.domain.models.prompt import Prompts as PromptModel
+from app.domain.models.user import User as UserModel
+from app.exceptions import InvalidCursorError
+from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
     paginate_with_cursor,
 )
+from app.presentation.dependencies import get_current_user
 
 
 router = APIRouter(prefix="/prompts", tags=["Prompts_v2"])
@@ -39,7 +39,7 @@ async def get_user_prompts(
         default=None, description="Курсор для следующей страницы. Берётся из предыдущего ответа"
     ),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
     include_inactive: bool = Query(False, description="Включать неактивные промпты"),
 ) -> PaginatedResponse[PromptResponse]:
     """
@@ -86,7 +86,7 @@ async def get_user_prompts(
 async def get_prompt(
     prompt_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> PromptResponse:
     """Получить конкретный промпт"""
     logger.info(f"Запрос на получение промпта {prompt_id} пользователем {current_user.id}")
@@ -108,7 +108,7 @@ async def get_prompt(
 async def create_prompt(
     prompt_data: PromptCreate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> PromptResponse:
     """Создать новый промпт"""
     logger.info(f"Запрос на создание промпта пользователем {current_user.id}")
@@ -130,7 +130,7 @@ async def update_prompt(
     prompt_id: UUID,
     prompt_data: PromptUpdate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> PromptResponse:
     """Обновить промпт"""
     logger.info(f"Запрос на обновление промпта {prompt_id} пользователем {current_user.id}")
@@ -165,7 +165,7 @@ async def update_prompt(
 async def delete_prompt(
     prompt_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Удалить промпт (мягкое удаление)

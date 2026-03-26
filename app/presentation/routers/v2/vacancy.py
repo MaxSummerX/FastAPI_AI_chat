@@ -6,19 +6,14 @@ from loguru import logger
 from sqlalchemy import asc, desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v2 import vacancy_analysis
-from app.auth.dependencies import get_current_user
-from app.depends.db_depends import get_async_postgres_db
-from app.enum.experience import Experience, OrderField
-from app.models import Vacancy as VacancyModel
-from app.models.user_vacancies import UserVacancies as UserVacanciesModel
-from app.models.users import User as UserModel
-from app.schemas.pagination import PaginatedResponse
-from app.schemas.vacancies import VacancyPaginationResponse, VacancyResponse
-from app.services.headhunter.find_vacancies import vacancy_create
-from app.services.headhunter.headhunter_client import get_hh_client
-from app.utils.db_optimizer import optimized_query
-from app.utils.pagination import (
+from app.application.schemas.pagination import PaginatedResponse
+from app.application.schemas.vacancy import VacancyPaginationResponse, VacancyResponse
+from app.domain.enums.experience import Experience, OrderField
+from app.domain.models.user import User as UserModel
+from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
+from app.domain.models.vacancy import Vacancy as VacancyModel
+from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MAXIMUM_PER_PAGE,
     MINIMUM_PER_PAGE,
@@ -28,6 +23,11 @@ from app.utils.pagination import (
     trim_excess_item,
     validate_pagination_limit,
 )
+from app.infrastructure.persistence.sqlalchemy.db_optimizer import optimized_query
+from app.presentation.dependencies import get_current_user
+from app.presentation.routers.v2 import vacancy_analysis
+from app.services.headhunter.find_vacancies import vacancy_create
+from app.services.headhunter.headhunter_client import get_hh_client
 
 
 router = APIRouter(prefix="/vacancies")
@@ -59,7 +59,7 @@ async def get_all_vacancies(
     order_by: OrderField | None = Query(default=None, description="Поле для сортировки"),
     order_desc: bool = Query(default=False, description="Сортировка по убыванию"),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[VacancyPaginationResponse]:
     """
     Получить вакансий пользователя с пагинацией (курсорной).
@@ -151,7 +151,7 @@ async def get_all_vacancies(
 async def hh_vacancy(
     hh_id_vacancy: str,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
     hh_client: AsyncClient = Depends(get_hh_client),
 ) -> None:
     """
@@ -215,7 +215,7 @@ async def hh_vacancy(
 async def get_vacancy(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> VacancyResponse:
     """
     Получает вакансию по UUID. Оптимизированный запрос только для полей из VacancyResponse.
@@ -254,7 +254,7 @@ async def get_vacancy(
 async def delete_vacancy(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Мягкое удаление вакансии
@@ -287,7 +287,7 @@ async def delete_vacancy(
 async def add_to_favorites(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Добавить вакансию в избранное
@@ -321,7 +321,7 @@ async def add_to_favorites(
 async def remove_from_favorites(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Удалить вакансию из избранного

@@ -6,24 +6,23 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
+from app.application.schemas.message import MessageResponse as MessageSchemas
+from app.application.schemas.message import MessageStreamRequest
+from app.application.schemas.pagination import PaginatedResponse
 from app.configs.llm_config import base_config_for_llm
-from app.depends.db_depends import get_async_postgres_db
-from app.exceptions import InvalidCursorError
-from app.exceptions.exceptions import LLMGenerationError, NotFoundError, ValidationError  # TODO: настроить исключения
-from app.llms.openai import AsyncOpenAILLM
-from app.models import Conversation as ConversationModel
-from app.models import Message as MessageModel
-from app.models import User as UserModel
-from app.schemas.messages import MessageResponse as MessageSchemas
-from app.schemas.messages import MessageStreamRequest
-from app.schemas.pagination import PaginatedResponse
-from app.services.message_service import MessageService, get_message_service
-from app.utils.pagination import (
+from app.domain.models.conversation import Conversation as ConversationModel
+from app.domain.models.message import Message as MessageModel
+from app.domain.models.user import User as UserModel
+from app.exceptions.exceptions import InvalidCursorError, LLMGenerationError, NotFoundError, ValidationError
+from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
     paginate_with_cursor,
 )
+from app.llms.openai import AsyncOpenAILLM
+from app.presentation.dependencies import get_current_user
+from app.services.message_service import MessageService, get_message_service
 
 
 router = APIRouter(prefix="/{conversation_id}/messages", tags=["Messages_v2"])
@@ -46,7 +45,7 @@ async def get_messages(
         default=None, description="Курсор для загрузки более старых сообщений. Берётся из предыдущего ответа"
     ),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_postgres_db),
+    db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[MessageSchemas]:
     """
     Получить историю сообщений с курсорной пагинацией.

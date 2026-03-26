@@ -3,9 +3,9 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
 from loguru import logger
 
-from app.auth.dependencies import get_current_user
-from app.enum.providers import ImportedProvider
-from app.models.users import User as UserModel
+from app.domain.enums.provider import ImportedProvider
+from app.domain.models.user import User as UserModel
+from app.presentation.dependencies import get_current_user
 from app.services.upload.upload_conversations import upload_conversations_other_provider
 
 
