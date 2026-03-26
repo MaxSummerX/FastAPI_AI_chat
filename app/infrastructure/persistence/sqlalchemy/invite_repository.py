@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.models.invite import Invite
@@ -61,14 +62,18 @@ class InviteSQLAlchemyRepository(IInviteRepository):
         )
         return result
 
-    async def get_available_invites(self) -> Sequence[Invite]:
+    async def get_available_invites(self, skip: int, limit: int) -> Sequence[Invite]:
         """
-        Получить все доступные (неиспользованные) инвайты.
+        Получить список доступных (неиспользованных) инвайтов с пагинацией.
+
+        Args:
+            skip: Количество записей для пропуска (offset)
+            limit: Максимальное количество записей для возврата
 
         Returns:
-            Последовательность всех доступных объектов Invite
+            Последовательность доступных объектов Invite
         """
-        result = await self.db.scalars(select(Invite).where(Invite.is_used.is_(False)))
+        result = await self.db.scalars(select(Invite).where(Invite.is_used.is_(False)).offset(skip).limit(limit))
         invites: Sequence[Invite] = result.all()
         return invites
 
@@ -123,16 +128,33 @@ class InviteSQLAlchemyRepository(IInviteRepository):
         await self.db.commit()
         return True
 
-    async def bulk_create(self, invites: list[Invite]) -> None:
+    async def bulk_create(self, invites: Sequence[Invite]) -> Sequence[Invite]:
         """
         Массово создать инвайты (одна транзакция).
 
+        При наличии дубликатов кодов пропускает их и возвращает только успешно созданные.
+
         Args:
-            invites: Список объектов Invite для создания
+            invites: Последовательность объектов Invite для создания
+
+        Returns:
+            Список успешно созданных инвайтов с id и created_at из БД
         """
         for invite in invites:
             self.db.add(invite)
+
         await self.db.commit()
+
+        created_invites = []
+        for invite in invites:
+            try:
+                await self.db.refresh(invite)
+                created_invites.append(invite)
+            except IntegrityError:
+                # Пропускаем дубликаты кодов
+                continue
+
+        return created_invites
 
     async def delete_all_unused(self) -> int:
         """

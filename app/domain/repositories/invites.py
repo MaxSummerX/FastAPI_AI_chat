@@ -49,12 +49,16 @@ class IInviteRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_available_invites(self) -> Sequence[Invite]:
+    async def get_available_invites(self, skip: int, limit: int) -> Sequence[Invite]:
         """
-        Получить все доступные (неиспользованные) инвайты.
+        Получить список доступных (неиспользованных) инвайтов с пагинацией.
+
+        Args:
+            skip: Количество записей для пропуска (offset)
+            limit: Максимальное количество записей для возврата
 
         Returns:
-            Последовательность всех доступных объектов Invite
+            Последовательность доступных объектов Invite
         """
         pass
 
@@ -101,12 +105,15 @@ class IInviteRepository(ABC):
         pass
 
     @abstractmethod
-    async def bulk_create(self, invites: list[Invite]) -> None:
+    async def bulk_create(self, invites: Sequence[Invite]) -> Sequence[Invite]:
         """
         Массово создать инвайты (одна транзакция).
 
         Args:
             invites: Список объектов Invite для создания
+
+        Returns:
+            Список созданных инвайтов с id и created_at из БД
         """
         pass
 
