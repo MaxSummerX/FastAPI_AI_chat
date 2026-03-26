@@ -1,13 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.admin import experiment, invite, role, statistics
-from app.api.v2 import analysis, conversation, document, fact, prompt, task, upload, users, vacancy
-from app.configs.settings import settings
+from app.infrastructure.settings.settings import settings
 from app.lifespan import lifespan
-from app.middleware.logging import log_middleware
-from app.middleware.security_middleware import add_security_headers
-from app.middleware.timing_middleware import TimingMiddleware
+from app.presentation.middleware.logging import log_middleware
+from app.presentation.middleware.security_middleware import add_security_headers
+from app.presentation.middleware.timing_middleware import TimingMiddleware
+from app.presentation.routers import admin, v1
+from app.presentation.routers.v2 import analysis, conversation, document, fact, prompt, task, upload, vacancy
 
 
 app = FastAPI(
@@ -28,9 +28,9 @@ app.middleware("http")(log_middleware)
 app.middleware("http")(add_security_headers)  # Security headers
 
 
+app.include_router(v1.api_v1)
 # Подключаем маршруты 2ой версии
 app.include_router(upload.router, prefix="/api/v2")
-app.include_router(users.router, prefix="/api/v2")
 app.include_router(conversation.router, prefix="/api/v2")
 app.include_router(fact.router, prefix="/api/v2")
 app.include_router(prompt.router, prefix="/api/v2")
@@ -39,10 +39,7 @@ app.include_router(analysis.router, prefix="/api/v2")
 app.include_router(task.router, prefix="/api/v2")
 app.include_router(document.router, prefix="/api/v2")
 # Admin routes
-app.include_router(statistics.router, prefix="/api/admin")
-app.include_router(invite.router, prefix="/api/admin")
-app.include_router(role.router, prefix="/api/admin")
-app.include_router(experiment.router, prefix="/api/admin")
+app.include_router(admin.router)
 
 
 @app.get("/health", tags=["Health Check"])
