@@ -34,7 +34,7 @@ from app.domain.models.user import User as UserModel
 from app.presentation.dependencies import get_auth_service, get_current_user, get_user_service
 
 
-router = APIRouter(prefix="/user", tags=["User_V1"])
+router = APIRouter(prefix="/user", tags=["User"])
 
 
 @router.get("", status_code=status.HTTP_200_OK, summary="Получить базовую информацию о пользователе")
@@ -180,7 +180,7 @@ async def update_user_profile(
         ) from None
 
 
-@router.post("/update-email", status_code=status.HTTP_200_OK, summary="Обновить email")
+@router.post("/email", status_code=status.HTTP_200_OK, summary="Обновить email")
 async def update_user_email(
     email_data: UserUpdateEmail,
     current_user: UserModel = Depends(get_current_user),
@@ -222,7 +222,7 @@ async def update_user_email(
         ) from None
 
 
-@router.post("/update-password", status_code=status.HTTP_200_OK, summary="Обновить пароль")
+@router.post("/password", status_code=status.HTTP_200_OK, summary="Обновить пароль")
 async def update_user_password(
     password_data: UserUpdatePassword,
     current_user: UserModel = Depends(get_current_user),
@@ -257,7 +257,7 @@ async def update_user_password(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from None
 
 
-@router.post("/update-username", status_code=status.HTTP_200_OK, summary="Обновить username")
+@router.post("/username", status_code=status.HTTP_200_OK, summary="Обновить username")
 async def update_user_username(
     username_data: UserUpdateUsername,
     current_user: UserModel = Depends(get_current_user),
