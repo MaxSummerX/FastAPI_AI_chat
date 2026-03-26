@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # Приложение
     DEBUG: bool = Field(default=False, description="Режим отладки")
     API_PREFIX: str = Field(default="/api/v2", description="Префикс API")
+    # Включить инвайты для регистрации
+    REQUIRE_INVITE: bool = Field(
+        default=False,
+        description="Требовать инвайт-код для регистрации (True - только по инвайтам, False - открытая регистрация)",
+    )
 
     # CORS
     CORS_PRODUCTION: list[str] = Field(
