@@ -10,7 +10,7 @@
 
 import pytest
 
-from app.enum.analysis import AnalysisType
+from app.domain.enums.analysis import AnalysisType
 
 
 # ============================================================
@@ -19,7 +19,7 @@ from app.enum.analysis import AnalysisType
 
 
 def test_analysis_type_values() -> None:
-    """Тест: проверка что все типы имеют правильные строковые значения"""
+    """Тест: проверка, что все типы имеют правильные строковые значения"""
     assert AnalysisType.MATCHING.value == "matching"
     assert AnalysisType.PRIORITIZATION.value == "prioritization"
     assert AnalysisType.PREPARATION.value == "preparation"
@@ -28,7 +28,7 @@ def test_analysis_type_values() -> None:
 
 
 def test_analysis_type_count() -> None:
-    """Тест: проверка что в enum 5 типов"""
+    """Тест: проверка, что в enum 5 типов"""
     assert len(AnalysisType) == 5
 
 

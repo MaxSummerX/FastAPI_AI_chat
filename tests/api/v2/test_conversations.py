@@ -12,7 +12,7 @@
 import pytest
 from httpx import AsyncClient
 
-from app.models import Conversation as ConversationModel
+from app.domain.models.conversation import Conversation as ConversationModel
 
 
 # ============================================================

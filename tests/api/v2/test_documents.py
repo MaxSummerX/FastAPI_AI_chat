@@ -14,8 +14,8 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enum.documents import DocumentCategory
-from app.models.documents import Document as DocumentModel
+from app.domain.enums.document import DocumentCategory
+from app.domain.models.document import Document as DocumentModel
 
 
 # ============================================================

@@ -13,7 +13,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.prompts import Prompts as PromptModel
+from app.domain.models.prompt import Prompts as PromptModel
 
 
 # ============================================================

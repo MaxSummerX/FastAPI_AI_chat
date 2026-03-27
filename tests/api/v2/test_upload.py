@@ -342,7 +342,7 @@ async def test_upload_special_characters_in_filename(
     auth_headers: dict[str, str],
     sample_claude_json: bytes,
 ) -> None:
-    """Тест: файл с спецсимволами в названии"""
+    """Тест: файл со спецсимволами в названии"""
     filename = "conversations (1) [test].json"
     files = {"file": (filename, BytesIO(sample_claude_json), "application/json")}
 

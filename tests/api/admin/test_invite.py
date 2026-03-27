@@ -16,7 +16,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Invite as InviteModel
+from app.domain.models.invite import Invite as InviteModel
 
 
 # ============================================================
@@ -53,7 +53,7 @@ async def test_generate_invite_codes_success(
     assert data["count"] == 3
 
     # Проверяем что коды сохранены в БД
-    from app.models.invites import Invite
+    from app.domain.models.invite import Invite
 
     result = await db_session.scalars(select(Invite).where(Invite.code.in_(data["codes"])))
     invites = result.all()
@@ -146,7 +146,7 @@ async def test_get_unused_invites_empty(
     """Тест: список пуст когда все коды использованы"""
     from datetime import UTC, datetime, timedelta
 
-    from app.models.invites import Invite
+    from app.domain.models.invite import Invite
 
     # Создаём использованный код
     invite = Invite(
@@ -348,7 +348,7 @@ async def test_delete_invite_code_success(
     assert response.status_code == 204
 
     # Проверяем что код удалён из БД
-    from app.models.invites import Invite
+    from app.domain.models.invite import Invite
 
     result = await db_session.scalars(select(Invite).where(Invite.code == code))
     invite = result.first()
@@ -388,7 +388,7 @@ async def test_delete_used_invite_code(
     assert response.status_code == 204
 
     # Проверяем что код удалён
-    from app.models.invites import Invite
+    from app.domain.models.invite import Invite
 
     result = await db_session.scalars(select(Invite).where(Invite.code == test_invite.code))
     deleted_invite = result.first()
@@ -454,8 +454,8 @@ async def test_cannot_use_other_users_invite(
     # Создаём второго пользователя
     from datetime import UTC, datetime
 
-    from app.auth import hash_password
-    from app.models.users import User
+    from app.domain.models.user import User
+    from app.infrastructure.security import hash_password
 
     user2 = User(
         id=uuid.uuid4(),

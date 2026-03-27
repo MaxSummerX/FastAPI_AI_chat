@@ -19,10 +19,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enum.experience import Experience
-from app.models.user_vacancies import UserVacancies
-from app.models.users import User as UserModel
-from app.models.vacancies import Vacancy as VacancyModel
+from app.domain.enums.experience import Experience
+from app.domain.models.user import User as UserModel
+from app.domain.models.user_vacancies import UserVacancies
+from app.domain.models.vacancy import Vacancy as VacancyModel
 
 
 # ============================================================
@@ -175,14 +175,14 @@ async def test_get_vacancies_filter_by_tier(
     response = await client.get(
         "/api/v2/vacancies",
         headers=auth_headers,
-        params={"tier": Experience.tier_0.value},
+        params={"tier": Experience.NO_EXPERIENCE.value},
     )
     assert response.status_code == 200
 
     data = response.json()
     # Все вакансии должны иметь указанный уровень опыта
     for item in data["items"]:
-        assert item["experience_id"] == Experience.tier_0.value
+        assert item["experience_id"] == Experience.NO_EXPERIENCE.value
 
 
 @pytest.mark.asyncio
@@ -196,8 +196,8 @@ async def test_get_vacancies_filter_by_multiple_tiers(
         headers=auth_headers,
         params={
             "tier": [
-                Experience.tier_0.value,
-                Experience.tier_1.value,
+                Experience.NO_EXPERIENCE.value,
+                Experience.BETWEEN_1_AND_3.value,
             ]
         },
     )
@@ -206,7 +206,7 @@ async def test_get_vacancies_filter_by_multiple_tiers(
     data = response.json()
     # Все вакансии должны иметь один из указанных уровней опыта
     for item in data["items"]:
-        assert item["experience_id"] in [Experience.tier_0.value, Experience.tier_1.value]
+        assert item["experience_id"] in [Experience.NO_EXPERIENCE.value, Experience.BETWEEN_1_AND_3.value]
 
 
 # ============================================================
@@ -251,7 +251,7 @@ async def test_get_vacancy_by_id_inactive(
 ) -> None:
     """Тест: попытка получить неактивную вакансию"""
     # Делаем вакансию неактивной для пользователя
-    from app.models.user_vacancies import UserVacancies
+    from app.domain.models.user_vacancies import UserVacancies
 
     user_vacancy = await db_session.execute(
         select(UserVacancies).where(
@@ -281,7 +281,7 @@ async def test_get_vacancy_by_hh_id_from_db(
 ) -> None:
     """Тест: добавление вакансии по hh_id из БД к пользователю"""
     # First, remove the existing UserVacancy link so we can test adding it back
-    from app.models.user_vacancies import UserVacancies
+    from app.domain.models.user_vacancies import UserVacancies
 
     result = await db_session.scalars(
         select(UserVacancies).where(
@@ -316,7 +316,7 @@ async def test_get_vacancy_by_hh_id_with_import(
     """Тест: импорт вакансии с hh.ru при отсутствии в БД (POST request)"""
     from datetime import UTC, datetime
 
-    from app.models.vacancies import Vacancy
+    from app.domain.models.vacancy import Vacancy
 
     hh_id = "99999999"
 

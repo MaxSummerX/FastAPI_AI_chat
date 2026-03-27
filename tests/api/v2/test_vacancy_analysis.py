@@ -15,10 +15,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enum.analysis import AnalysisType
-from app.models.users import User as UserModel
-from app.models.vacancies import Vacancy as VacancyModel
-from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
+from app.domain.enums.analysis import AnalysisType
+from app.domain.models.user import User as UserModel
+from app.domain.models.vacancy import Vacancy as VacancyModel
+from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 
 
 # ============================================================
@@ -80,7 +80,7 @@ async def test_get_all_analyses_inactive_vacancy(
     db_session: AsyncSession,
 ) -> None:
     """Тест: попытка получить анализы для неактивной вакансии"""
-    from app.models.user_vacancies import UserVacancies
+    from app.domain.models.user_vacancies import UserVacancies
 
     user_vacancy = await db_session.execute(
         select(UserVacancies).where(UserVacancies.user_id == test_user.id, UserVacancies.vacancy_id == test_vacancy.id)
@@ -126,7 +126,7 @@ async def test_get_all_analyses_structure(
 async def test_get_all_analyses_unique_types(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analyses: list[VacancyAnalysisModel]
 ) -> None:
-    """Тест: проверка что analyses_types содержат только уникальные типы"""
+    """Тест: проверка, что analyses_types содержат только уникальные типы"""
     vacancy_id = test_vacancy_analyses[0].vacancy_id
     response = await client.get(f"/api/v2/vacancies/{vacancy_id}/analyses", headers=auth_headers)
     assert response.status_code == 200
@@ -343,7 +343,7 @@ async def test_get_available_types_content(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_available_types_all_types_present(client: AsyncClient) -> None:
-    """Тест: проверка что все типы из enum присутствуют в ответе"""
+    """Тест: проверка, что все типы из enum присутствуют в ответе"""
     response = await client.get("/api/v2/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
     assert response.status_code == 200
 

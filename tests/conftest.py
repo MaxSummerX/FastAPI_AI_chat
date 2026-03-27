@@ -18,17 +18,17 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
+from app.domain.models import Conversation as ConversationModel
+from app.domain.models import Document as DocumentModel
+from app.domain.models import Fact as FactModel
+from app.domain.models import Invite as InviteModel
+from app.domain.models import Message as MessageModel
+from app.domain.models import Prompts as PromptModel
+from app.domain.models import User as UserModel
+from app.domain.models import Vacancy as VacancyModel
+from app.domain.models import VacancyAnalysis as VacancyAnalysisModel
+from app.domain.models.base_model import Base
 from app.main import app
-from app.models import Conversation as ConversationModel
-from app.models import Fact as FactModel
-from app.models import Invite as InviteModel
-from app.models import Message as MessageModel
-from app.models import Vacancy as VacancyModel
-from app.models.base_model import Base
-from app.models.documents import Document as DocumentModel
-from app.models.prompts import Prompts as PromptModel
-from app.models.users import User as UserModel
-from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 
 
 TEST_DATABASE_URL = os.getenv(
@@ -109,8 +109,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     """
     from unittest.mock import AsyncMock
 
-    from app.depends.db_depends import get_async_postgres_db
     from app.depends.mem0_depends import get_memory
+    from app.infrastructure.database.dependencies import get_db
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
@@ -127,7 +127,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
         return mock_memory_instance
 
     # Подменяем зависимости
-    app.dependency_overrides[get_async_postgres_db] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_memory] = override_get_memory
 
     # Создаём клиент с ASGI транспортом (без lifespan - он создаёт реальное соединение)
@@ -149,7 +149,7 @@ async def test_user(db_session: AsyncSession) -> UserModel:
     Returns:
         UserModel: Созданный пользователь с хешем пароля 'TestPassword123!' и резюме
     """
-    from app.auth import hash_password
+    from app.infrastructure.security import hash_password
 
     user = UserModel(
         username="testuser",
@@ -196,8 +196,9 @@ async def admin_user(db_session: AsyncSession) -> UserModel:
     """
     Создаёт пользователя-администратора для тестов.
     """
-    from app.auth import hash_password
-    from app.enum.roles import UserRole
+
+    from app.domain.enums.role import UserRole
+    from app.infrastructure.security import hash_password
 
     user = UserModel(
         username="admin",
@@ -344,7 +345,7 @@ async def test_fact(db_session: AsyncSession, test_user: UserModel) -> FactModel
     """Создаёт тестовый факт."""
     import uuid
 
-    from app.models.facts import FactCategory, FactSource
+    from app.domain.models.fact import FactCategory, FactSource
 
     fact = FactModel(
         id=uuid.uuid4(),
@@ -369,7 +370,7 @@ async def test_facts(db_session: AsyncSession, test_user: UserModel) -> list[Fac
     import uuid
     from asyncio import sleep
 
-    from app.models.facts import FactCategory, FactSource
+    from app.domain.models.fact import FactCategory, FactSource
 
     facts = []
     categories = list(FactCategory)
@@ -409,7 +410,7 @@ async def test_prompt(db_session: AsyncSession, test_user: UserModel) -> PromptM
     import uuid
     from datetime import UTC, datetime
 
-    from app.models.prompts import Prompts
+    from app.domain.models.prompt import Prompts
 
     prompt = Prompts(
         id=uuid.uuid4(),
@@ -434,7 +435,7 @@ async def test_prompts(db_session: AsyncSession, test_user: UserModel) -> list[P
     from asyncio import sleep
     from datetime import UTC, datetime
 
-    from app.models.prompts import Prompts
+    from app.domain.models.prompt import Prompts
 
     prompts = []
 
@@ -451,7 +452,7 @@ async def test_prompts(db_session: AsyncSession, test_user: UserModel) -> list[P
         )
         prompts.append(prompt)
         db_session.add(prompt)
-        await db_session.flush()  # Флаш чтобы получить ID и зафиксировать timestamp
+        await db_session.flush()  # Flush чтобы получить ID и зафиксировать timestamp
         # Небольшая задержка для разницы во времени
         await sleep(0.001)
 
@@ -495,14 +496,14 @@ async def client_with_mocked_background(db_session: AsyncSession) -> AsyncGenera
     """
     from unittest.mock import patch
 
-    from app.depends.db_depends import get_async_postgres_db
+    from app.infrastructure.database.dependencies import get_db
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
         yield db_session
 
     # Подменяем зависимости
-    app.dependency_overrides[get_async_postgres_db] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
 
     # Создаём клиент с ASGI транспортом и замоканными background функциями
     with (
@@ -529,14 +530,14 @@ async def client_with_mocked_import(db_session: AsyncSession) -> AsyncGenerator[
     from dataclasses import dataclass
     from unittest.mock import Mock, patch
 
-    from app.depends.db_depends import get_async_postgres_db
+    from app.infrastructure.database.dependencies import get_db
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
         yield db_session
 
     # Подменяем зависимости
-    app.dependency_overrides[get_async_postgres_db] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
 
     # Мок для Celery Task result
     @dataclass
@@ -605,14 +606,14 @@ async def client_with_mocked_llm(db_session: AsyncSession) -> AsyncGenerator[Asy
     """
     from unittest.mock import patch
 
-    from app.depends.db_depends import get_async_postgres_db
+    from app.infrastructure.database.dependencies import get_db
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
         yield db_session
 
     # Подменяем зависимости
-    app.dependency_overrides[get_async_postgres_db] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
 
     # Создаём асинхронный мок для analyze_vacancy_from_db
     async def mock_analyze(*args: object, **kwargs: object) -> tuple[str, str]:
@@ -667,9 +668,9 @@ async def test_vacancy(db_session: AsyncSession, test_user: UserModel) -> Vacanc
     import uuid
     from datetime import UTC, datetime
 
-    from app.enum.experience import Experience
-    from app.models.user_vacancies import UserVacancies
-    from app.models.vacancies import Vacancy
+    from app.domain.enums.experience import Experience
+    from app.domain.models.user_vacancies import UserVacancies
+    from app.domain.models.vacancy import Vacancy
 
     vacancy = Vacancy(
         id=uuid.uuid4(),
@@ -681,7 +682,7 @@ async def test_vacancy(db_session: AsyncSession, test_user: UserModel) -> Vacanc
         salary_to=150000,
         salary_currency="RUR",
         salary_gross=True,
-        experience_id=Experience.tier_1.value,
+        experience_id=Experience.NO_EXPERIENCE.value,
         area_id="1",
         area_name="Москва",
         schedule_id="fullDay",
@@ -718,9 +719,9 @@ async def test_vacancies(db_session: AsyncSession, test_user: UserModel) -> list
     from asyncio import sleep
     from datetime import UTC, datetime, timedelta
 
-    from app.enum.experience import Experience
-    from app.models.user_vacancies import UserVacancies
-    from app.models.vacancies import Vacancy
+    from app.domain.enums.experience import Experience
+    from app.domain.models.user_vacancies import UserVacancies
+    from app.domain.models.vacancy import Vacancy
 
     vacancies = []
     experiences = list(Experience)
@@ -787,8 +788,8 @@ async def test_vacancy_analysis(
     import uuid
     from datetime import UTC, datetime
 
-    from app.enum.analysis import AnalysisType
-    from app.models.vacancy_analysis import VacancyAnalysis
+    from app.domain.enums.analysis import AnalysisType
+    from app.domain.models.vacancy_analysis import VacancyAnalysis
 
     analysis = VacancyAnalysis(
         id=uuid.uuid4(),
@@ -821,8 +822,8 @@ async def test_vacancy_analyses(
     from asyncio import sleep
     from datetime import UTC, datetime
 
-    from app.enum.analysis import AnalysisType
-    from app.models.vacancy_analysis import VacancyAnalysis
+    from app.domain.enums.analysis import AnalysisType
+    from app.domain.models.vacancy_analysis import VacancyAnalysis
 
     analyses = []
     # Создаём анализы разных типов
@@ -908,15 +909,15 @@ async def client_with_mocked_memory_sync(
     Создаёт HTTP клиент с замоканным mem0ai и синхронными background tasks.
 
     Подменяет:
-    - AsyncMemory чтобы избежать реальных запросов к Qdrant/Neo4j
-    - BackgroundTasks чтобы выполнять задачи синхронно в тестах
+    - AsyncMemory, чтобы избежать реальных запросов к Qdrant/Neo4j
+    - BackgroundTasks, чтобы выполнять задачи синхронно в тестах
 
     Позволяет тестам проверять результаты создания/обновления фактов сразу.
     """
     from unittest.mock import AsyncMock, patch
 
-    from app.api.v2 import fact as fact_module
-    from app.depends.db_depends import get_async_postgres_db
+    from app.infrastructure.database.dependencies import get_db
+    from app.presentation.routers.v2 import fact as fact_module
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
@@ -933,7 +934,7 @@ async def client_with_mocked_memory_sync(
         return mock_memory_instance
 
     # Подменяем зависимости
-    app.dependency_overrides[get_async_postgres_db] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
     from app.depends.mem0_depends import get_memory
 
     app.dependency_overrides[get_memory] = override_get_memory
@@ -1011,7 +1012,7 @@ async def test_invite(db_session: AsyncSession) -> InviteModel:
     import uuid
     from datetime import UTC, datetime
 
-    from app.models.invites import Invite
+    from app.domain.models.invite import Invite
 
     invite = Invite(
         id=uuid.uuid4(),
@@ -1034,7 +1035,7 @@ async def test_invites(db_session: AsyncSession, test_user: UserModel, admin_use
     import uuid
     from datetime import UTC, datetime, timedelta
 
-    from app.models.invites import Invite
+    from app.domain.models.invite import Invite
 
     invites = []
 
@@ -1069,7 +1070,7 @@ async def test_invites(db_session: AsyncSession, test_user: UserModel, admin_use
 @pytest_asyncio.fixture(scope="function")
 async def test_document(db_session: AsyncSession, test_user: UserModel) -> DocumentModel:
     """Создаёт тестовый документ."""
-    from app.enum.documents import DocumentCategory
+    from app.domain.enums.document import DocumentCategory
 
     document = DocumentModel(
         user_id=test_user.id,
@@ -1090,7 +1091,7 @@ async def test_documents(db_session: AsyncSession, test_user: UserModel) -> list
     """Создаёт несколько тестовых документов для пагинации."""
     from asyncio import sleep
 
-    from app.enum.documents import DocumentCategory
+    from app.domain.enums.document import DocumentCategory
 
     documents = []
     categories = list(DocumentCategory)

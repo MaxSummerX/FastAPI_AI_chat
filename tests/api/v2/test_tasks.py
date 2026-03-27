@@ -10,7 +10,7 @@
 import pytest
 from httpx import AsyncClient
 
-from app.enum.experience import Experience
+from app.domain.enums.experience import Experience
 
 
 # ============================================================
@@ -47,7 +47,7 @@ async def test_import_vacancies_with_tiers(
         headers=auth_headers_import,
         params={
             "query": "django developer",
-            "tiers": [Experience.tier_1.value, Experience.tier_2.value],
+            "tiers": [Experience.NO_EXPERIENCE.value, Experience.BETWEEN_1_AND_3.value],
         },
     )
 

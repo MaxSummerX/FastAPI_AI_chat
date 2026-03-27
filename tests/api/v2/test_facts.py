@@ -12,7 +12,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Fact as FactModel
+from app.domain.models.fact import Fact as FactModel
 
 
 # ============================================================

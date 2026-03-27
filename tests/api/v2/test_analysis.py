@@ -14,7 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
+from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 
 
 # ============================================================
@@ -88,7 +88,7 @@ async def test_get_analysis_response_structure(
 async def test_get_analysis_all_fields(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
-    """Тест: проверка что все поля корректно возвращаются"""
+    """Тест: проверка, что все поля корректно возвращаются"""
     response = await client.get(f"/api/v2/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
     assert response.status_code == 200
 
@@ -125,7 +125,7 @@ async def test_delete_analysis_success(
     assert response.status_code == 204
 
     # Проверяем что анализ действительно удалён
-    from app.models.vacancy_analysis import VacancyAnalysis
+    from app.domain.models.vacancy_analysis import VacancyAnalysis
 
     result = await db_session.scalars(select(VacancyAnalysis).where(VacancyAnalysis.id == analysis_id))
     analysis = result.first()
@@ -217,7 +217,7 @@ async def test_different_analysis_types(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analyses: list[VacancyAnalysisModel]
 ) -> None:
     """Тест: получение анализов разных типов"""
-    from app.enum.analysis import AnalysisType
+    from app.domain.enums.analysis import AnalysisType
 
     for analysis in test_vacancy_analyses:
         response = await client.get(f"/api/v2/analyses/{analysis.id}", headers=auth_headers)
