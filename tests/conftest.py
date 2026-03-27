@@ -178,7 +178,7 @@ async def auth_headers(client: AsyncClient, test_user: UserModel) -> dict[str, s
     """
     # Логинимся и получаем токены
     response = await client.post(
-        "/api/v2/user/token",
+        "/api/v1/user/token",
         data={
             "username": "testuser",
             "password": "TestPassword123!",
@@ -222,7 +222,7 @@ async def admin_headers(client: AsyncClient, admin_user: UserModel) -> dict[str,
     Создаёт JWT токены для администратора.
     """
     response = await client.post(
-        "/api/v2/user/token",
+        "/api/v1/user/token",
         data={
             "username": "admin",
             "password": "AdminPassword123!",
@@ -584,7 +584,7 @@ async def auth_headers_import(client_with_mocked_import: AsyncClient, test_user:
     """
     # Логинимся через клиент с замоканным импортом и получаем токены
     response = await client_with_mocked_import.post(
-        "/api/v2/user/token",
+        "/api/v1/user/token",
         data={
             "username": "testuser",
             "password": "TestPassword123!",
@@ -644,7 +644,7 @@ async def auth_headers_llm(client_with_mocked_llm: AsyncClient, test_user: UserM
     """
     # Логинимся через клиент с замоканным LLM и получаем токены
     response = await client_with_mocked_llm.post(
-        "/api/v2/user/token",
+        "/api/v1/user/token",
         data={
             "username": "testuser",
             "password": "TestPassword123!",
@@ -963,7 +963,7 @@ async def auth_headers_memory_sync(
     """
     # Логинимся через клиент с замоканным memory и получаем токены
     response = await client_with_mocked_memory_sync.post(
-        "/api/v2/user/token",
+        "/api/v1/user/token",
         data={
             "username": "testuser",
             "password": "TestPassword123!",
@@ -988,7 +988,7 @@ async def admin_headers_memory_sync(
     """
     # Логинимся через клиент с замоканным memory и получаем admin токены
     response = await client_with_mocked_memory_sync.post(
-        "/api/v2/user/token",
+        "/api/v1/user/token",
         data={
             "username": "admin",
             "password": "AdminPassword123!",
