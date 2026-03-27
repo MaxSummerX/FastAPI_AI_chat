@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -174,3 +174,15 @@ class InviteSQLAlchemyRepository(IInviteRepository):
 
         await self.db.commit()
         return count
+
+    async def get_count_unused(self) -> int:
+        """
+        Получить количество неиспользованных инвайтов.
+
+        Выполняет COUNT запрос по инвайтам с is_used=False.
+
+        Returns:
+            Число неиспользованных инвайтов, 0 если таких нет
+        """
+        result = await self.db.scalar(select(func.count(Invite.id)).where(Invite.is_used.is_(False)))
+        return result if result else 0

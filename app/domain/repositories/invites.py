@@ -128,3 +128,13 @@ class IInviteRepository(ABC):
             Количество удалённых инвайтов
         """
         pass
+
+    @abstractmethod
+    async def get_count_unused(self) -> int:
+        """
+        Получить количество неиспользованных инвайтов.
+
+        Returns:
+            Число инвайтов с is_used=False
+        """
+        pass

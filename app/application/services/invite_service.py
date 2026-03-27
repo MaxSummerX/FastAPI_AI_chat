@@ -62,13 +62,14 @@ class InviteService:
         """
         logger.info("Запрос на получение инвайт-кодов от администратора {}", admin_id)
         invites = await self.invite_repo.get_available_invites(skip, limit)
+        unused_invite = await self.invite_repo.get_count_unused()
 
         codes = [
             InviteCodeResponse(id=invite.id, code=invite.code, is_used=invite.is_used, created_at=invite.created_at)
             for invite in invites
         ]
 
-        return InviteListResponse(codes=codes, count=len(codes))
+        return InviteListResponse(codes=codes, count=unused_invite)
 
     async def delete_all_unused(self, admin_id: UUID) -> InviteDeleteResponse:
         """
