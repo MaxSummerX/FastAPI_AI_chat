@@ -1,12 +1,12 @@
 """
-Тесты для invite endpoints API admin.
+Тесты для invite endpoints admin API (presentation слой).
 
-Покрывает все основные сценарии:
-- Генерация инвайт-кодов (admin only)
-- Получение списка неиспользованных кодов (admin only)
-- Проверка кода (требует авторизации)
-- Использование кода
-- Удаление кода (admin only)
+Эндпоинты (все требуют роль ADMIN):
+- POST   /api/admin/invites         — генерация инвайт-кодов
+- GET    /api/admin/invites/unused   — список неиспользованных кодов с пагинацией
+- DELETE /api/admin/invites/unused   — удаление всех неиспользованных кодов
+
+Архитектура: Presentation (router) → Application (InviteService) → Domain (IInviteRepository) → Infrastructure (InviteSQLAlchemyRepository)
 """
 
 import uuid
@@ -55,7 +55,8 @@ async def test_generate_invite_codes_success(
     # Проверяем что коды сохранены в БД
     from app.domain.models.invite import Invite
 
-    result = await db_session.scalars(select(Invite).where(Invite.code.in_(data["codes"])))
+    codes_list = [item["code"] for item in data["codes"]]
+    result = await db_session.scalars(select(Invite).where(Invite.code.in_(codes_list)))
     invites = result.all()
     assert len(invites) == 3
 
@@ -102,7 +103,7 @@ async def test_generate_invite_codes_unique(client: AsyncClient, admin_headers: 
 
     data = response.json()
     codes = data["codes"]
-    assert len(codes) == len(set(codes))  # Все коды уникальны
+    assert len(codes) == len({item["code"] for item in data["codes"]})
 
 
 # ============================================================
@@ -148,7 +149,6 @@ async def test_get_unused_invites_empty(
 
     from app.domain.models.invite import Invite
 
-    # Создаём использованный код
     invite = Invite(
         id=uuid.uuid4(),
         code="used_code",
@@ -185,155 +185,21 @@ async def test_get_unused_invites_structure(client: AsyncClient, admin_headers: 
 
 
 # ============================================================
-# GET /invites/{code} - проверка кода
+# DELETE /invites/unused - удаление всех неиспользованных кодов
 # ============================================================
 
 
 @pytest.mark.asyncio
-async def test_check_invite_code_unauthorized(client: AsyncClient, test_invite: InviteModel) -> None:
-    """Тест: проверка кода без авторизации"""
-    response = await client.get(f"/api/admin/invites/{test_invite.code}")
+async def test_delete_invite_code_unauthorized(client: AsyncClient) -> None:
+    """Тест: удаление кодов без авторизации"""
+    response = await client.delete("/api/admin/invites/unused")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_check_invite_code_success(
-    client: AsyncClient, auth_headers: dict[str, str], test_invite: InviteModel
-) -> None:
-    """Тест: успешная проверка кода"""
-    response = await client.get(f"/api/admin/invites/{test_invite.code}", headers=auth_headers)
-    assert response.status_code == 200
-
-    data = response.json()
-    assert "id" in data
-    assert data["code"] == test_invite.code
-    assert data["is_used"] is False
-
-
-@pytest.mark.asyncio
-async def test_check_invite_code_used(
-    client: AsyncClient, auth_headers: dict[str, str], db_session: AsyncSession, test_invite: InviteModel
-) -> None:
-    """Тест: проверка использованного кода"""
-    from datetime import UTC, datetime
-
-    test_invite.is_used = True
-    test_invite.used_by_user_id = uuid.uuid4()
-    test_invite.used_at = datetime.now(UTC)
-    await db_session.commit()
-    await db_session.refresh(test_invite)
-
-    response = await client.get(f"/api/admin/invites/{test_invite.code}", headers=auth_headers)
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["is_used"] is True
-
-
-@pytest.mark.asyncio
-async def test_check_invite_code_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
-    """Тест: проверка несуществующего кода"""
-    response = await client.get("/api/admin/invites/nonexistent_code", headers=auth_headers)
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_check_invite_code_case_sensitive(
-    client: AsyncClient, auth_headers: dict[str, str], test_invite: InviteModel
-) -> None:
-    """Тест: проверка чувствительности к регистру"""
-    # Код в другом регистре не должен найтись
-    response = await client.get(f"/api/admin/invites/{test_invite.code.upper()}", headers=auth_headers)
-    assert response.status_code == 404
-
-
-# ============================================================
-# POST /invites/{code}/use - использование кода
-# ============================================================
-
-
-@pytest.mark.asyncio
-async def test_use_invite_code_unauthorized(client: AsyncClient, test_invite: InviteModel) -> None:
-    """Тест: использование кода без авторизации"""
-    response = await client.post(f"/api/admin/invites/{test_invite.code}/use")
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_use_invite_code_success(
-    client: AsyncClient, auth_headers: dict[str, str], db_session: AsyncSession, test_invite: InviteModel
-) -> None:
-    """Тест: успешное использование кода"""
-    response = await client.post(f"/api/admin/invites/{test_invite.code}/use", headers=auth_headers)
-    assert response.status_code == 200
-
-    data = response.json()
-    assert "message" in data
-    assert "code" in data
-    assert data["code"] == test_invite.code
-
-    # Проверяем что код помечен как использованный
-    await db_session.refresh(test_invite)
-    assert test_invite.is_used is True
-    assert test_invite.used_by_user_id is not None
-    assert test_invite.used_at is not None
-
-
-@pytest.mark.asyncio
-async def test_use_invite_code_already_used(
-    client: AsyncClient, auth_headers: dict[str, str], db_session: AsyncSession, test_invite: InviteModel
-) -> None:
-    """Тест: попытка использовать уже использованный код"""
-    from datetime import UTC, datetime
-
-    test_invite.is_used = True
-    test_invite.used_by_user_id = uuid.uuid4()
-    test_invite.used_at = datetime.now(UTC)
-    await db_session.commit()
-
-    response = await client.post(f"/api/admin/invites/{test_invite.code}/use", headers=auth_headers)
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_use_invite_code_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
-    """Тест: использование несуществующего кода"""
-    response = await client.post("/api/admin/invites/nonexistent_code/use", headers=auth_headers)
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_use_invite_code_idempotent(
-    client: AsyncClient, auth_headers: dict[str, str], test_invite: InviteModel
-) -> None:
-    """Тест: повторное использование того же кода тем же пользователем"""
-    # Первое использование
-    response1 = await client.post(f"/api/admin/invites/{test_invite.code}/use", headers=auth_headers)
-    assert response1.status_code == 200
-
-    # Второе использование - должно вернуть 404 (уже использован)
-    response2 = await client.post(f"/api/admin/invites/{test_invite.code}/use", headers=auth_headers)
-    assert response2.status_code == 404
-
-
-# ============================================================
-# DELETE /invites/{code} - удаление кода
-# ============================================================
-
-
-@pytest.mark.asyncio
-async def test_delete_invite_code_unauthorized(client: AsyncClient, test_invite: InviteModel) -> None:
-    """Тест: удаление кода без авторизации"""
-    response = await client.delete(f"/api/admin/invites/{test_invite.code}")
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_delete_invite_code_forbidden(
-    client: AsyncClient, auth_headers: dict[str, str], test_invite: InviteModel
-) -> None:
-    """Тест: удаление кода обычным пользователем (должно быть запрещено)"""
-    response = await client.delete(f"/api/admin/invites/{test_invite.code}", headers=auth_headers)
+async def test_delete_invite_code_forbidden(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+    """Тест: удаление кодов обычным пользователем (должно быть запрещено)"""
+    response = await client.delete("/api/admin/invites/unused", headers=auth_headers)
     assert response.status_code == 403
 
 
@@ -344,8 +210,8 @@ async def test_delete_invite_code_success(
     """Тест: успешное удаление кода"""
     code = test_invite.code
 
-    response = await client.delete(f"/api/admin/invites/{code}", headers=admin_headers)
-    assert response.status_code == 204
+    response = await client.delete("/api/admin/invites/unused", headers=admin_headers)
+    assert response.status_code == 200
 
     # Проверяем что код удалён из БД
     from app.domain.models.invite import Invite
@@ -355,126 +221,81 @@ async def test_delete_invite_code_success(
     assert invite is None
 
 
-@pytest.mark.asyncio
-async def test_delete_invite_code_not_found(client: AsyncClient, admin_headers: dict[str, str]) -> None:
-    """Тест: удаление несуществующего кода"""
-    response = await client.delete("/api/admin/invites/nonexistent_code", headers=admin_headers)
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_delete_invite_code_returns_no_content(
-    client: AsyncClient, admin_headers: dict[str, str], test_invite: InviteModel
-) -> None:
-    """Тест: удаление возвращает 204 No Content без тела ответа"""
-    response = await client.delete(f"/api/admin/invites/{test_invite.code}", headers=admin_headers)
-    assert response.status_code == 204
-    assert response.content == b""
-
-
-@pytest.mark.asyncio
-async def test_delete_used_invite_code(
-    client: AsyncClient, admin_headers: dict[str, str], db_session: AsyncSession, test_invite: InviteModel
-) -> None:
-    """Тест: удаление использованного кода"""
-    from datetime import UTC, datetime
-
-    test_invite.is_used = True
-    test_invite.used_by_user_id = uuid.uuid4()
-    test_invite.used_at = datetime.now(UTC)
-    await db_session.commit()
-
-    response = await client.delete(f"/api/admin/invites/{test_invite.code}", headers=admin_headers)
-    assert response.status_code == 204
-
-    # Проверяем что код удалён
-    from app.domain.models.invite import Invite
-
-    result = await db_session.scalars(select(Invite).where(Invite.code == test_invite.code))
-    deleted_invite = result.first()
-    assert deleted_invite is None
-
-
 # ============================================================
-# Интеграционные тесты
+# Пагинация и интеграционные тесты
 # ============================================================
 
 
 @pytest.mark.asyncio
-async def test_full_invite_workflow(
-    client: AsyncClient, admin_headers: dict[str, str], auth_headers: dict[str, str]
-) -> None:
-    """Тест: полный цикл работы с инвайт-кодом"""
-    # 1. Генерация кода (admin)
-    gen_response = await client.post("/api/admin/invites?count=1", headers=admin_headers)
-    assert gen_response.status_code == 201
-    code = gen_response.json()["codes"][0]
+async def test_unused_pagination(client: AsyncClient, admin_headers: dict[str, str]) -> None:
+    """Тест: проверка пагинации списка"""
 
-    # 2. Проверка, что код в списке неиспользованных
-    unused_response = await client.get("/api/admin/invites/unused", headers=admin_headers)
-    assert unused_response.status_code == 200
-    codes = [item["code"] for item in unused_response.json()["codes"]]
-    assert code in codes
+    # Генерируем больше чем лимит
+    response = await client.post("/api/admin/invites?count=10", headers=admin_headers)
+    assert response.status_code == 201
+    codes_batch_1 = [item["code"] for item in response.json()["codes"]]
+    assert len(codes_batch_1) == 10
 
-    # 3. Проверка кода (требует авторизации)
-    check_response = await client.get(f"/api/admin/invites/{code}", headers=auth_headers)
-    assert check_response.status_code == 200
-    assert check_response.json()["is_used"] is False
+    response = await client.post("/api/admin/invites?count=10", headers=admin_headers)
+    assert response.status_code == 201
+    codes_batch_2 = [item["code"] for item in response.json()["codes"]]
+    assert len(codes_batch_2) == 10
 
-    # 4. Использование кода
-    use_response = await client.post(f"/api/admin/invites/{code}/use", headers=auth_headers)
-    assert use_response.status_code == 200
-    assert "message" in use_response.json()
+    all_codes = codes_batch_1 + codes_batch_2
+    assert len(all_codes) == 20
+    assert len(set(all_codes)) == 20
 
-    # 5. Проверка, что код теперь использован
-    check_response2 = await client.get(f"/api/admin/invites/{code}", headers=auth_headers)
-    assert check_response2.status_code == 200
-    assert check_response2.json()["is_used"] is True
+    # Получаем первую страницу
+    response = await client.get("/api/admin/invites/unused?skip=0&limit=10", headers=admin_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["codes"]) == 10
+    assert data["count"] == 20
 
-    # 6. Проверка, что код не в списке неиспользованных
-    unused_response2 = await client.get("/api/admin/invites/unused", headers=admin_headers)
-    assert unused_response2.status_code == 200
-    codes2 = [item["code"] for item in unused_response2.json()["codes"]]
-    assert code not in codes2
+    # Получаем вторую страницу
+    response = await client.get("/api/admin/invites/unused?skip=10&limit=10", headers=admin_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["codes"]) == 10
+
+    # Получаем третью страницу (пустая)
+    response = await client.get("/api/admin/invites/unused?skip=20&limit=10", headers=admin_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["codes"]) == 0
 
 
 @pytest.mark.asyncio
-async def test_cannot_use_other_users_invite(
-    client: AsyncClient, admin_headers: dict[str, str], auth_headers: dict[str, str], db_session: AsyncSession
-) -> None:
-    """Тест: нельзя использовать код уже использованный другим пользователем"""
-    # Генерируем код
-    gen_response = await client.post("/api/admin/invites?count=1", headers=admin_headers)
-    code = gen_response.json()["codes"][0]
+async def test_full_invite_workflow(client: AsyncClient, admin_headers: dict[str, str]) -> None:
+    """Тест: генерация → проверка в списке → удаление"""
 
-    # Первый пользователь использует код
-    use_response1 = await client.post(f"/api/admin/invites/{code}/use", headers=auth_headers)
-    assert use_response1.status_code == 200
+    # 1. Генерируем коды
+    response = await client.post("/api/admin/invites?count=5", headers=admin_headers)
+    assert response.status_code == 201
+    codes = [item["code"] for item in response.json()["codes"]]
+    assert len(codes) == 5
 
-    # Создаём второго пользователя
-    from datetime import UTC, datetime
+    # 2. Проверяем что коды в списке неиспользованных
+    response = await client.get("/api/admin/invites/unused", headers=admin_headers)
+    assert response.status_code == 200
+    unused_codes = [item["code"] for item in response.json()["codes"]]
+    assert all(code in unused_codes for code in codes)
 
-    from app.domain.models.user import User
-    from app.infrastructure.security import hash_password
+    # 3. Удаляем все неиспользованные
+    response = await client.delete("/api/admin/invites/unused", headers=admin_headers)
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] >= 5
 
-    user2 = User(
-        id=uuid.uuid4(),
-        username="user2",
-        email="user2@example.com",
-        password_hash=hash_password("password123"),
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-    db_session.add(user2)
-    await db_session.commit()
+    # 4. Проверяем что список пуст
+    response = await client.get("/api/admin/invites/unused", headers=admin_headers)
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
 
-    # Логиним второго пользователя
-    token_response = await client.post(
-        "/api/v2/user/token",
-        data={"username": "user2", "password": "password123"},
-    )
-    user2_headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
 
-    # Второй пользователь пытается использовать тот же код
-    use_response2 = await client.post(f"/api/admin/invites/{code}/use", headers=user2_headers)
-    assert use_response2.status_code == 404
+@pytest.mark.asyncio
+async def test_delete_unused_when_empty(client: AsyncClient, admin_headers: dict[str, str]) -> None:
+    """Тест: удаление когда нет неиспользованных кодов"""
+
+    response = await client.delete("/api/admin/invites/unused", headers=admin_headers)
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 0

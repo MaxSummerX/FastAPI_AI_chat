@@ -253,12 +253,12 @@ async def test_get_vacancy_by_id_inactive(
     # Делаем вакансию неактивной для пользователя
     from app.domain.models.user_vacancies import UserVacancies
 
-    user_vacancy = await db_session.execute(
+    result = await db_session.execute(
         select(UserVacancies).where(
             UserVacancies.user_id == auth_headers["_user_id"], UserVacancies.vacancy_id == test_vacancy.id
         )
     )
-    user_vacancy = user_vacancy.scalar_one()
+    user_vacancy = result.scalar_one()
     user_vacancy.is_active = False
     await db_session.commit()
 
@@ -391,10 +391,10 @@ async def test_delete_vacancy_success(
     assert response.status_code == 204
 
     # Проверяем, что вакансия помечена как неактивная через UserVacancies
-    user_vacancy = await db_session.execute(
+    result = await db_session.execute(
         select(UserVacancies).where(UserVacancies.user_id == test_user.id, UserVacancies.vacancy_id == test_vacancy.id)
     )
-    user_vacancy = user_vacancy.scalar_one()
+    user_vacancy = result.scalar_one()
     assert user_vacancy.is_active is False
 
 

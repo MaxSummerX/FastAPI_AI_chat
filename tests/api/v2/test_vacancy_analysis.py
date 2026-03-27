@@ -82,10 +82,10 @@ async def test_get_all_analyses_inactive_vacancy(
     """Тест: попытка получить анализы для неактивной вакансии"""
     from app.domain.models.user_vacancies import UserVacancies
 
-    user_vacancy = await db_session.execute(
+    result = await db_session.execute(
         select(UserVacancies).where(UserVacancies.user_id == test_user.id, UserVacancies.vacancy_id == test_vacancy.id)
     )
-    user_vacancy = user_vacancy.scalar_one()
+    user_vacancy = result.scalar_one()
     user_vacancy.is_active = False
     await db_session.commit()
 
