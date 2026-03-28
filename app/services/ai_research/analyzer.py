@@ -4,17 +4,15 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.exceptions.analysis import InvalidAnalysisTypeError
+from app.application.exceptions.llm import LLMGenerationError
+from app.application.exceptions.vacancy import VacancyNotFoundError
 from app.domain.enums.analysis import AnalysisType
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
-from app.exceptions.exceptions import (
-    InvalidAnalysisTypeError,
-    LLMGenerationError,
-    VacancyNotFoundError,
-)
 from app.llms.openai import AsyncOpenAILLM
 from app.services.ai_research.llm import _call_llm_with_retry
-from app.services.ai_research.prompts import prompt_choice
+from app.services.ai_research.utils import prompt_choice
 
 
 async def analyze_vacancy(

@@ -11,7 +11,7 @@ AI-анализ вакансий через LLM.
 
 from app.services.ai_research.analyzer import analyze_vacancy_from_db
 from app.services.ai_research.parallel import ai_response_gather
-from app.services.ai_research.prompts import prompt_choice
+from app.services.ai_research.utils import prompt_choice
 
 
 __all__ = [

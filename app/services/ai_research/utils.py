@@ -1,11 +1,11 @@
-from app.domain.enums.analysis import AnalysisType
-from app.exceptions.exceptions import InvalidAnalysisTypeError
-from app.prompts.prompts_for_analysis import (
+from app.application.exceptions.analysis import InvalidAnalysisTypeError
+from app.application.prompts.analysis import (
     MATCHING_PROMPT,
     PREPARATION_PROMPT,
     PRIORITIZATION_PROMPT,
     SKILL_GAP_PROMPT,
 )
+from app.domain.enums.analysis import AnalysisType
 
 
 def prompt_choice(analysis_type: AnalysisType) -> tuple[str, bool]:

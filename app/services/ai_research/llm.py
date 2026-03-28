@@ -3,7 +3,7 @@ from typing import Any
 from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from app.exceptions.exceptions import LLMGenerationError
+from app.application.exceptions.llm import LLMGenerationError
 from app.llms.openai import AsyncOpenAILLM
 
 

@@ -3,9 +3,9 @@ from typing import Any
 
 from loguru import logger
 
-from app.exceptions.exceptions import LLMGenerationError
+from app.application.exceptions.llm import LLMGenerationError
+from app.application.prompts.analysis import PREPARATION_PROMPT
 from app.llms.openai import AsyncOpenAILLM
-from app.prompts.prompts_for_analysis import PREPARATION_PROMPT
 from app.services.ai_research.llm import _call_llm_with_retry
 
 
