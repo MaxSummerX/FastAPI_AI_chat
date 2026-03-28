@@ -136,7 +136,9 @@ async def login(
 
 
 @router.post("/refresh-token", summary="Обновить access токен")
-async def get_refresh_token(token: str, auth_service: AuthService = Depends(get_auth_service)) -> RefreshTokenResponse:
+async def get_refresh_token(
+    refresh_token: str, auth_service: AuthService = Depends(get_auth_service)
+) -> RefreshTokenResponse:
     """
     Обновляет access токен с помощью refresh токена.
 
@@ -144,7 +146,7 @@ async def get_refresh_token(token: str, auth_service: AuthService = Depends(get_
     - `401` — неверный, истёкший или неправильный тип токена
     """
     try:
-        return await auth_service.refresh_token(token)
+        return await auth_service.refresh_token(refresh_token)
 
     except (InvalidTokenException, TokenExpiredException, WrongTokenTypeException) as e:
         raise HTTPException(
