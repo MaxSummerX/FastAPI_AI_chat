@@ -230,10 +230,10 @@ async def import_from_mem0ai_to_postgres_db(
         - Пропускает факты с невалидным run_id
         - Категоризирует факты через LLM если нет категории в metadata
     """
+    from app.application.prompts.parsing_category import PARSE_CATEGORY
     from app.configs.llm_config import parse_llm_config
     from app.domain.models.message import Message as MessageModel
     from app.llms.openai import AsyncOpenAILLM
-    from app.prompts.prompts_for_parse import PARSE_CATEGORY
 
     llm = AsyncOpenAILLM(parse_llm_config)
 

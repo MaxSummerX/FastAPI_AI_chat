@@ -12,12 +12,15 @@ from mem0 import AsyncMemory
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.exceptions.conversation import ConversationNotFoundError
+from app.application.exceptions.llm import LLMGenerationError
+from app.application.exceptions.prompt import PromptNotFoundError
+from app.application.prompts.base import START_PROMPT
 from app.application.schemas.fact import FactSource
 from app.application.schemas.message import HistoryMessage
 from app.domain.models import Message as MessageModel
 from app.domain.models.conversation import Conversation as ConversationModel
 from app.domain.models.prompt import Prompts as PromptModel
-from app.exceptions.exceptions import LLMGenerationError, NotFoundError, PromptNotFoundError
 from app.llms.openai import AsyncOpenAILLM
 from app.llms.tools import (
     CREATE_DOCUMENT_TOOL,
@@ -29,7 +32,6 @@ from app.llms.tools import (
     web_fetch,
     web_search,
 )
-from app.prompts.prompts_base import START_PROMPT
 
 
 @dataclass
@@ -159,7 +161,7 @@ class MessageService:
         conversation = conversation_result.first()
 
         if not conversation:
-            raise NotFoundError(f"Conversation {conversation_id} не найден")
+            raise ConversationNotFoundError(f"Conversation {conversation_id} не найден")
 
         # Сохраняем сообщение пользователя
         user_message = MessageModel(
