@@ -314,7 +314,7 @@ async def test_update_profile_unauthorized(client: AsyncClient) -> None:
 async def test_update_email_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное обновление email"""
     response = await client.post(
-        "/api/v1/user/update-email",
+        "/api/v1/user/email",
         headers=auth_headers,
         json={
             "current_password": "TestPassword123!",
@@ -331,7 +331,7 @@ async def test_update_email_success(client: AsyncClient, auth_headers: dict[str,
 async def test_update_email_wrong_password(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление email с неверным паролем"""
     response = await client.post(
-        "/api/v1/user/update-email",
+        "/api/v1/user/email",
         headers=auth_headers,
         json={
             "current_password": "WrongPassword123!",
@@ -345,14 +345,14 @@ async def test_update_email_wrong_password(client: AsyncClient, auth_headers: di
 async def test_update_email_same_as_current(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление email на текущий"""
     response = await client.post(
-        "/api/v1/user/update-email",
+        "/api/v1/user/email",
         headers=auth_headers,
         json={
             "current_password": "TestPassword123!",
             "new_email": "test@example.com",  # Текущий email
         },
     )
-    assert response.status_code == 200
+    assert response.status_code == 400
 
 
 # ============================================================
@@ -364,7 +364,7 @@ async def test_update_email_same_as_current(client: AsyncClient, auth_headers: d
 async def test_update_password_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное обновление пароля"""
     response = await client.post(
-        "/api/v1/user/update-password",
+        "/api/v1/user/password",
         headers=auth_headers,
         json={
             "current_password": "TestPassword123!",
@@ -378,7 +378,7 @@ async def test_update_password_success(client: AsyncClient, auth_headers: dict[s
 async def test_update_password_wrong_current(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление пароля с неверным текущим паролем"""
     response = await client.post(
-        "/api/v1/user/update-password",
+        "/api/v1/user/password",
         headers=auth_headers,
         json={
             "current_password": "WrongPassword123!",
@@ -392,7 +392,7 @@ async def test_update_password_wrong_current(client: AsyncClient, auth_headers: 
 async def test_update_password_weak_new(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление на слабый пароль"""
     response = await client.post(
-        "/api/v1/user/update-password",
+        "/api/v1/user/password",
         headers=auth_headers,
         json={
             "current_password": "TestPassword123!",
@@ -411,7 +411,7 @@ async def test_update_password_weak_new(client: AsyncClient, auth_headers: dict[
 async def test_update_username_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное обновление username"""
     response = await client.post(
-        "/api/v1/user/update-username",
+        "/api/v1/user/username",
         headers=auth_headers,
         json={
             "current_password": "TestPassword123!",
@@ -428,7 +428,7 @@ async def test_update_username_success(client: AsyncClient, auth_headers: dict[s
 async def test_update_username_wrong_password(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление username с неверным паролем"""
     response = await client.post(
-        "/api/v1/user/update-username",
+        "/api/v1/user/username",
         headers=auth_headers,
         json={
             "current_password": "WrongPassword123!",
@@ -442,7 +442,7 @@ async def test_update_username_wrong_password(client: AsyncClient, auth_headers:
 async def test_update_username_short(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление username на короткий"""
     response = await client.post(
-        "/api/v1/user/update-username",
+        "/api/v1/user/username",
         headers=auth_headers,
         json={
             "current_password": "TestPassword123!",
@@ -459,7 +459,7 @@ async def test_update_username_short(client: AsyncClient, auth_headers: dict[str
 
 @pytest.mark.asyncio
 async def test_register_with_invite_success(client: AsyncClient, db_session: AsyncSession) -> None:
-    """Тест: успешная регистрация с инвайтом"""
+    """Тест: успешная регистрация с инвайт-кодом"""
     import uuid
     from datetime import UTC, datetime
 
@@ -477,11 +477,12 @@ async def test_register_with_invite_success(client: AsyncClient, db_session: Asy
 
     # Регистрируемся с инвайтом
     response = await client.post(
-        "/api/v1/user/register_with_invite?invite_code=TESTCODE123",
+        "/api/v1/user/register",
         json={
             "username": "inviteduser",
             "email": "invited@example.com",
             "password": "InvitedPassword123!",
+            "invite_code": "TESTCODE123",
         },
     )
     assert response.status_code == 201
@@ -491,11 +492,12 @@ async def test_register_with_invite_success(client: AsyncClient, db_session: Asy
 async def test_register_with_invalid_invite(client: AsyncClient) -> None:
     """Тест: регистрация с неверным инвайтом"""
     response = await client.post(
-        "/api/v1/user/register_with_invite?invite_code=INVALID",
+        "/api/v1/user/register",
         json={
             "username": "inviteduser",
             "email": "invited@example.com",
             "password": "InvitedPassword123!",
+            "invite_code": "INVALID",
         },
     )
     assert response.status_code == 403
