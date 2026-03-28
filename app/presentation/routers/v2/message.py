@@ -6,6 +6,9 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.exceptions.conversation import ConversationNotFoundError
+from app.application.exceptions.llm import LLMGenerationError
+from app.application.exceptions.prompt import PromptNotFoundError
 from app.application.schemas.message import MessageResponse as MessageSchemas
 from app.application.schemas.message import MessageStreamRequest
 from app.application.schemas.pagination import PaginatedResponse
@@ -13,11 +16,11 @@ from app.configs.llm_config import base_config_for_llm
 from app.domain.models.conversation import Conversation as ConversationModel
 from app.domain.models.message import Message as MessageModel
 from app.domain.models.user import User as UserModel
-from app.exceptions.exceptions import InvalidCursorError, LLMGenerationError, NotFoundError, ValidationError
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
+    InvalidCursorError,
     paginate_with_cursor,
 )
 from app.llms.openai import AsyncOpenAILLM
@@ -115,7 +118,7 @@ async def add_message_stream_v2(
     - StreamingResponse: Потоковый ответ сгенерированный LLM
 
     Raises:
-    - HTTPException 422: Если content сообщения пустой
+    - HTTPException 422: Если content сообщения пустой (Pydantic validation)
     - HTTPException 404: Если беседа или промпт не найдены
     - HTTPException 500: При ошибке генерации ответа
     """
@@ -134,11 +137,9 @@ async def add_message_stream_v2(
             memory_facts=request.memory_facts,
             user_id=current_user.id,
         )
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+    except (ConversationNotFoundError, PromptNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None
     except LLMGenerationError as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=str(e)) from None
 
     return StreamingResponse(service.stream_generator(stream_data=data), media_type="text/event-stream")

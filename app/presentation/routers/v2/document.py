@@ -18,6 +18,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.exceptions.document import DocumentNotFoundError
 from app.application.schemas.document import (
     BaseResponse,
     DocumentCreate,
@@ -30,12 +31,12 @@ from app.depends.service_depends import get_document_service
 from app.domain.enums.document import DocumentCategory
 from app.domain.models.document import Document as DocumentModel
 from app.domain.models.user import User as UserModel
-from app.exceptions import DocumentNotFoundError, InvalidCursorError
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.pagination import (
     DEFAULT_OFFSET,
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
+    InvalidCursorError,
     paginate_with_cursor,
 )
 from app.presentation.dependencies import get_current_user

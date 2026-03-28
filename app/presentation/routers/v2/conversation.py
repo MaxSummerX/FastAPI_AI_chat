@@ -10,11 +10,11 @@ from app.application.schemas.conversation import ConversationResponse as Convers
 from app.application.schemas.pagination import PaginatedResponse
 from app.domain.models.conversation import Conversation as ConversationModel
 from app.domain.models.user import User as UserModel
-from app.exceptions import InvalidCursorError
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
+    InvalidCursorError,
     paginate_with_cursor,
 )
 from app.presentation.dependencies import get_current_user

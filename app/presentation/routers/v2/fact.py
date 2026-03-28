@@ -13,11 +13,11 @@ from app.depends.mem0_depends import get_memory
 from app.domain.models.fact import Fact as FactModel
 from app.domain.models.fact import FactCategory, FactSource
 from app.domain.models.user import User as UserModel
-from app.exceptions import InvalidCursorError
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
+    InvalidCursorError,
     paginate_with_cursor,
 )
 from app.presentation.dependencies import get_current_user

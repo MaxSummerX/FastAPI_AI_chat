@@ -5,6 +5,10 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.exceptions.analysis import InvalidAnalysisTypeError
+from app.application.exceptions.llm import LLMGenerationError
+from app.application.exceptions.user import UserNotFoundException
+from app.application.exceptions.vacancy import VacancyNotFoundError
 from app.application.schemas.vacancy_analysis import (
     AnalysisTypeInfo,
     AvailableAnalysesResponse,
@@ -19,12 +23,6 @@ from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
-from app.exceptions.exceptions import (
-    InvalidAnalysisTypeError,
-    LLMGenerationError,
-    UserNotFoundError,
-    VacancyNotFoundError,
-)
 from app.infrastructure.database.dependencies import get_db
 from app.llms.openai import AsyncOpenAILLM
 from app.presentation.dependencies import get_current_user
@@ -151,7 +149,7 @@ async def create_vacancy_analysis(
     except VacancyNotFoundError as e:
         logger.warning(f"Vacancy not found: {e}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-    except UserNotFoundError as e:
+    except UserNotFoundException as e:
         logger.warning(f"User not found: {e}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from None
     except InvalidAnalysisTypeError as e:
