@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -61,11 +62,14 @@ class AuthService:
             if not invite_code:
                 logger.warning("Попытка регистрации без инвайт-кода | email={}", email)
                 raise InvalidInviteCodeException("Invite code is required")
-            return await self.register_with_invite(invite_code, username, email, password)
+            return await self._register_with_invite(invite_code, username, email, password)
 
-        return await self.register(username, email, password)
+        if invite_code:
+            return await self._register_with_optional_invite(invite_code, username, email, password)
 
-    async def register(self, username: str, email: str, password: str) -> UserResponseBase:
+        return await self._register(username, email, password)
+
+    async def _register(self, username: str, email: str, password: str) -> UserResponseBase:
         """
         Регистрирует нового пользователя.
 
@@ -94,7 +98,7 @@ class AuthService:
 
         return UserResponseBase.model_validate(new_user)
 
-    async def register_with_invite(
+    async def _register_with_invite(
         self, invite_code: str, username: str, email: str, password: str
     ) -> UserResponseBase:
         """
@@ -135,6 +139,32 @@ class AuthService:
 
         return UserResponseBase.model_validate(new_user)
 
+    async def _register_with_optional_invite(
+        self,
+        invite_code: str,
+        username: str,
+        email: str,
+        password: str,
+    ) -> UserResponseBase:
+        """
+        Регистрация когда REQUIRE_INVITE=False, но инвайт-код был передан.
+
+        Этот кейс возникает при прямых обращениях к API в обход фронтенда.
+        Инвайт валидируется и помечается использованным — код не должен
+        оставаться доступным независимо от режима системы.
+
+        Args:
+            invite_code: Инвайт-код
+            username: Имя пользователя
+            email: Email пользователя
+            password: Пароль (plaintext)
+        Raises:
+            InvalidInviteCodeException: Если код неверный или уже использован
+            UserAlreadyExistsException: Если username или email уже заняты
+        """
+        logger.info("Регистрация с инвайтом при REQUIRE_INVITE=False (прямой API вызов) | email={}", email)
+        return await self._register_with_invite(invite_code, username, email, password)
+
     async def login(self, username_or_email: str, password: str) -> tuple[UUID, TokenResponse]:
         """
         Аутентифицирует пользователя и возвращает токены.
@@ -172,7 +202,7 @@ class AuthService:
         )
 
         refresh_token = create_refresh_token(
-            username=user.username, user_id=str(user.id), email=user.email, role=user.role.value
+            username=user.username, user_id=str(user.id), email=user.email, role=user.role.value, jti=str(uuid.uuid4())
         )
 
         return user.id, TokenResponse(
