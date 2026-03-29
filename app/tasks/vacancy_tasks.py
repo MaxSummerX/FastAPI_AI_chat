@@ -9,15 +9,14 @@ from loguru import logger
 from sqlalchemy import and_, select
 
 from app.application.schemas.vacancy import VacancyForAnalysis
-from app.configs.celery_config import celery
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
-from app.infrastructure.database.dependencies import async_session_maker
 from app.infrastructure.settings.settings import settings
+from app.infrastructure.task_queue.celery_config import celery
 from app.llms.config import researcher_llm_config
 from app.llms.openai import AsyncOpenAILLM
 from app.services.ai_research.analyzer import analyze_vacancy
@@ -137,7 +136,7 @@ def ai_analyse_task(
     llm = AsyncOpenAILLM(researcher_llm_config)
 
     async def run_ai_analyse() -> dict[str, Any]:
-        async with async_session_maker() as session:
+        async with _worker_resources["session_factory"]() as session:
             stmt = (
                 select(
                     VacancyModel.id,
@@ -180,7 +179,7 @@ def ai_analyse_task(
             # Конвертируем Row объекты в Pydantic схемы для типизации
             vacancies: list[VacancyForAnalysis] = [VacancyForAnalysis.model_validate(row) for row in rows_vacancies]
 
-        async with async_session_maker() as session:
+        async with _worker_resources["session_factory"]() as session:
             analysis_to_add = []
 
             for vacancy in vacancies:
@@ -229,7 +228,7 @@ def ai_analyse_task(
         }
 
     try:
-        result = asyncio.run(run_ai_analyse())
+        result: dict[str, Any] = _worker_resources["loop"].run_until_complete(run_ai_analyse())
         logger.success(f"✅ Подсчёт вакансий: {result}")
         return result
     except Exception as e:
