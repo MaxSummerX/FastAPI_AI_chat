@@ -1,20 +1,22 @@
+"""
+Зависимости для сервисов headhunter.
+
+Модуль содержит FastAPI dependency-функции для создания сервисов,
+работающих с API hh.ru (синхронизация статусов вакансий).
+"""
+
 from fastapi import Depends
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.dependencies import get_db
-from app.services.document_service import DocumentService
 from app.services.headhunter.headhunter_client import get_hh_client
 from app.services.headhunter.vacancy_status import VacancyArchiveSync
 
 
+# Конфигурация для VacancyArchiveSync
 REQUEST_DELAY_ARCHIVE: float = 2.0
 SEMAPHORE_COUNT: int = 2
-
-
-def get_document_service(db: AsyncSession = Depends(get_db)) -> DocumentService:
-    """Фабрика для создания DocumentService через Dependency Injection."""
-    return DocumentService(db)
 
 
 async def get_vacancy_archive_sync(
@@ -23,6 +25,10 @@ async def get_vacancy_archive_sync(
 ) -> VacancyArchiveSync:
     """
     Фабрика для создания VacancyArchiveSync через Dependency Injection.
+
+    Создаёт сервис для синхронизации архивных статусов вакансий с hh.ru API.
+    Использует семафор для ограничения параллельных запросов и задержку
+    для предотвращения rate limiting.
 
     Args:
         db: Асинхронная сессия БД
@@ -37,6 +43,3 @@ async def get_vacancy_archive_sync(
         semaphore_count=SEMAPHORE_COUNT,
         request_delay=REQUEST_DELAY_ARCHIVE,
     )
-
-
-# TODO: Добавить фабрики для других сервисов
