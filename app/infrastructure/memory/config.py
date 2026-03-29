@@ -44,7 +44,7 @@ if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY is required")
 
 # Определяем корень проекта
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 # Создаём путь к директории для db mem0ai
 STORAGE_DIR = PROJECT_ROOT / "storage" / "mem0ai"
