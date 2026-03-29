@@ -63,11 +63,11 @@ class IDocumentRepository(ABC):
     async def create(
         self,
         user_id: UUID,
-        title: str,
+        title: str | None,
         content: str,
-        category: DocumentCategory,
+        category: DocumentCategory | None,
         metadata_: dict | None,
-        tags: dict | None,
+        tags: list | None,
     ) -> Document:
         """
         Создать новый документ.
@@ -76,9 +76,9 @@ class IDocumentRepository(ABC):
             user_id: ID пользователя, владельца документа
             title: Заголовок документа
             content: Содержимое документа
-            category: Категория документа из DocumentCategory
+            category: Категория документа из DocumentCategory (опционально)
             metadata_: Дополнительные метаданные в формате JSON (опционально)
-            tags: Теги для организации документов (опционально)
+            tags: Список тегов для организации документов (опционально)
 
         Returns:
             Созданный объект Document
@@ -106,7 +106,7 @@ class IDocumentRepository(ABC):
         offset: int,
         category: DocumentCategory | None,
         user_id: UUID,
-    ) -> Sequence[Document]:
+    ) -> Sequence[tuple[Document, float]]:
         """
         Полнотекстовый поиск по документам пользователя.
 
@@ -118,20 +118,21 @@ class IDocumentRepository(ABC):
             user_id: ID пользователя, владельца документов
 
         Returns:
-            Последовательность найденных документов
+            Последовательность кортежей (Document, relevance_score),
+            где relevance_score - оценка релевантности документа запросу
         """
         pass
 
     @abstractmethod
-    async def get_by_id_for_update(self, user_id: UUID, document_id: UUID) -> Document | None:
+    async def get_by_id_for_update(self, document_id: UUID, user_id: UUID) -> Document | None:
         """
         Получить документ по ID с блокировкой для обновления.
 
         Используется для предотвращения race conditions при параллельных обновлениях.
 
         Args:
-            user_id: ID пользователя, владельца документа
             document_id: Уникальный идентификатор документа
+            user_id: ID пользователя, владельца документа
 
         Returns:
             Объект Document или None, если документ не найден
