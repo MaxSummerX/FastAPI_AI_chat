@@ -228,8 +228,8 @@ def make_search_documents_tool(user_id: UUID) -> Callable[..., Awaitable[str]]:
         offset: int = 0,
     ) -> str:
         """Поиск по документам пользователя."""
+        from app.application.services.document_service import DocumentService
         from app.domain.enums.document import DocumentCategory
-        from app.services.document_service import DocumentService
 
         category_enum = None
         if category:
@@ -239,7 +239,10 @@ def make_search_documents_tool(user_id: UUID) -> Callable[..., Awaitable[str]]:
                 pass
 
         async with async_session_maker() as session:
-            service = DocumentService(session)
+            from app.infrastructure.persistence.sqlalchemy.document_repository import DocumentSQLAlchemyRepository
+
+            repository = DocumentSQLAlchemyRepository(session)
+            service = DocumentService(repository)
             response = await service.search_user_documents(
                 query=query,
                 limit=limit,

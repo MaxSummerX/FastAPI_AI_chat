@@ -1,6 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 
-from app.depends.service_depends import get_vacancy_archive_sync
+from app.services.headhunter.dependencies import get_vacancy_archive_sync
 from app.services.headhunter.vacancy_status import VacancyArchiveSync
 
 
