@@ -12,13 +12,16 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.auth_service import AuthService
+from app.application.services.document_service import DocumentService
 from app.application.services.invite_service import InviteService
 from app.application.services.user_service import UserService
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
+from app.domain.repositories.documents import IDocumentRepository
 from app.domain.repositories.invites import IInviteRepository
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.sqlalchemy.document_repository import DocumentSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.invite_repository import InviteSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 from app.infrastructure.security.jwt_service import TokenPayload, decode_token
@@ -52,6 +55,19 @@ def get_invite_repo(db: AsyncSession = Depends(get_db)) -> IInviteRepository:
         IInviteRepository: Репозиторий для CRUD операций с приглашениями
     """
     return InviteSQLAlchemyRepository(db)
+
+
+def get_document_repo(db: AsyncSession = Depends(get_db)) -> IDocumentRepository:
+    """
+    Создаёт репозиторий документов для работы с БД.
+
+    Args:
+        db: Асинхронная сессия БД
+
+    Returns:
+        IDocumentRepository: Репозиторий для CRUD операций с документами
+    """
+    return DocumentSQLAlchemyRepository(db)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:
@@ -94,6 +110,19 @@ def get_invite_service(invite_repo: IInviteRepository = Depends(get_invite_repo)
         InviteService: Сервис с бизнес-логикой приглашений (генерация, валидация, использование)
     """
     return InviteService(invite_repo)
+
+
+def get_document_service(document_repo: IDocumentRepository = Depends(get_document_repo)) -> DocumentService:
+    """
+    Создаёт сервис документов для бизнес-логики работы с документами.
+
+    Args:
+        document_repo: Репозиторий документов для доступа к данным
+
+    Returns:
+        DocumentService: Сервис с бизнес-логикой документов (создание, поиск, обновление)
+    """
+    return DocumentService(document_repo)
 
 
 async def get_current_user(
