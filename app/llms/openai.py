@@ -9,9 +9,9 @@ from typing import Any
 from loguru import logger
 from openai import AsyncOpenAI
 
-from app.configs.llms.base import BaseLlmConfig
-from app.configs.llms.openai import OpenAIConfig
 from app.llms.base import LLMBase
+from app.llms.configs.base import BaseLlmConfig
+from app.llms.configs.openai import OpenAIConfig
 
 
 def extract_json(text: str) -> str:

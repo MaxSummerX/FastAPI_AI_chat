@@ -17,13 +17,13 @@ from app.application.schemas.vacancy_analysis import (
     VacancyListResponse,
     VacancyResponse,
 )
-from app.depends.llm_depends import get_researcher_llm
 from app.domain.enums.analysis import AnalysisType
 from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.infrastructure.database.dependencies import get_db
+from app.llms.depends import get_researcher_llm
 from app.llms.openai import AsyncOpenAILLM
 from app.presentation.dependencies import get_current_user
 from app.services.ai_research import analyze_vacancy_from_db

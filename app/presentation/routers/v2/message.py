@@ -12,7 +12,6 @@ from app.application.exceptions.prompt import PromptNotFoundError
 from app.application.schemas.message import MessageResponse as MessageSchemas
 from app.application.schemas.message import MessageStreamRequest
 from app.application.schemas.pagination import PaginatedResponse
-from app.configs.llm_config import base_config_for_llm
 from app.domain.models.conversation import Conversation as ConversationModel
 from app.domain.models.message import Message as MessageModel
 from app.domain.models.user import User as UserModel
@@ -23,6 +22,7 @@ from app.infrastructure.persistence.pagination import (
     InvalidCursorError,
     paginate_with_cursor,
 )
+from app.llms.config import base_config_for_llm
 from app.llms.openai import AsyncOpenAILLM
 from app.presentation.dependencies import get_current_user
 from app.services.message_service import MessageService, get_message_service

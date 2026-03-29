@@ -2,7 +2,7 @@ import os
 
 from dotenv import load_dotenv
 
-from app.configs.llms.openai import OpenAIConfig
+from app.llms.configs.openai import OpenAIConfig
 
 
 load_dotenv()

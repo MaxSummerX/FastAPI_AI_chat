@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from app.configs.llms.base import BaseLlmConfig
+from app.llms.configs.base import BaseLlmConfig
 
 
 class LLMBase(ABC):

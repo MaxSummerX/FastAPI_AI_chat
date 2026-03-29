@@ -10,7 +10,6 @@ from sqlalchemy import and_, select
 
 from app.application.schemas.vacancy import VacancyForAnalysis
 from app.configs.celery_config import celery
-from app.configs.llm_config import researcher_llm_config
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
@@ -19,6 +18,7 @@ from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.infrastructure.database.dependencies import async_session_maker
 from app.infrastructure.settings.settings import settings
+from app.llms.config import researcher_llm_config
 from app.llms.openai import AsyncOpenAILLM
 from app.services.ai_research.analyzer import analyze_vacancy
 from app.services.headhunter import VacancyArchiveSync, import_vacancies
