@@ -26,14 +26,14 @@ from app.domain.models.document import Document as DocumentModel
 @pytest.mark.asyncio
 async def test_get_documents_unauthorized(client: AsyncClient) -> None:
     """Тест: неавторизованный запрос к documents"""
-    response = await client.get("/api/v2/documents")
+    response = await client.get("/api/v1/documents")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_documents_empty(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение документов когда их нет"""
-    response = await client.get("/api/v2/documents", headers=auth_headers)
+    response = await client.get("/api/v1/documents", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -52,7 +52,7 @@ async def test_get_documents_first_page(
     test_documents: list[DocumentModel],
 ) -> None:
     """Тест: первая страница документов (без cursor)"""
-    response = await client.get("/api/v2/documents", headers=auth_headers, params={"limit": 15})
+    response = await client.get("/api/v1/documents", headers=auth_headers, params={"limit": 15})
     assert response.status_code == 200
 
     data = response.json()
@@ -69,13 +69,13 @@ async def test_get_documents_with_cursor(
 ) -> None:
     """Тест: вторая страница документов (с cursor)"""
     # Первая страница
-    first_response = await client.get("/api/v2/documents", headers=auth_headers, params={"limit": 10})
+    first_response = await client.get("/api/v1/documents", headers=auth_headers, params={"limit": 10})
     first_data = first_response.json()
     cursor = first_data["next_cursor"]
 
     # Вторая страница
     response = await client.get(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         params={"limit": 10, "cursor": cursor},
     )
@@ -101,7 +101,7 @@ async def test_get_documents_pagination_to_end(
         if cursor:
             params["cursor"] = cursor
 
-        response = await client.get("/api/v2/documents", headers=auth_headers, params=params)
+        response = await client.get("/api/v1/documents", headers=auth_headers, params=params)
         data = response.json()
 
         all_items.extend(data["items"])
@@ -119,7 +119,7 @@ async def test_get_documents_pagination_to_end(
 async def test_get_documents_invalid_cursor(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: использование невалидного курсора"""
     response = await client.get(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         params={"cursor": "invalid_cursor_base64"},
     )
@@ -133,7 +133,7 @@ async def test_get_documents_ordering_desc(
     test_documents: list[DocumentModel],
 ) -> None:
     """Тест: проверка правильности сортировки (от нового к старому)"""
-    response = await client.get("/api/v2/documents", headers=auth_headers, params={"limit": 10})
+    response = await client.get("/api/v1/documents", headers=auth_headers, params={"limit": 10})
     assert response.status_code == 200
 
     data = response.json()
@@ -154,7 +154,7 @@ async def test_get_documents_filter_by_category(
 ) -> None:
     """Тест: фильтрация документов по категории"""
     response = await client.get(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         params={"category": "note", "limit": 100},
     )
@@ -179,13 +179,13 @@ async def test_get_documents_include_archived(
     await db_session.commit()
 
     # Без include_archived - архивированные не возвращаются
-    response_active = await client.get("/api/v2/documents", headers=auth_headers, params={"limit": 100})
+    response_active = await client.get("/api/v1/documents", headers=auth_headers, params={"limit": 100})
     active_data = response_active.json()
     assert len(active_data["items"]) == 29
 
     # С include_archived - все документы
     response_all = await client.get(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         params={"include_archived": True, "limit": 100},
     )
@@ -197,14 +197,14 @@ async def test_get_documents_include_archived(
 async def test_get_documents_limit_validation(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: валидация limit параметра"""
     # Слишком большой limit - использует максимум
-    response = await client.get("/api/v2/documents", headers=auth_headers, params={"limit": 150})
+    response = await client.get("/api/v1/documents", headers=auth_headers, params={"limit": 150})
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_get_documents_limit_minimum(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: limit меньше минимума возвращает ошибку валидации"""
-    response = await client.get("/api/v2/documents", headers=auth_headers, params={"limit": 0})
+    response = await client.get("/api/v1/documents", headers=auth_headers, params={"limit": 0})
     assert response.status_code == 422
 
 
@@ -216,7 +216,7 @@ async def test_get_documents_limit_minimum(client: AsyncClient, auth_headers: di
 @pytest.mark.asyncio
 async def test_get_document_unauthorized(client: AsyncClient, test_document: DocumentModel) -> None:
     """Тест: получение документа без авторизации"""
-    response = await client.get(f"/api/v2/documents/{test_document.id}")
+    response = await client.get(f"/api/v1/documents/{test_document.id}")
     assert response.status_code == 401
 
 
@@ -227,7 +227,7 @@ async def test_get_document_success(
     test_document: DocumentModel,
 ) -> None:
     """Тест: успешное получение документа"""
-    response = await client.get(f"/api/v2/documents/{test_document.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/documents/{test_document.id}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -239,7 +239,7 @@ async def test_get_document_success(
 @pytest.mark.asyncio
 async def test_get_document_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение несуществующего документа"""
-    response = await client.get(f"/api/v2/documents/{uuid.uuid4()}", headers=auth_headers)
+    response = await client.get(f"/api/v1/documents/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -254,7 +254,7 @@ async def test_get_document_archived(
     test_document.is_archived = True
     await db_session.commit()
 
-    response = await client.get(f"/api/v2/documents/{test_document.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/documents/{test_document.id}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -265,7 +265,7 @@ async def test_get_document_other_user(
     test_document: DocumentModel,
 ) -> None:
     """Тест: попытка получить документ другого пользователя"""
-    response = await client.get(f"/api/v2/documents/{test_document.id}", headers=admin_headers)
+    response = await client.get(f"/api/v1/documents/{test_document.id}", headers=admin_headers)
     assert response.status_code == 404
 
 
@@ -278,7 +278,7 @@ async def test_get_document_other_user(
 async def test_create_document_unauthorized(client: AsyncClient) -> None:
     """Тест: создание документа без авторизации"""
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         json={
             "content": "Test document content",
         },
@@ -290,7 +290,7 @@ async def test_create_document_unauthorized(client: AsyncClient) -> None:
 async def test_create_document_success(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: успешное создание документа"""
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         json={
             "title": "Test Document",
@@ -298,7 +298,7 @@ async def test_create_document_success(client: AsyncClient, auth_headers: dict[s
             "category": "note",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 201
 
     data = response.json()
     assert data["title"] == "Test Document"
@@ -312,7 +312,7 @@ async def test_create_document_success(client: AsyncClient, auth_headers: dict[s
 async def test_create_document_with_tags(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание документа с тегами"""
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         json={
             "title": "Document with Tags",
@@ -320,7 +320,7 @@ async def test_create_document_with_tags(client: AsyncClient, auth_headers: dict
             "tags": ["python", "fastapi", "testing"],
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 201
 
     data = response.json()
     assert data["tags"] == ["python", "fastapi", "testing"]
@@ -332,7 +332,7 @@ async def test_create_document_with_metadata(client: AsyncClient, auth_headers: 
     metadata = {"source": "manual", "priority": "high", "author": "test_user"}
 
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         json={
             "title": "Document with Metadata",
@@ -340,7 +340,7 @@ async def test_create_document_with_metadata(client: AsyncClient, auth_headers: 
             "metadata_": metadata,
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 201
 
     data = response.json()
     assert data["metadata_"] == metadata
@@ -350,13 +350,13 @@ async def test_create_document_with_metadata(client: AsyncClient, auth_headers: 
 async def test_create_document_default_category(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание документа с категорией по умолчанию (note)"""
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         json={
             "content": "Minimal document",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 201
 
     data = response.json()
     assert data["category"] == DocumentCategory.NOTE
@@ -366,7 +366,7 @@ async def test_create_document_default_category(client: AsyncClient, auth_header
 async def test_create_document_empty_content(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание документа с пустым контентом"""
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         json={
             "content": "   ",
@@ -379,7 +379,7 @@ async def test_create_document_empty_content(client: AsyncClient, auth_headers: 
 async def test_create_document_content_too_short(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: контент короче минимума (5 символов)"""
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         json={
             "content": "abc",
@@ -392,7 +392,7 @@ async def test_create_document_content_too_short(client: AsyncClient, auth_heade
 async def test_create_document_title_too_long(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: заголовок длиннее максимума (255 символов)"""
     response = await client.post(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         json={
             "title": "x" * 256,
@@ -407,7 +407,7 @@ async def test_create_document_all_categories(client: AsyncClient, auth_headers:
     """Тест: создание документов всех категорий"""
     for category in DocumentCategory:
         response = await client.post(
-            "/api/v2/documents",
+            "/api/v1/documents",
             headers=auth_headers,
             json={
                 "title": f"Document {category}",
@@ -415,7 +415,7 @@ async def test_create_document_all_categories(client: AsyncClient, auth_headers:
                 "category": category,
             },
         )
-        assert response.status_code == 202
+        assert response.status_code == 201
 
         data = response.json()
         assert data["category"] == category
@@ -430,7 +430,7 @@ async def test_create_document_all_categories(client: AsyncClient, auth_headers:
 async def test_update_document_unauthorized(client: AsyncClient, test_document: DocumentModel) -> None:
     """Тест: обновление документа без авторизации"""
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         json={"title": "Updated Title"},
     )
     assert response.status_code == 401
@@ -444,14 +444,14 @@ async def test_update_document_success(
 ) -> None:
     """Тест: успешное обновление документа"""
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         headers=auth_headers,
         json={
             "title": "Updated Title",
             "content": "Updated content",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 200
 
     data = response.json()
     assert data["id"] == str(test_document.id)
@@ -469,13 +469,13 @@ async def test_update_document_partial(
     original_content = test_document.content
 
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         headers=auth_headers,
         json={
             "title": "New Title Only",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 200
 
     data = response.json()
     assert data["title"] == "New Title Only"
@@ -490,13 +490,13 @@ async def test_update_document_category(
 ) -> None:
     """Тест: обновление категории документа"""
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         headers=auth_headers,
         json={
             "category": "code",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 200
 
     data = response.json()
     assert data["category"] == "code"
@@ -510,13 +510,13 @@ async def test_update_document_tags(
 ) -> None:
     """Тест: обновление тегов документа"""
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         headers=auth_headers,
         json={
             "tags": ["new-tag", "another-tag"],
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 200
 
     data = response.json()
     assert data["tags"] == ["new-tag", "another-tag"]
@@ -526,7 +526,7 @@ async def test_update_document_tags(
 async def test_update_document_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление несуществующего документа"""
     response = await client.patch(
-        f"/api/v2/documents/{uuid.uuid4()}",
+        f"/api/v1/documents/{uuid.uuid4()}",
         headers=auth_headers,
         json={"title": "Updated"},
     )
@@ -545,7 +545,7 @@ async def test_update_document_archived(
     await db_session.commit()
 
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         headers=auth_headers,
         json={"title": "Try to update archived"},
     )
@@ -560,7 +560,7 @@ async def test_update_document_other_user(
 ) -> None:
     """Тест: попытка обновить документ другого пользователя"""
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         headers=admin_headers,
         json={"title": "Hacked!"},
     )
@@ -575,11 +575,11 @@ async def test_update_document_empty_body(
 ) -> None:
     """Тест: обновление с пустым телом запроса (возвращает текущий документ)"""
     response = await client.patch(
-        f"/api/v2/documents/{test_document.id}",
+        f"/api/v1/documents/{test_document.id}",
         headers=auth_headers,
         json={},
     )
-    assert response.status_code == 202
+    assert response.status_code == 200
 
     data = response.json()
     assert data["id"] == str(test_document.id)
@@ -593,7 +593,7 @@ async def test_update_document_empty_body(
 @pytest.mark.asyncio
 async def test_delete_document_unauthorized(client: AsyncClient, test_document: DocumentModel) -> None:
     """Тест: удаление документа без авторизации"""
-    response = await client.delete(f"/api/v2/documents/{test_document.id}")
+    response = await client.delete(f"/api/v1/documents/{test_document.id}")
     assert response.status_code == 401
 
 
@@ -605,7 +605,7 @@ async def test_delete_document_success(
     db_session: AsyncSession,
 ) -> None:
     """Тест: успешное удаление документа (мягкое)"""
-    response = await client.delete(f"/api/v2/documents/{test_document.id}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/documents/{test_document.id}", headers=auth_headers)
     assert response.status_code == 204
 
     # Проверяем что документ помечен как архивированный
@@ -616,7 +616,7 @@ async def test_delete_document_success(
 @pytest.mark.asyncio
 async def test_delete_document_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: удаление несуществующего документа"""
-    response = await client.delete(f"/api/v2/documents/{uuid.uuid4()}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/documents/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -631,7 +631,7 @@ async def test_delete_document_already_archived(
     test_document.is_archived = True
     await db_session.commit()
 
-    response = await client.delete(f"/api/v2/documents/{test_document.id}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/documents/{test_document.id}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -642,7 +642,7 @@ async def test_delete_document_other_user(
     test_document: DocumentModel,
 ) -> None:
     """Тест: попытка удалить документ другого пользователя"""
-    response = await client.delete(f"/api/v2/documents/{test_document.id}", headers=admin_headers)
+    response = await client.delete(f"/api/v1/documents/{test_document.id}", headers=admin_headers)
     assert response.status_code == 404
 
 
@@ -654,10 +654,10 @@ async def test_delete_then_get_not_found(
 ) -> None:
     """Тест: после удаления документ не находится через GET"""
     # Удаляем документ
-    await client.delete(f"/api/v2/documents/{test_document.id}", headers=auth_headers)
+    await client.delete(f"/api/v1/documents/{test_document.id}", headers=auth_headers)
 
     # Пытаемся получить удалённый документ
-    response = await client.get(f"/api/v2/documents/{test_document.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/documents/{test_document.id}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -670,17 +670,17 @@ async def test_delete_then_get_with_include_archived(
 ) -> None:
     """Тест: удалённый документ не возвращается в списке без include_archived"""
     # Удаляем документ
-    await client.delete(f"/api/v2/documents/{test_document.id}", headers=auth_headers)
+    await client.delete(f"/api/v1/documents/{test_document.id}", headers=auth_headers)
 
     # Без include_archived - документ не возвращается
-    response = await client.get("/api/v2/documents", headers=auth_headers, params={"limit": 100})
+    response = await client.get("/api/v1/documents", headers=auth_headers, params={"limit": 100})
     data = response.json()
     document_ids = [doc["id"] for doc in data["items"]]
     assert str(test_document.id) not in document_ids
 
     # С include_archived - документ возвращается
     response_all = await client.get(
-        "/api/v2/documents",
+        "/api/v1/documents",
         headers=auth_headers,
         params={"include_archived": True, "limit": 100},
     )
