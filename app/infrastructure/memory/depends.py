@@ -1,6 +1,6 @@
 from mem0 import AsyncMemory
 
-from app.configs.memory import custom_config
+from app.infrastructure.memory.config import custom_config
 
 
 _memory_service: AsyncMemory | None = None
