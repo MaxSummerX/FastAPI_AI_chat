@@ -231,8 +231,8 @@ async def import_from_mem0ai_to_postgres_db(
         - Категоризирует факты через LLM если нет категории в metadata
     """
     from app.application.prompts.parsing_category import PARSE_CATEGORY
-    from app.configs.llm_config import parse_llm_config
     from app.domain.models.message import Message as MessageModel
+    from app.llms.config import parse_llm_config
     from app.llms.openai import AsyncOpenAILLM
 
     llm = AsyncOpenAILLM(parse_llm_config)
