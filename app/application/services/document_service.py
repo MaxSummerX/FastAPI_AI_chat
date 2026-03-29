@@ -1,43 +1,72 @@
-"""
-Сервисный слой для управления документами пользователей.
-
-Модуль предоставляет CRUD операции для работы с документами:
-- Создание новых документов с категоризацией и тегами
-- Получение документов с проверкой прав доступа
-- Обновление содержимого и метаданных документов
-- Мягкое удаление документов с возможностью восстановления
-
-Все операции выполняются с проверкой прав доступа текущего пользователя
-и поддерживают мягкое удаление через флаг is_archived.
-"""
-
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.exceptions.document import DocumentNotFoundError
 from app.application.schemas.document import (
+    BaseResponse,
     DocumentCreate,
     DocumentResponse,
     DocumentSearchResponse,
     DocumentSearchResult,
     DocumentUpdate,
 )
+from app.application.schemas.pagination import PaginatedResponse
 from app.domain.enums.document import DocumentCategory
-from app.domain.models.document import Document as DocumentModel
+from app.domain.repositories.documents import IDocumentRepository
 
 
 class DocumentService:
-    def __init__(self, db: AsyncSession) -> None:
+    """Сервис для управления документами пользователей."""
+
+    def __init__(self, document_repo: IDocumentRepository) -> None:
         """
-        Конструктор получает зависимости через Dependency Injection.
+        Инициализирует сервис документов.
 
         Args:
-            db: Сессия БД (инжектится FastAPI)
+            document_repo: Репозиторий документов для доступа к данным
         """
-        self.db = db
+        self.document_repo = document_repo
+
+    async def get_user_documents(
+        self, category: DocumentCategory | None, limit: int, cursor: str | None, user_id: UUID, include_archived: bool
+    ) -> PaginatedResponse[BaseResponse]:
+        """
+        Получить документы пользователя с курсорной пагинацией.
+
+        Args:
+            category: Фильтр по категории документа (опционально)
+            limit: Максимальное количество документов на странице
+            cursor: Курсор из предыдущего ответа для следующей страницы
+            user_id: UUID пользователя
+            include_archived: Включать ли архивные документы
+
+        Returns:
+            PaginatedResponse с документами и метаданными пагинации
+        """
+        logger.debug(
+            f"Запрос на получение документов пользователя {user_id} "
+            f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
+        )
+        documents, next_cursor, has_next = await self.document_repo.get_paginated(
+            user_id=user_id,
+            cursor=cursor,
+            limit=limit,
+            category=category,
+            include_archived=include_archived,
+        )
+        logger.debug(
+            "Возвращено {} документов, has_next={}, next_cursor={}",
+            len(documents),
+            has_next,
+            "да" if next_cursor else "нет",
+        )
+
+        return PaginatedResponse(
+            items=[BaseResponse.model_validate(document) for document in documents],
+            next_cursor=next_cursor,
+            has_next=has_next,
+        )
 
     async def get_user_document(self, document_id: UUID, current_user_id: UUID) -> DocumentResponse:
         """
@@ -57,17 +86,11 @@ class DocumentService:
             DocumentNotFoundError: Если документ не найден, принадлежит другому
                 пользователю или архивирован
         """
-        result = await self.db.scalars(
-            select(DocumentModel).where(
-                DocumentModel.id == document_id,
-                DocumentModel.user_id == current_user_id,
-                DocumentModel.is_archived.is_(False),
-            )
-        )
-
-        document = result.first()
+        logger.debug("Запрос на получение документа {} пользователя {}", document_id, current_user_id)
+        document = await self.document_repo.get_by_id(document_id=document_id, user_id=current_user_id)
 
         if not document:
+            logger.warning("Документ не найден: document_id={}, user_id={}", document_id, current_user_id)
             raise DocumentNotFoundError(f"Document {document_id} not found")
 
         return DocumentResponse.model_validate(document)
@@ -87,7 +110,8 @@ class DocumentService:
         Returns:
             DocumentResponse: Данные созданного документа с присвоенным UUID
         """
-        document = DocumentModel(
+        logger.debug("Запрос на создание документа пользователем {}", current_user_id)
+        document = await self.document_repo.create(
             user_id=current_user_id,
             title=document_data.title,
             content=document_data.content,
@@ -96,11 +120,7 @@ class DocumentService:
             tags=document_data.tags,
         )
 
-        self.db.add(document)
-        await self.db.commit()
-        await self.db.refresh(document)
-
-        logger.info(f"Документ {document.id} успешно создан")
+        logger.debug("Документ {} успешно создан", document.id)
         return DocumentResponse.model_validate(document)
 
     async def update_user_document(
@@ -124,37 +144,28 @@ class DocumentService:
         Raises:
             DocumentNotFoundError: Если документ не найден или принадлежит другому пользователю
         """
+        logger.debug("Запрос на обновление документа {} пользователя {}", document_id, current_user_id)
+        document = await self.document_repo.get_by_id_for_update(document_id=document_id, user_id=current_user_id)
+
+        if not document:
+            logger.warning("Документ не найден: document_id={}, user_id={}", document_id, current_user_id)
+            raise DocumentNotFoundError(f"Document {document_id} not found")
+
         update_data = document_data.model_dump(exclude_unset=True, by_alias=False)
 
         if not update_data:
-            document = await self.db.get(DocumentModel, document_id)
-            if not document or document.user_id != current_user_id:
-                raise DocumentNotFoundError(f"Document {document_id} not found")
             return DocumentResponse.model_validate(document)
 
-        result = await self.db.execute(
-            update(DocumentModel)
-            .where(
-                DocumentModel.id == document_id,
-                DocumentModel.user_id == current_user_id,
-                DocumentModel.is_archived.is_(False),
-            )
-            .values(**update_data)
-            .returning(DocumentModel)
-        )
+        for field, value in update_data.items():
+            setattr(document, field, value)
 
-        document = result.scalar_one_or_none()
+        result = await self.document_repo.save(document)
 
-        if not document:
-            raise DocumentNotFoundError(f"Document {document_id} not found")
+        logger.debug("Документ пользователя успешно обновлён: {}", document_id)
 
-        await self.db.commit()
+        return DocumentResponse.model_validate(result)
 
-        logger.info(f"Документ пользователя успешно обновлён: {document_id}")
-
-        return DocumentResponse.model_validate(document)
-
-    async def delete_user_document(self, document_id: UUID, current_user_id: UUID) -> None:
+    async def soft_delete_user_document(self, document_id: UUID, current_user_id: UUID) -> None:
         """
         Удалить документ (мягкое удаление).
 
@@ -177,24 +188,18 @@ class DocumentService:
             Функция выполняет мягкое удаление - документ физически остаётся
             в базе данных, но помечается как is_archived=True
         """
-        result = await self.db.scalars(
-            select(DocumentModel).where(
-                DocumentModel.id == document_id,
-                DocumentModel.user_id == current_user_id,
-                DocumentModel.is_archived.is_(False),
-            )
-        )
-
-        document = result.first()
+        logger.debug("Запрос на удаление документа {} пользователя {}", document_id, current_user_id)
+        document = await self.document_repo.get_by_id_for_update(document_id=document_id, user_id=current_user_id)
 
         if not document:
+            logger.warning("Документ не найден: document_id={}, user_id={}", document_id, current_user_id)
             raise DocumentNotFoundError(f"Document {document_id} not found")
 
         document.is_archived = True
 
-        await self.db.commit()
+        await self.document_repo.save(document)
 
-        logger.info(f"Документ {document_id} помечен как архивированный")
+        logger.debug("Документ {} помечен как архивированный", document_id)
 
     async def search_user_documents(
         self,
@@ -221,26 +226,16 @@ class DocumentService:
         Returns:
             DocumentSearchResponse: Результаты поиска с метаданными запроса
         """
-        ts_query = func.plainto_tsquery("russian", query).op("||")(func.plainto_tsquery("english", query))
-
-        conditions = [
-            DocumentModel.user_id == current_user_id,
-            DocumentModel.is_archived.is_(False),
-            DocumentModel.search_vector.op("@@")(ts_query),
-        ]
-
-        if category:
-            conditions.append(DocumentModel.category == category)
-
-        ts_rank = func.ts_rank(DocumentModel.search_vector, ts_query).label("relevance_score")
-
-        result = await self.db.execute(
-            select(DocumentModel, ts_rank).where(*conditions).order_by(ts_rank.desc()).limit(limit).offset(offset)
+        logger.debug("Поиск документов по запросу: '{}' пользователя {}", query, current_user_id)
+        result = await self.document_repo.search(
+            query=query, limit=limit, offset=offset, category=category, user_id=current_user_id
         )
 
         documents = [
-            DocumentSearchResult.model_validate({**doc.__dict__, "relevance_score": score})
-            for doc, score in result.all()
+            DocumentSearchResult(
+                relevance_score=score, **DocumentResponse.model_validate(doc, from_attributes=True).model_dump()
+            )
+            for doc, score in result
         ]
 
         return DocumentSearchResponse(
