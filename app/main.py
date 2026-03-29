@@ -7,7 +7,7 @@ from app.presentation.middleware.logging import log_middleware
 from app.presentation.middleware.security_middleware import add_security_headers
 from app.presentation.middleware.timing_middleware import TimingMiddleware
 from app.presentation.routers import admin, v1
-from app.presentation.routers.v2 import analysis, conversation, document, fact, prompt, task, upload, vacancy
+from app.presentation.routers.v2 import analysis, conversation, fact, prompt, task, upload, vacancy
 
 
 app = FastAPI(
@@ -37,7 +37,6 @@ app.include_router(prompt.router, prefix="/api/v2")
 app.include_router(vacancy.router, prefix="/api/v2")
 app.include_router(analysis.router, prefix="/api/v2")
 app.include_router(task.router, prefix="/api/v2")
-app.include_router(document.router, prefix="/api/v2")
 # Admin routes
 app.include_router(admin.router)
 
