@@ -45,21 +45,10 @@ async def get_all_documents(
     service: DocumentService = Depends(get_document_service),
 ) -> PaginatedResponse[BaseResponse]:
     """
-    Получить документы текущего пользователя с курсорной пагинацией.
+    Возвращает документы текущего пользователя с курсорной пагинацией.
 
-    Args:
-        category: Фильтр по категории документов (опционально)
-        limit: Размер страницы (1-100)
-        cursor: Курсор для следующей страницы
-        include_archived: Включать ли неактивные (удалённые) документы
-        current_user: Текущий аутентифицированный пользователь
-        service: Сервис документов для бизнес-логики
-
-    Returns:
-        PaginatedResponse со списком документов и курсором для следующей страницы
-
-    Raises:
-        HTTPException 400: Невалидный формат курсора
+    **Возможные ошибки:**
+    - `400` — невалидный формат курсора
     """
     try:
         return await service.get_user_documents(
@@ -87,21 +76,9 @@ async def search_documents(
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentSearchResponse:
     """
-    Полнотекстовый поиск документов текущего пользователя.
+    Выполняет полнотекстовый поиск документов текущего пользователя.
 
-    Выполняет поиск по содержимому документов с поддержкой русского и английского языков.
-    Результаты сортируются по релевантности.
-
-    Args:
-        query: Поисковый запрос (текст)
-        limit: Максимальное количество результатов (1-100)
-        offset: Смещение для пагинации
-        category: Фильтр по категории документа (опционально)
-        current_user: Текущий аутентифицированный пользователь
-        service: Сервис документов для бизнес-логики
-
-    Returns:
-        DocumentSearchResponse: Результаты поиска с оценками релевантности
+    Поддерживает русский и английский языки. Результаты сортируются по релевантности.
     """
     return await service.search_user_documents(
         query=query,
@@ -119,25 +96,21 @@ async def get_document(
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
-    Получить документ по ID.
+    Возвращает документ по ID.
 
-    Args:
-        document_id: UUID документа
-        current_user: Текущий аутентифицированный пользователь
-        service: Сервис документов для бизнес-логики
-
-    Returns:
-        DocumentResponse: Данные запрошенного документа
-
-    Raises:
-        HTTPException 404: Если документ не найден или принадлежит другому пользователю
+    **Возможные ошибки:**
+    - `404` — документ не найден или принадлежит другому пользователю
     """
-
     try:
         return await service.get_user_document(document_id=document_id, current_user_id=current_user.id)
-
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+
+    except Exception as e:
+        logger.error("Ошибка при запросе документа пользователем {}: {}", current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating document"
+        ) from None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="Создать новый документ")
@@ -147,20 +120,19 @@ async def create_document(
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
-    Создать новый документ пользователя.
+    Создаёт новый документ для текущего пользователя.
 
-    Args:
-        document_data: Данные для создания документа
-        current_user: Текущий аутентифицированный пользователь
-        service: Сервис документов для бизнес-логики
-
-    Returns:
-        DocumentResponse: Данные созданного документа
-
-    Raises:
-        HTTPException 422: Некорректные данные документа
+    **Возможные ошибки:**
+    - `422` — некорректные данные документа
     """
-    return await service.create_user_document(document_data=document_data, current_user_id=current_user.id)
+    try:
+        return await service.create_user_document(document_data=document_data, current_user_id=current_user.id)
+
+    except Exception as e:
+        logger.error("Ошибка при создании документа пользователем {}: {}", current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating document"
+        ) from None
 
 
 @router.patch("/{document_id}", status_code=status.HTTP_200_OK, summary="Обновить документ")
@@ -171,19 +143,12 @@ async def update_document(
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
-    Обновить документ пользователя
+    Обновляет документ пользователя.
 
-    Args:
-        document_id: UUID документа для обновления
-        document_data: Новые данные документа
-        current_user: Текущий аутентифицированный пользователь
-        service: Сервис документов для бизнес-логики
+    Выполняет частичное обновление — обновляются только переданные поля.
 
-    Returns:
-        DocumentResponse: Данные обновлённого документа
-
-    Raises:
-        HTTPException 404: Если документ не найден или принадлежит другому пользователю
+    **Возможные ошибки:**
+    - `404` — документ не найден или принадлежит другому пользователю
     """
     try:
         return await service.update_user_document(
@@ -193,6 +158,12 @@ async def update_document(
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
+    except Exception as e:
+        logger.error("Ошибка при обновлении документа: {} пользователем {}: {}", document_id, current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating document"
+        ) from None
+
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить документ")
 async def delete_document(
@@ -201,24 +172,22 @@ async def delete_document(
     service: DocumentService = Depends(get_document_service),
 ) -> None:
     """
-    Удалить документ (мягкое удаление).
+    Удаляет документ пользователя (мягкое удаление).
 
     Документ помечается как архивированный (is_archived=True) и исключается
     из основного списка, но остаётся в базе данных.
 
-    Args:
-        document_id: UUID документа для удаления
-        current_user: Текущий аутентифицированный пользователь
-        service: Сервис документов для бизнес-логики
-
-    Returns:
-        None (HTTP 204 No Content)
-
-    Raises:
-        HTTPException 404: Если документ не найден или уже архивирован
+    **Возможные ошибки:**
+    - `404` — документ не найден или уже архивирован
     """
     try:
         await service.soft_delete_user_document(document_id=document_id, current_user_id=current_user.id)
 
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+
+    except Exception as e:
+        logger.error("Ошибка при удалении документа: {} пользователем {}: {}", document_id, current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting document"
+        ) from None
