@@ -20,7 +20,7 @@ class ConversationUpdate(BaseModel):
     """
 
     title: str | None = Field(None, description="Название беседы")
-    is_archived: bool = Field(False, description="Архивная беседа")
+    is_archived: bool | None = Field(None, description="Архивная беседа")
 
 
 class ConversationResponse(BaseModel):

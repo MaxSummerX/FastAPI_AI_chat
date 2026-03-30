@@ -12,15 +12,18 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.auth_service import AuthService
+from app.application.services.conversation_service import ConversationService
 from app.application.services.document_service import DocumentService
 from app.application.services.invite_service import InviteService
 from app.application.services.user_service import UserService
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
+from app.domain.repositories.conversations import IConversationRepository
 from app.domain.repositories.documents import IDocumentRepository
 from app.domain.repositories.invites import IInviteRepository
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.sqlalchemy.conversation_repository import ConversationSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.document_repository import DocumentSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.invite_repository import InviteSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
@@ -68,6 +71,19 @@ def get_document_repo(db: AsyncSession = Depends(get_db)) -> IDocumentRepository
         IDocumentRepository: Репозиторий для CRUD операций с документами
     """
     return DocumentSQLAlchemyRepository(db)
+
+
+def get_conversation_repo(db: AsyncSession = Depends(get_db)) -> IConversationRepository:
+    """
+    Создаёт репозиторий бесед для работы с БД.
+
+    Args:
+        db: Асинхронная сессия БД
+
+    Returns:
+        IConversationRepository: Репозиторий для CRUD операций с беседами
+    """
+    return ConversationSQLAlchemyRepository(db)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:
@@ -123,6 +139,21 @@ def get_document_service(document_repo: IDocumentRepository = Depends(get_docume
         DocumentService: Сервис с бизнес-логикой документов (создание, поиск, обновление)
     """
     return DocumentService(document_repo)
+
+
+def get_conversation_service(
+    conversation_repo: IConversationRepository = Depends(get_conversation_repo),
+) -> ConversationService:
+    """
+    Создаёт сервис бесед для бизнес-логики работы с беседами.
+
+    Args:
+        conversation_repo: Репозиторий бесед для доступа к данным
+
+    Returns:
+        ConversationService: Сервис с бизнес-логикой бесед (создание, обновление, удаление)
+    """
+    return ConversationService(conversation_repo)
 
 
 async def get_current_user(
