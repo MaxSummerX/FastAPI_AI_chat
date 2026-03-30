@@ -2,28 +2,24 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.schemas.conversation import ConversationCreate, ConversationUpdate
-from app.application.schemas.conversation import ConversationResponse as ConversationSchemas
+from app.application.exceptions.conversation import ConversationNotFoundError
+from app.application.schemas.conversation import ConversationCreate, ConversationResponse, ConversationUpdate
 from app.application.schemas.pagination import PaginatedResponse
-from app.domain.models.conversation import Conversation as ConversationModel
+from app.application.services.conversation_service import ConversationService
 from app.domain.models.user import User as UserModel
-from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
     InvalidCursorError,
-    paginate_with_cursor,
 )
-from app.presentation.dependencies import get_current_user
+from app.presentation.dependencies import get_conversation_service, get_current_user
 from app.presentation.routers.v2 import message
 
 
 router = APIRouter(prefix="/conversations")
 
-TAGS = "Conversations_V2"
+TAGS = "Conversations"
 
 
 @router.get(
@@ -40,39 +36,23 @@ async def get_conversations(
         default=None, description="Курсор для следующей страницы. Берётся из предыдущего ответа"
     ),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> PaginatedResponse[ConversationSchemas]:
+    service: ConversationService = Depends(get_conversation_service),
+) -> PaginatedResponse[ConversationResponse]:
     """
-    Получить беседы пользователя с пагинацией (курсорной).
+    Возвращает беседы текущего пользователя с курсорной пагинацией.
+
+    **Возможные ошибки:**
+    - `400` — невалидный формат курсора
     """
-    logger.info(
-        f"Запрос на получение бесед пользователя {current_user.id} "
-        f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
-    )
-
-    # Формируем базовый запрос
-    query = select(ConversationModel).where(ConversationModel.user_id == current_user.id)
-
     try:
-        conversations, next_cursor, has_next = await paginate_with_cursor(
-            db=db,
-            query=query,
-            cursor=cursor,
+        return await service.get_user_conversations(
             limit=limit,
-            model=ConversationModel,
+            cursor=cursor,
+            user_id=current_user.id,
         )
     except InvalidCursorError as e:
+        logger.warning("Невалидный курсор пользователя {}: {}", current_user.id, str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
-    logger.info(
-        f"Возвращено {len(conversations)} бесед, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}"
-    )
-
-    return PaginatedResponse(
-        items=[ConversationSchemas.model_validate(conversation) for conversation in conversations],
-        next_cursor=next_cursor,
-        has_next=has_next,
-    )
 
 
 @router.post(
@@ -84,21 +64,22 @@ async def get_conversations(
 async def create_conversation(
     conversation_data: ConversationCreate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ConversationSchemas:
+    service: ConversationService = Depends(get_conversation_service),
+) -> ConversationResponse:
     """
-    Создать новую беседу для текущего пользователя.
+    Создаёт новую беседу для текущего пользователя.
+
+    **Возможные ошибки:**
+    - `422` — некорректные данные беседы
     """
-    logger.info(f"Запрос на создание беседы пользователем {current_user.id}")
+    try:
+        return await service.create_conversation(conversation_data=conversation_data, user_id=current_user.id)
 
-    conversation = ConversationModel(user_id=current_user.id, title=conversation_data.title or "New conversation")
-    db.add(conversation)
-    await db.commit()
-    await db.refresh(conversation)
-
-    logger.info(f"Создана беседа {conversation.id} для пользователя {current_user.id}")
-
-    return ConversationSchemas.model_validate(conversation)
+    except Exception as e:
+        logger.error("Ошибка при создании беседы пользователем {}: {}", current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating conversation"
+        ) from None
 
 
 @router.patch(
@@ -111,60 +92,56 @@ async def update_conversation(
     conversation_id: UUID,
     conversation_data: ConversationUpdate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ConversationSchemas:
+    service: ConversationService = Depends(get_conversation_service),
+) -> ConversationResponse:
     """
-    Переименовать беседу или отправить её в архив.
+    Обновляет беседу пользователя.
+
+    Выполняет частичное обновление — обновляются только переданные поля.
+
+    **Возможные ошибки:**
+    - `404` — беседа не найдена или принадлежит другому пользователю
     """
-    logger.info(f"Запрос на обновление беседы {conversation_id} пользователя {current_user.id}")
+    try:
+        return await service.update_conversation(
+            conversation_id=conversation_id, conversation_data=conversation_data, user_id=current_user.id
+        )
 
-    result = await db.execute(
-        update(ConversationModel)
-        .where(ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id)
-        .values(**conversation_data.model_dump(exclude_unset=True, by_alias=False))
-        .returning(ConversationModel)
-    )
+    except ConversationNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
-    conversation = result.scalar_one_or_none()
-
-    if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    await db.commit()
-    await db.refresh(conversation)
-
-    logger.info(f"Обновлена беседа {conversation.id} для пользователя {current_user.id}")
-
-    return ConversationSchemas.model_validate(conversation)
+    except Exception as e:
+        logger.error("Ошибка при обновлении беседы: {} пользователем {}: {}", conversation_id, current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating conversation"
+        ) from None
 
 
 @router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, tags=[TAGS], summary="Удалить беседу")
 async def delete_conversation(
     conversation_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    service: ConversationService = Depends(get_conversation_service),
 ) -> None:
     """
-    Полное удаление беседы по UUID из БД (включая все сообщения).
+    Удаляет беседу пользователя.
 
-    **Внимание:** Это действие необратимо!
+    Выполняет полное удаление беседы из базы данных.
+
+    **Возможные ошибки:**
+    - `404` — беседа не найдена или принадлежит другому пользователю
     """
-    logger.info(f"Запрос на удаление беседы {conversation_id} пользователем {current_user.id}")
+    try:
+        await service.delete_conversation(conversation_id=conversation_id, user_id=current_user.id)
 
-    result = await db.scalars(
-        select(ConversationModel).where(
-            ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
-        )
-    )
-    conversation = result.first()
+    except ConversationNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
-    if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    await db.delete(conversation)
-    await db.commit()
-
-    logger.info(f"Удалена беседа {conversation_id}")
+    except Exception as e:
+        logger.error("Ошибка при удалении беседы: {} пользователем {}: {}", conversation_id, current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting conversation"
+        ) from None
 
 
 router.include_router(message.router)
