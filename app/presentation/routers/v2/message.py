@@ -16,14 +16,14 @@ from app.domain.models.conversation import Conversation as ConversationModel
 from app.domain.models.message import Message as MessageModel
 from app.domain.models.user import User as UserModel
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.llms.config import base_config_for_llm
+from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
     InvalidCursorError,
     paginate_with_cursor,
 )
-from app.llms.config import base_config_for_llm
-from app.llms.openai import AsyncOpenAILLM
 from app.presentation.dependencies import get_current_user
 from app.services.message_service import MessageService, get_message_service
 

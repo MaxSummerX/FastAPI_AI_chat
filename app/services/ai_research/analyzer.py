@@ -10,7 +10,7 @@ from app.application.exceptions.vacancy import VacancyNotFoundError
 from app.domain.enums.analysis import AnalysisType
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
-from app.llms.openai import AsyncOpenAILLM
+from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.services.ai_research.llm import _call_llm_with_retry
 from app.services.ai_research.utils import prompt_choice
 

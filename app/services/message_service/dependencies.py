@@ -3,9 +3,9 @@ from mem0 import AsyncMemory
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.llms.depends import get_base_llm
+from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.memory.depends import get_memory
-from app.llms.depends import get_base_llm
-from app.llms.openai import AsyncOpenAILLM
 from app.services.message_service.service import MessageService
 
 

@@ -4,7 +4,7 @@ from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.application.exceptions.llm import LLMGenerationError
-from app.llms.openai import AsyncOpenAILLM
+from app.infrastructure.llms.openai import AsyncOpenAILLM
 
 
 @retry(

@@ -232,8 +232,8 @@ async def import_from_mem0ai_to_postgres_db(
     """
     from app.application.prompts.parsing_category import PARSE_CATEGORY
     from app.domain.models.message import Message as MessageModel
-    from app.llms.config import parse_llm_config
-    from app.llms.openai import AsyncOpenAILLM
+    from app.infrastructure.llms.config import parse_llm_config
+    from app.infrastructure.llms.openai import AsyncOpenAILLM
 
     llm = AsyncOpenAILLM(parse_llm_config)
 

@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from app.llms.configs.base import BaseLlmConfig
+from app.infrastructure.llms.configs.base import BaseLlmConfig
 
 
 class OpenAIConfig(BaseLlmConfig):
