@@ -110,7 +110,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     from unittest.mock import AsyncMock
 
     from app.infrastructure.database.dependencies import get_db
-    from app.infrastructure.memory.depends import get_memory
+    from app.infrastructure.memory.dependencies import get_memory
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
@@ -935,7 +935,7 @@ async def client_with_mocked_memory_sync(
 
     # Подменяем зависимости
     app.dependency_overrides[get_db] = override_get_db
-    from app.infrastructure.memory.depends import get_memory
+    from app.infrastructure.memory.dependencies import get_memory
 
     app.dependency_overrides[get_memory] = override_get_memory
 

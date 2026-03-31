@@ -2,26 +2,25 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from loguru import logger
-from mem0 import AsyncMemory
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.dto.stream import StreamData
 from app.application.exceptions.conversation import ConversationNotFoundError
 from app.application.exceptions.llm import LLMGenerationError
 from app.application.exceptions.prompt import PromptNotFoundError
 from app.application.prompts.base import START_PROMPT
 from app.application.schemas.fact import FactSource
-from app.application.schemas.message import HistoryMessage
-from app.domain.models import Message as MessageModel
-from app.domain.models.conversation import Conversation as ConversationModel
-from app.domain.models.prompt import Prompts as PromptModel
-from app.infrastructure.llms.openai import AsyncOpenAILLM
+from app.application.schemas.message import HistoryMessage, MessageResponse
+from app.application.schemas.pagination import PaginatedResponse
+from app.domain.repositories.conversations import IConversationRepository
+from app.domain.repositories.messages import IMessageRepository
+from app.domain.repositories.prompts import IPromptRepository
+from app.domain.services.llm import ILLMService
+from app.domain.services.memory import IMemoryService
 from app.infrastructure.llms.tools import (
     CREATE_DOCUMENT_TOOL,
     FILE_SEARCH_TOOL,
@@ -34,60 +33,101 @@ from app.infrastructure.llms.tools import (
 )
 
 
-@dataclass
-class StreamData:
-    stream: AsyncIterator[str]
-    result_awaitable: Awaitable[dict[str, Any]]
-    conversation_id: UUID
-    model: str
-    history: list[dict]
-    tools: dict[str, Callable[..., Any]]
-
-
-def parse_facts_from_mem0(memory: dict) -> str:
-    """Извлечь и отформатировать факты из ответа mem0."""
-    data = []
-
-    # Добавляем факты
-    if results := memory.get("results"):
-        data.append("\n📝 Факты о пользователе:")
-        for item in results:
-            data.append(f" • {item['memory']} - {item['created_at'][:16]}")
-
-    # Добавляем связи
-    if relations := memory.get("relations"):
-        data.append("\n🔗 Связи:")
-        for relation in relations:
-            source = relation["source"].replace("user_id:_", "User").replace("_", " ")
-            dest = relation["destination"].replace("_", " ")
-            rel_type = relation["relationship"].replace("_", " ")
-            data.append(f"  • {source} → {rel_type} → {dest}")
-
-    return "\n".join(data) if data else "Нет данных о пользователе"
-
-
 def _handle_memory_result(ts: asyncio.Task) -> None:
     """Обработать результат фоновой задачи mem0ai."""
     if ts.cancelled():
         logger.warning("Задача mem0ai отменена")
     elif ts.exception():
-        logger.error(f"Ошибка mem0ai: {ts.exception()}", exc_info=ts.exception())
+        logger.error("Ошибка mem0ai: {}", ts.exception(), exc_info=ts.exception())
     else:
         logger.debug("mem0ai успешно сохранил память")
 
 
 class MessageService:
-    """Сервис для обработки сообщений с поддержкой multi-round tool calls."""
+    """
+    Сервис для обработки сообщений с поддержкой multi-round tool calls.
+
+    Управляет жизненным циклом сообщений в беседах:
+    создание, получение истории, генерация AI-ответов через LLM,
+    интеграция с системой памяти (mem0ai) и выполнение инструментов.
+    """
 
     def __init__(
         self,
-        memory: AsyncMemory,
-        db: AsyncSession,
-        llm: AsyncOpenAILLM,
+        message_repo: IMessageRepository,
+        conversation_repo: IConversationRepository,
+        prompt_repo: IPromptRepository,
+        llm_service: ILLMService,
+        memory_service: IMemoryService,
     ):
-        self.memory = memory
-        self.db = db
-        self.llm = llm
+        """
+        Инициализирует сервис сообщений.
+
+        Args:
+            message_repo: Репозиторий сообщений для доступа к данным
+            conversation_repo: Репозиторий бесед для проверки существования
+            prompt_repo: Репозиторий промптов для кастомных системных промптов
+            llm_service: Сервис языковой модели для генерации ответов
+            memory_service: Сервис памяти для извлечения и сохранения фактов
+        """
+        self.message_repo = message_repo
+        self.conversation_repo = conversation_repo
+        self.prompt_repo = prompt_repo
+        self.llm_service = llm_service
+        self.memory_service = memory_service
+
+    async def get_user_messages(
+        self,
+        limit: int,
+        cursor: str | None,
+        user_id: UUID,
+        conversation_id: UUID,
+    ) -> PaginatedResponse[MessageResponse]:
+        """
+        Получить сообщения беседы с курсорной пагинацией.
+
+        Args:
+            limit: Максимальное количество сообщений на странице
+            cursor: Курсор из предыдущего ответа для следующей страницы
+            user_id: UUID пользователя для проверки прав доступа
+            conversation_id: UUID беседы
+
+        Returns:
+            PaginatedResponse с сообщениями и метаданными пагинации
+
+        Raises:
+            ConversationNotFoundError: Если беседа не существует или недоступна пользователю
+        """
+        logger.debug(
+            "Запрос на получение сообщений пользователя пользователя {} с пагинацией: limit={}, cursor={}",
+            user_id,
+            limit,
+            "да" if cursor else "нет",
+        )
+
+        conversation = await self.conversation_repo.get_by_id(conversation_id=conversation_id, user_id=user_id)
+
+        if not conversation:
+            logger.warning("Попытка доступа к несуществующей беседе {} пользователем {}", conversation_id, user_id)
+            raise ConversationNotFoundError("Conversation not found")
+
+        messages, next_cursor, has_next = await self.message_repo.get_paginated(
+            conversation_id=conversation_id,
+            cursor=cursor,
+            limit=limit,
+        )
+        logger.debug(
+            "Возвращено {} сообщений, has_next={}, next_cursor={}",
+            len(messages),
+            has_next,
+            "да" if next_cursor else "нет",
+        )
+
+        return PaginatedResponse(
+            items=[MessageResponse.model_validate(message) for message in messages],
+            next_cursor=next_cursor,
+            has_next=has_next,
+        )
 
     async def stream(
         self,
@@ -148,43 +188,27 @@ class MessageService:
             "search_documents": make_search_documents_tool(user_id),
         }
 
-        logger.info(f"Запрос на добавление стримингового ответа v2 в беседу {conversation_id} пользователем {user_id}")
+        logger.info(
+            "Запрос на добавление стримингового ответа v2 в беседу {} пользователем {}", conversation_id, user_id
+        )
 
         # Проверка существования беседы
-        conversation_result = await self.db.scalars(
-            select(ConversationModel).where(
-                ConversationModel.id == conversation_id,
-                ConversationModel.user_id == user_id,
-                ConversationModel.is_archived.is_(False),
-            )
-        )
-        conversation = conversation_result.first()
+        conversation = await self.conversation_repo.get_by_id(conversation_id=conversation_id, user_id=user_id)
 
         if not conversation:
-            raise ConversationNotFoundError(f"Conversation {conversation_id} не найден")
+            raise ConversationNotFoundError("Conversation {} не найден", conversation_id)
 
-        # Сохраняем сообщение пользователя
-        user_message = MessageModel(
-            conversation_id=conversation_id, role=message_role, content=message, model=self.llm.config.model
+        user_message = await self.message_repo.create(
+            conversation_id=conversation_id, role=message_role, content=message, model=self.llm_service.default_model
         )
-        self.db.add(user_message)
-        await self.db.flush()  # Получаем ID сообщения для background task
-        await self.db.commit()
 
         # Получаем промпт с улучшенными проверками
         if prompt_id:
-            prompt_result = await self.db.scalars(
-                select(PromptModel).where(
-                    PromptModel.id == prompt_id,
-                    PromptModel.user_id == user_id,
-                    PromptModel.is_active.is_(True),
-                )
-            )
+            prompt = await self.prompt_repo.get_by_id(prompt_id=prompt_id, user_id=user_id)
 
-            prompt = prompt_result.first()
-            logger.info(f"Поиск промпта: id={prompt_id}, найден={prompt is not None}")
+            logger.info("Поиск промпта: id={}, найден={}", prompt_id, prompt is not None)
             if not prompt:
-                logger.warning(f"Промпт не найден: id={prompt_id}, пользователь={user_id}")
+                logger.warning("Промпт не найден: id={}, пользователь={}", prompt_id, user_id)
                 raise PromptNotFoundError(f"Промпт {prompt_id} не найден")
 
             prompt_content = prompt.content + f"\nСегодня: {str(datetime.now())}"
@@ -208,20 +232,20 @@ class MessageService:
 
         # Передаём историю для генерации ответа
         try:
-            stream, result_awaitable = await self.llm.generate_stream_response(
+            stream, result_awaitable = await self.llm_service.generate_stream_response(
                 messages=history,
                 model=model,
                 tools=[WEB_SEARCH_TOOL, WEB_FETCH_TOOL, CREATE_DOCUMENT_TOOL, FILE_SEARCH_TOOL],
                 tool_choice="auto",
             )
         except Exception as e:
-            logger.error(f"Ошибка при генерации стримингового ответа: {e}")
+            logger.error("Ошибка при генерации стримингового ответа: {}", e)
             raise LLMGenerationError(str(e)) from e
 
         # Создаём фоновую задачу для работы mem0ai
         if mem0ai_save:
             task = asyncio.create_task(
-                self.memory.add(
+                self.memory_service.add(
                     messages=[{"role": message_role, "content": message}],
                     user_id=str(user_id),
                     run_id=str(user_message.id),
@@ -231,26 +255,48 @@ class MessageService:
 
             task.add_done_callback(_handle_memory_result)
 
-        logger.info(f"Сообщение добавлено в беседу {conversation_id}, стриминг запущен")
+        logger.info("Сообщение добавлено в беседу {}, стриминг запущен", conversation_id)
 
         # Возвращаем streaming ответ
         return StreamData(
             stream=stream,
             result_awaitable=result_awaitable,
             conversation_id=conversation_id,
-            model=model if model is not None else self.llm.config.model or "gpt-4o-mini",
+            model=model if model is not None else self.llm_service.default_model or "gpt-4o-mini",
             history=history,
             tools=tools,
         )
+
+    @staticmethod
+    def parse_facts_from_mem0(memory: dict) -> str:
+        """Извлечь и отформатировать факты из ответа mem0."""
+        data = []
+
+        # Добавляем факты
+        if results := memory.get("results"):
+            data.append("\n📝 Факты о пользователе:")
+            for item in results:
+                data.append(f" • {item['memory']} - {item['created_at'][:16]}")
+
+        # Добавляем связи
+        if relations := memory.get("relations"):
+            data.append("\n🔗 Связи:")
+            for relation in relations:
+                source = relation["source"].replace("user_id:_", "User").replace("_", " ")
+                dest = relation["destination"].replace("_", " ")
+                rel_type = relation["relationship"].replace("_", " ")
+                data.append(f"  • {source} → {rel_type} → {dest}")
+
+        return "\n".join(data) if data else "Нет данных о пользователе"
 
     async def stream_generator(self, stream_data: StreamData) -> AsyncIterator[str]:
         """
         Асинхронный генератор для поточной передачи ответа LLM.
 
-        Принимает подготовленные данные от message_stream и yields чанки ответа.
+        Принимает подготовленные данные от метода stream и yields чанки ответа.
 
         Args:
-            stream_data:
+            stream_data: Подготовленные данные для стриминга (StreamData)
 
         Yields:
             str: Чанки ответа от LLM для передачи в StreamingResponse
@@ -266,16 +312,22 @@ class MessageService:
             yield chunk
 
     async def _get_conversation_history(self, prompt: str, conversation_id: UUID, limit: int = 10) -> list[dict]:
-        """Получить историю в формате для LLM"""
+        """
+        Получить историю сообщений в формате для LLM.
 
-        result = await self.db.scalars(
-            select(MessageModel)
-            .where(MessageModel.conversation_id == conversation_id)
-            .order_by(MessageModel.timestamp.desc())
-            .limit(limit)
-        )
+        Извлекает последние сообщения из беседы, нормализует их через Pydantic
+        и добавляет системный промпт в начало.
 
-        messages = result.all()
+        Args:
+            prompt: Системный промпт для LLM
+            conversation_id: UUID беседы
+            limit: Максимальное количество сообщений
+
+        Returns:
+            Список словарей в формате [{"role": "...", "content": "..."}]
+        """
+
+        messages = await self.message_repo.get_history(conversation_id=conversation_id, limit=limit)
 
         # Нормализуем через Pydantic
         history = [HistoryMessage.model_validate(msg).model_dump(mode="json") for msg in reversed(messages)]
@@ -293,28 +345,40 @@ class MessageService:
         memory_limit: int = 50,
         fact_score: float = 0.3,
     ) -> list[dict]:
-        """Получить историю с релевантными фактами из mem0 в формате для LLM"""
-        start = time.time()
+        """
+        Получить историю сообщений с релевантными фактами из mem0ai.
 
-        result = await self.db.scalars(
-            select(MessageModel)
-            .where(MessageModel.conversation_id == conversation_id)
-            .order_by(MessageModel.timestamp.desc())
-            .limit(limit)
-        )
+        Выполняет поиск фактов в памяти пользователя, извлекает историю
+        сообщений и формирует контекст для LLM с найденными фактами.
+
+        Args:
+            message: Текст сообщения пользователя для поиска релевантных фактов
+            user_id: UUID пользователя
+            prompt: Системный промпт для LLM
+            conversation_id: UUID беседы
+            limit: Максимальное количество сообщений из истории
+            memory_limit: Максимальное количество фактов из памяти
+            fact_score: Минимальный порог схожести для фактов (0.0-1.0)
+
+        Returns:
+            Список словарей в формате [{"role": "...", "content": "..."}]
+            с расширенным системным промптом, включающим факты
+        """
+        start = time.time()
+        messages = await self.message_repo.get_history(conversation_id=conversation_id, limit=limit)
         db_time = time.time() - start
 
-        messages = result.all()
-
         mem_start = time.time()
-        facts = await self.memory.search(message, user_id=str(user_id), limit=memory_limit, threshold=fact_score)
+        facts = await self.memory_service.search(
+            message, user_id=str(user_id), limit=memory_limit, threshold=fact_score
+        )
         mem_time = time.time() - mem_start
 
         total_time = time.time() - start
         logger.info(
             f"Кол-во Фактов: {len(facts['results'])}, БД: {db_time:.3f}s, Mem0: {mem_time:.3f}s, Всего: {total_time:.3f}s"
         )
-        new_prompt = prompt + parse_facts_from_mem0(facts)
+        new_prompt = prompt + self.parse_facts_from_mem0(facts)
 
         # Нормализуем через Pydantic
         history = [HistoryMessage.model_validate(msg).model_dump(mode="json") for msg in reversed(messages)]
@@ -368,7 +432,7 @@ class MessageService:
 
             # Логирование раунда
             if tool_calls:
-                logger.info(f"🔄 Раунд {round_num + 1}: {len(tool_calls)} tool calls")
+                logger.info("🔄 Раунд {}: {} tool calls", round_num + 1, len(tool_calls))
 
             # Если нет tool_calls или нет данных для выполнения — сохраняем и выходим
             if not tool_calls or not tools:
@@ -376,11 +440,9 @@ class MessageService:
                     logger.warning("Получены tool_calls но нет history/llm/tools для выполнения")
 
                 # Сохраняем финальный ответ в БД
-                assistant_message = MessageModel(
+                await self.message_repo.create(
                     conversation_id=conversation_id, role="assistant", content=content, model=model
                 )
-                self.db.add(assistant_message)
-                await self.db.commit()
                 return
 
             # Форматируем tool_calls для OpenAI API и сохраняем в БД
@@ -397,18 +459,16 @@ class MessageService:
             ]
 
             if content:
-                assistant_message = MessageModel(
+                await self.message_repo.create(
                     conversation_id=conversation_id,
                     role="assistant",
                     content=content,
                     model=model,
                     metadata_={"tool_calls": formatted_tool_calls},  # Сохраняем metadata
                 )
-                self.db.add(assistant_message)
-                await self.db.commit()
 
             # Выполняем tools
-            logger.info(f"Выполняем {len(tool_calls)} tools...")
+            logger.info("Выполняем {} tools...", len(tool_calls))
 
             async def execute_tool(tool_call: dict, formatted_calls: list) -> dict:
                 """Выполнить один tool call."""
@@ -419,26 +479,24 @@ class MessageService:
                 if not func_args and func_name in ["create_file", "web_search", "web_fetch", "search_documents"]:
                     error_msg = f"⚠️ Пропущен вызов {func_name}: пустые аргументы (невалидный JSON от модели)"
                     logger.warning(error_msg)
-                    return {"role": "tool", "tool_call_id": tool_call["id"], "content": error_msg}
+                    return {"role": "tool", "tool_calsl_id": tool_call["id"], "content": error_msg}
 
                 logger.info(f"🔧 {func_name}({func_args})")
                 try:
                     result = await tools[func_name](**func_args)
                     logger.info(f"📦 {result}")
 
-                    # Сохраняем reuslt с tool_calls в БД
-                    tool_call_results = MessageModel(
+                    # Сохраняем result с tool_calls в БД
+                    await self.message_repo.create(
                         conversation_id=conversation_id,
                         role="assistant",
                         content=result,
                         model=model,
                         metadata_={"tool_calls": formatted_calls},  # Сохраняем metadata
                     )
-                    self.db.add(tool_call_results)
-                    await self.db.commit()
 
-                except Exception as e:
-                    error_msg = f"Ошибка выполнения {func_name}: {e}"
+                except Exception as er:
+                    error_msg = f"Ошибка выполнения {func_name}: {er}"
                     logger.error(error_msg)
                     result = error_msg
                 return {"role": "tool", "tool_call_id": tool_call["id"], "content": str(result)}
@@ -464,7 +522,7 @@ class MessageService:
 
             # Следующий запрос к LLM с результатами tools
             try:
-                stream, result_awaitable = await self.llm.generate_stream_response(
+                stream, result_awaitable = await self.llm_service.generate_stream_response(
                     messages=history,
                     model=model,
                 )
@@ -476,14 +534,12 @@ class MessageService:
             # Продолжаем цикл - stream и result_awaitable обновлены для следующей итерации
 
         # Если вышли из цикла по превышению max_tool_rounds
-        logger.error(f"Превышено максимальное количество раундов tool calls: {max_tool_rounds}")
+        logger.error("Превышено максимальное количество раундов tool calls: {}", max_tool_rounds)
         yield "\n\n[Ошибка: Превышено максимальное количество операций]"
 
         # Сохраняем последний результат
         result = await result_awaitable
         final_content = result.get("content", "")
-        assistant_message = MessageModel(
+        await self.message_repo.create(
             conversation_id=conversation_id, role="assistant", content=final_content, model=model
         )
-        self.db.add(assistant_message)
-        await self.db.commit()
