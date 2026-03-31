@@ -5,7 +5,7 @@ from loguru import logger
 
 from app.application.exceptions.llm import LLMGenerationError
 from app.application.prompts.analysis import PREPARATION_PROMPT
-from app.llms.openai import AsyncOpenAILLM
+from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.services.ai_research.llm import _call_llm_with_retry
 
 

@@ -7,8 +7,8 @@ Dependency injection для LLM инстансов.
 
 from collections.abc import AsyncGenerator
 
-from app.llms.config import base_config_for_llm, researcher_llm_config
-from app.llms.openai import AsyncOpenAILLM
+from app.infrastructure.llms.config import base_config_for_llm, researcher_llm_config
+from app.infrastructure.llms.openai import AsyncOpenAILLM
 
 
 async def get_researcher_llm() -> AsyncGenerator[AsyncOpenAILLM]:

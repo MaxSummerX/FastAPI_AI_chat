@@ -21,8 +21,8 @@ from app.application.schemas.message import HistoryMessage
 from app.domain.models import Message as MessageModel
 from app.domain.models.conversation import Conversation as ConversationModel
 from app.domain.models.prompt import Prompts as PromptModel
-from app.llms.openai import AsyncOpenAILLM
-from app.llms.tools import (
+from app.infrastructure.llms.openai import AsyncOpenAILLM
+from app.infrastructure.llms.tools import (
     CREATE_DOCUMENT_TOOL,
     FILE_SEARCH_TOOL,
     WEB_FETCH_TOOL,
