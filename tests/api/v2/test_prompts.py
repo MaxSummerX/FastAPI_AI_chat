@@ -353,7 +353,7 @@ async def test_create_prompt_title_too_long(client: AsyncClient, auth_headers: d
 @pytest.mark.asyncio
 async def test_update_prompt_unauthorized(client: AsyncClient, test_prompt: PromptModel) -> None:
     """Тест: обновление промпта без авторизации"""
-    response = await client.put(
+    response = await client.patch(
         f"/api/v2/prompts/{test_prompt.id}",
         json={"content": "Updated content"},
     )
@@ -367,7 +367,7 @@ async def test_update_prompt_success(
     test_prompt: PromptModel,
 ) -> None:
     """Тест: успешное обновление промпта"""
-    response = await client.put(
+    response = await client.patch(
         f"/api/v2/prompts/{test_prompt.id}",
         headers=auth_headers,
         json={
@@ -392,7 +392,7 @@ async def test_update_prompt_partial(
     """Тест: частичное обновление промпта"""
     original_content = test_prompt.content
 
-    response = await client.put(
+    response = await client.patch(
         f"/api/v2/prompts/{test_prompt.id}",
         headers=auth_headers,
         json={"title": "New title only"},
@@ -411,7 +411,7 @@ async def test_update_prompt_deactivate(
     test_prompt: PromptModel,
 ) -> None:
     """Тест: деактивация промпта"""
-    response = await client.put(
+    response = await client.patch(
         f"/api/v2/prompts/{test_prompt.id}",
         headers=auth_headers,
         json={"is_active": False},
@@ -426,7 +426,7 @@ async def test_update_prompt_deactivate(
 async def test_update_prompt_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: обновление несуществующего промпта"""
 
-    response = await client.put(
+    response = await client.patch(
         f"/api/v2/prompts/{uuid.uuid4()}",
         headers=auth_headers,
         json={"content": "Updated"},
@@ -441,7 +441,7 @@ async def test_update_prompt_other_user(
     test_prompt: PromptModel,
 ) -> None:
     """Тест: попытка обновить промпт другого пользователя"""
-    response = await client.put(
+    response = await client.patch(
         f"/api/v2/prompts/{test_prompt.id}",
         headers=admin_headers,
         json={"content": "Hacked!"},

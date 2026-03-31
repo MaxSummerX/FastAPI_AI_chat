@@ -28,8 +28,8 @@ class PromptUpdate(BaseModel):
     is_active: bool | None = Field(None, description="Статус промпта")
 
 
-class PromptResponseBase(PromptBase):
-    """Базовая схема ответа с промптом"""
+class PromptResponse(PromptBase):
+    """Полная схема ответа с промптом"""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -38,18 +38,3 @@ class PromptResponseBase(PromptBase):
     is_active: bool = Field(..., description="Активен ли промпт")
     created_at: datetime = Field(..., description="Время создания")
     updated_at: datetime = Field(..., description="Время обновления")
-
-
-class PromptResponse(PromptResponseBase):
-    """Полная схема ответа с промптом"""
-
-    pass
-
-
-class PromptListResponse(BaseModel):
-    """Схема для списка промптов"""
-
-    prompts: list[PromptResponseBase] = Field(..., description="Список промптов")
-    total: int = Field(..., description="Общее количество промптов")
-    page: int = Field(..., description="Номер страницы")
-    size: int = Field(..., description="Размер страницы")
