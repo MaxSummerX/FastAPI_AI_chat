@@ -21,8 +21,7 @@ parse_llm_config = OpenAIConfig(
     max_tokens=500,
 )
 
-
-researcher_llm_config = OpenAIConfig(
+analysis_llm_config = OpenAIConfig(
     model=os.getenv("MODEL"),
     temperature=0.4,
     api_key=os.getenv("OPENROUTER_API_KEY"),
