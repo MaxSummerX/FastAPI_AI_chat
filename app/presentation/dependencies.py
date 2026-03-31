@@ -9,12 +9,14 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
+from mem0 import AsyncMemory
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.auth_service import AuthService
 from app.application.services.conversation_service import ConversationService
 from app.application.services.document_service import DocumentService
 from app.application.services.invite_service import InviteService
+from app.application.services.message_service import MessageService
 from app.application.services.prompt_service import PromptService
 from app.application.services.user_service import UserService
 from app.domain.enums.role import UserRole
@@ -22,14 +24,24 @@ from app.domain.models.user import User as UserModel
 from app.domain.repositories.conversations import IConversationRepository
 from app.domain.repositories.documents import IDocumentRepository
 from app.domain.repositories.invites import IInviteRepository
+from app.domain.repositories.messages import IMessageRepository
 from app.domain.repositories.prompts import IPromptRepository
 from app.domain.repositories.users import IUserRepository
+from app.domain.services.llm import ILLMService
+from app.domain.services.memory import IMemoryService
 from app.infrastructure.database.dependencies import get_db
-from app.infrastructure.persistence.sqlalchemy.conversation_repository import ConversationSQLAlchemyRepository
-from app.infrastructure.persistence.sqlalchemy.document_repository import DocumentSQLAlchemyRepository
-from app.infrastructure.persistence.sqlalchemy.invite_repository import InviteSQLAlchemyRepository
-from app.infrastructure.persistence.sqlalchemy.prompt_repository import PromptSQLAlchemyRepository
-from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
+from app.infrastructure.llms.config import base_config_for_llm
+from app.infrastructure.llms.factory import create_analysis_llm, create_llm_service
+from app.infrastructure.llms.openai import AsyncOpenAILLM
+from app.infrastructure.memory.dependencies import create_memory_service, get_memory
+from app.infrastructure.persistence.sqlalchemy import (
+    ConversationSQLAlchemyRepository,
+    DocumentSQLAlchemyRepository,
+    InviteSQLAlchemyRepository,
+    MessageSQLAlchemyRepository,
+    PromptSQLAlchemyRepository,
+    UserSQLAlchemyRepository,
+)
 from app.infrastructure.security.jwt_service import TokenPayload, decode_token
 from app.infrastructure.settings.settings import settings
 
@@ -91,6 +103,19 @@ def get_conversation_repo(db: AsyncSession = Depends(get_db)) -> IConversationRe
 
 def get_prompt_repo(db: AsyncSession = Depends(get_db)) -> IPromptRepository:
     return PromptSQLAlchemyRepository(db)
+
+
+def get_message_repo(db: AsyncSession = Depends(get_db)) -> IMessageRepository:
+    """
+    Создаёт репозиторий сообщений для работы с БД.
+
+    Args:
+        db: Асинхронная сессия БД
+
+    Returns:
+        IMessageRepository: Репозиторий для CRUD операций с сообщениями
+    """
+    return MessageSQLAlchemyRepository(db)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:
@@ -174,6 +199,39 @@ def get_prompt_service(prompt_repo: IPromptRepository = Depends(get_prompt_repo)
         PromptService: Сервис с бизнес-логикой промптов
     """
     return PromptService(prompt_repo)
+
+
+def get_memory_service(
+    memory: AsyncMemory = Depends(get_memory),
+) -> IMemoryService:
+    """Создаёт Memory сервис для application layer."""
+    return create_memory_service(memory)
+
+
+def get_llm_service() -> ILLMService:
+    """Создаёт LLM сервис для application layer."""
+    return create_llm_service(base_config_for_llm)
+
+
+def get_message_service(
+    message_repo: IMessageRepository = Depends(get_message_repo),
+    conversation_repo: IConversationRepository = Depends(get_conversation_repo),
+    prompt_repo: IPromptRepository = Depends(get_prompt_repo),
+    llm_service: ILLMService = Depends(get_llm_service),
+    memory_service: IMemoryService = Depends(get_memory_service),
+) -> MessageService:
+    return MessageService(
+        message_repo=message_repo,
+        conversation_repo=conversation_repo,
+        prompt_repo=prompt_repo,
+        llm_service=llm_service,
+        memory_service=memory_service,
+    )
+
+
+def get_researcher_llm() -> AsyncOpenAILLM:
+    """FastAPI зависимость для AI-исследования."""
+    return create_analysis_llm()
 
 
 async def get_current_user(

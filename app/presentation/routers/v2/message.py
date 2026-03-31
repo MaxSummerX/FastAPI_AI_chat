@@ -3,8 +3,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.exceptions.conversation import ConversationNotFoundError
 from app.application.exceptions.llm import LLMGenerationError
@@ -12,23 +10,19 @@ from app.application.exceptions.prompt import PromptNotFoundError
 from app.application.schemas.message import MessageResponse as MessageSchemas
 from app.application.schemas.message import MessageStreamRequest
 from app.application.schemas.pagination import PaginatedResponse
-from app.domain.models.conversation import Conversation as ConversationModel
-from app.domain.models.message import Message as MessageModel
+from app.application.services.message_service import MessageService
 from app.domain.models.user import User as UserModel
-from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.llms.config import base_config_for_llm
 from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
     InvalidCursorError,
-    paginate_with_cursor,
 )
-from app.presentation.dependencies import get_current_user
-from app.services.message_service import MessageService, get_message_service
+from app.presentation.dependencies import get_current_user, get_message_service
 
 
-router = APIRouter(prefix="/{conversation_id}/messages", tags=["Messages_v2"])
+router = APIRouter(prefix="/{conversation_id}/messages", tags=["Messages"])
 
 
 llm = AsyncOpenAILLM(base_config_for_llm)
@@ -48,49 +42,27 @@ async def get_messages(
         default=None, description="Курсор для загрузки более старых сообщений. Берётся из предыдущего ответа"
     ),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    service: MessageService = Depends(get_message_service),
 ) -> PaginatedResponse[MessageSchemas]:
     """
-    Получить историю сообщений с курсорной пагинацией.
+    Возвращает историю сообщений беседы с курсорной пагинацией.
+
+    **Возможные ошибки:**
+    - `400` — невалидный формат курсора
+    - `404` — беседа не найдена или недоступна пользователю
     """
-    logger.info(f"Запрос сообщений беседы {conversation_id} от пользователя {current_user.id}")
-
-    # Проверка существования беседы и прав доступа
-    conversation_result = await db.scalars(
-        select(ConversationModel).where(
-            ConversationModel.id == conversation_id, ConversationModel.user_id == current_user.id
-        )
-    )
-    conversation = conversation_result.first()
-
-    if not conversation:
-        logger.warning(f"Попытка доступа к несуществующей беседе {conversation_id} пользователем {current_user.id}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    # Формируем базовый запрос
-    query = select(MessageModel).where(MessageModel.conversation_id == conversation_id)
-
     try:
-        messages, next_cursor, has_next = await paginate_with_cursor(
-            db=db,
-            query=query,
-            cursor=cursor,
+        return await service.get_user_messages(
             limit=limit,
-            model=MessageModel,
-            timestamp_field="timestamp",  # MessageModel использует поле timestamp, не created_at
+            cursor=cursor,
+            user_id=current_user.id,
+            conversation_id=conversation_id,
         )
+    except ConversationNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None
     except InvalidCursorError as e:
+        logger.warning("Невалидный курсор пользователя {}: {}", current_user.id, str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
-    logger.info(
-        f"Возвращено {len(messages)} сообщений, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}"
-    )
-
-    return PaginatedResponse(
-        items=[MessageSchemas.model_validate(message) for message in messages],
-        next_cursor=next_cursor,
-        has_next=has_next,
-    )
 
 
 @router.post("/stream_v2", status_code=status.HTTP_200_OK, summary="Добавить сообщение с поточным ответом (v2)")
@@ -101,26 +73,15 @@ async def add_message_stream_v2(
     service: MessageService = Depends(get_message_service),
 ) -> StreamingResponse:
     """
-    Добавить сообщение в беседу и получить поточный ответ (v2).
+    Добавляет сообщение в беседу и возвращает поточный ответ от LLM.
 
-    Дополнительно поддерживает:
-    - Выборочное использование mem0ai
-    - Кастомные промпты
-    - Настройку контекста (sliding window, memory facts)
+    Поддерживает кастомные промпты, настройку контекста (sliding window),
+    и выборочное использование mem0ai для персонализации ответа.
 
-    Args:
-    - conversation_id: UUID беседы
-    - request: Запрос с сообщением и настройками (MessageStreamRequest)
-    - current_user: Текущий аутентифицированный пользователь
-    - service: Сервис для обработки сообщений (MessageService)
-
-    Returns:
-    - StreamingResponse: Потоковый ответ сгенерированный LLM
-
-    Raises:
-    - HTTPException 422: Если content сообщения пустой (Pydantic validation)
-    - HTTPException 404: Если беседа или промпт не найдены
-    - HTTPException 500: При ошибке генерации ответа
+    **Возможные ошибки:**
+    - `404` — беседа или промпт не найдены
+    - `422` — пустое content сообщения
+    - `500` — ошибка генерации ответа LLM
     """
 
     # Возвращаем streaming ответ

@@ -15,7 +15,7 @@ from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
-from app.infrastructure.llms.config import researcher_llm_config
+from app.infrastructure.llms.config import analysis_llm_config
 from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.settings.settings import settings
 from app.infrastructure.task_queue.celery_config import celery
@@ -133,7 +133,7 @@ def ai_analyse_task(
         dict со статистикой анализа
     """
 
-    llm = AsyncOpenAILLM(researcher_llm_config)
+    llm = AsyncOpenAILLM(analysis_llm_config)
 
     async def run_ai_analyse() -> dict[str, Any]:
         async with _worker_resources["session_factory"]() as session:
