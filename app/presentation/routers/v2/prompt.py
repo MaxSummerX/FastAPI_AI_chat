@@ -2,28 +2,21 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.exceptions.prompt import PromptNotFoundError
 from app.application.schemas.pagination import PaginatedResponse
-from app.application.schemas.prompt import (
-    PromptCreate,
-    PromptResponse,
-    PromptUpdate,
-)
-from app.domain.models.prompt import Prompts as PromptModel
+from app.application.schemas.prompt import PromptCreate, PromptResponse, PromptUpdate
+from app.application.services.prompt_service import PromptService
 from app.domain.models.user import User as UserModel
-from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
     InvalidCursorError,
-    paginate_with_cursor,
 )
-from app.presentation.dependencies import get_current_user
+from app.presentation.dependencies import get_current_user, get_prompt_service
 
 
-router = APIRouter(prefix="/prompts", tags=["Prompts_v2"])
+router = APIRouter(prefix="/prompts", tags=["Prompts"])
 
 
 @router.get(
@@ -38,153 +31,128 @@ async def get_user_prompts(
     cursor: str | None = Query(
         default=None, description="Курсор для следующей страницы. Берётся из предыдущего ответа"
     ),
+    include_inactive: bool = Query(default=False, description="Включать неактивные промпты в результаты"),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    include_inactive: bool = Query(False, description="Включать неактивные промпты"),
+    service: PromptService = Depends(get_prompt_service),
 ) -> PaginatedResponse[PromptResponse]:
     """
-    Получить промпты пользователя с пагинацией (курсорной).
+    Возвращает промпты текущего пользователя с курсорной пагинацией.
+
+    **Возможные ошибки:**
+    - `400` — невалидный формат курсора
     """
-    logger.info(
-        f"Запрос на получение промптов пользователя {current_user.id} "
-        f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
-    )
-
-    # Базовое условие - промпты текущего пользователя
-    conditions = [PromptModel.user_id == current_user.id]
-
-    # Добавляем условие по активности, если не включаем неактивные
-    if not include_inactive:
-        conditions.append(PromptModel.is_active.is_(True))
-
-    # Формируем базовый запрос
-    query = select(PromptModel).where(*conditions)
-
     try:
-        prompts, next_cursor, has_next = await paginate_with_cursor(
-            db=db,
-            query=query,
-            cursor=cursor,
+        return await service.get_user_prompts(
             limit=limit,
-            model=PromptModel,
+            cursor=cursor,
+            user_id=current_user.id,
+            include_inactive=include_inactive,
         )
     except InvalidCursorError as e:
+        logger.warning("Невалидный курсор пользователя {}: {}", current_user.id, str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
-    logger.info(
-        f"Возвращено {len(prompts)} промптов, has_next={has_next}, next_cursor={'да' if next_cursor else 'нет'}"
-    )
 
-    return PaginatedResponse(
-        items=[PromptResponse.model_validate(prompt) for prompt in prompts],
-        next_cursor=next_cursor,
-        has_next=has_next,
-    )
-
-
-@router.get("/{prompt_id}", status_code=status.HTTP_200_OK, summary="Получить промпт по ID")
+@router.get(
+    "/{prompt_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Получить промпт по ID",
+)
 async def get_prompt(
     prompt_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    service: PromptService = Depends(get_prompt_service),
 ) -> PromptResponse:
-    """Получить конкретный промпт"""
-    logger.info(f"Запрос на получение промпта {prompt_id} пользователем {current_user.id}")
+    """
+    Возвращает промпт по его ID.
 
-    result = await db.scalars(
-        select(PromptModel).where(
-            PromptModel.id == prompt_id, PromptModel.user_id == current_user.id, PromptModel.is_active.is_(True)
-        )
-    )
+    **Возможные ошибки:**
+    - `404` — промпт не найден или принадлежит другому пользователю
+    """
+    try:
+        return await service.get_user_prompt(prompt_id=prompt_id, user_id=current_user.id)
+    except PromptNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    except Exception as e:
+        logger.error("Ошибка при получении промпта {} пользователем {}: {}", prompt_id, current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error retrieving prompt"
+        ) from None
 
-    prompt = result.first()
-    if not prompt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found or inaccessible")
 
-    return PromptResponse.model_validate(prompt)
-
-
-@router.post("", status_code=status.HTTP_201_CREATED, summary="Создать новый промпт")
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    summary="Создать новый промпт",
+)
 async def create_prompt(
     prompt_data: PromptCreate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    service: PromptService = Depends(get_prompt_service),
 ) -> PromptResponse:
-    """Создать новый промпт"""
-    logger.info(f"Запрос на создание промпта пользователем {current_user.id}")
+    """
+    Создаёт новый промпт для текущего пользователя.
 
-    prompt = PromptModel(
-        user_id=current_user.id, title=prompt_data.title, content=prompt_data.content, metadata_=prompt_data.metadata_
-    )
-
-    db.add(prompt)
-    await db.commit()
-    await db.refresh(prompt)
-
-    logger.info(f"Промпт {prompt.id} успешно создан")
-    return PromptResponse.model_validate(prompt)
+    **Возможные ошибки:**
+    - `422` — некорректные данные промпта
+    """
+    try:
+        return await service.create_prompt(prompt_data=prompt_data, user_id=current_user.id)
+    except Exception as e:
+        logger.error("Ошибка при создании промпта пользователем {}: {}", current_user.id, e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating prompt") from None
 
 
-@router.put("/{prompt_id}", status_code=status.HTTP_200_OK, summary="Обновить промпт")
+@router.patch(
+    "/{prompt_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Обновить промпт",
+)
 async def update_prompt(
     prompt_id: UUID,
     prompt_data: PromptUpdate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    service: PromptService = Depends(get_prompt_service),
 ) -> PromptResponse:
-    """Обновить промпт"""
-    logger.info(f"Запрос на обновление промпта {prompt_id} пользователем {current_user.id}")
+    """
+    Обновляет промпт пользователя.
 
-    # Находим промпт
-    result = await db.scalars(
-        select(PromptModel).where(PromptModel.id == prompt_id, PromptModel.user_id == current_user.id)
-    )
+    Выполняет частичное обновление — обновляются только переданные поля.
 
-    prompt = result.first()
-    if not prompt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
-
-    # Обновляем только переданные поля
-    if prompt_data.title is not None:
-        prompt.title = prompt_data.title
-    if prompt_data.content is not None:
-        prompt.content = prompt_data.content
-    if prompt_data.metadata_ is not None:
-        prompt.metadata_ = prompt_data.metadata_
-    if prompt_data.is_active is not None:
-        prompt.is_active = prompt_data.is_active
-
-    await db.commit()
-    await db.refresh(prompt)
-
-    logger.info(f"Промпт {prompt.id} успешно обновлен")
-    return PromptResponse.model_validate(prompt)
+    **Возможные ошибки:**
+    - `404` — промпт не найден или принадлежит другому пользователю
+    """
+    try:
+        return await service.update_prompt(prompt_id=prompt_id, prompt_data=prompt_data, user_id=current_user.id)
+    except PromptNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    except Exception as e:
+        logger.error("Ошибка при обновлении промпта {} пользователем {}: {}", prompt_id, current_user.id, e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating prompt") from None
 
 
-@router.delete("/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить промпт")
+@router.delete(
+    "/{prompt_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить промпт",
+)
 async def delete_prompt(
     prompt_id: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    service: PromptService = Depends(get_prompt_service),
 ) -> None:
     """
-    Удалить промпт (мягкое удаление)
+    Удаляет промпт пользователя (мягкое удаление).
+
+    Промпт помечается как неактивный, но остаётся в базе данных.
+
+    **Возможные ошибки:**
+    - `404` — промпт не найден или принадлежит другому пользователю
     """
-    logger.info(f"Запрос на удаление промпта {prompt_id} пользователем {current_user.id}")
-
-    # Находим промпт
-    result = await db.scalars(
-        select(PromptModel).where(
-            PromptModel.id == prompt_id, PromptModel.user_id == current_user.id, PromptModel.is_active.is_(True)
-        )
-    )
-
-    prompt = result.first()
-    if not prompt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found or already deleted")
-
-    # Мягкое удаление - меняем флаг is_active
-    prompt.is_active = False
-    await db.commit()
-
-    logger.info(f"Промпт {prompt.id} успешно удален")
+    try:
+        await service.soft_delete_user_prompt(prompt_id=prompt_id, user_id=current_user.id)
+    except PromptNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    except Exception as e:
+        logger.error("Ошибка при удаление промпта: {} пользователем {}: {}", prompt_id, current_user.id, e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting prompt") from None

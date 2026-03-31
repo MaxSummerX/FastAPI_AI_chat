@@ -15,17 +15,20 @@ from app.application.services.auth_service import AuthService
 from app.application.services.conversation_service import ConversationService
 from app.application.services.document_service import DocumentService
 from app.application.services.invite_service import InviteService
+from app.application.services.prompt_service import PromptService
 from app.application.services.user_service import UserService
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
 from app.domain.repositories.conversations import IConversationRepository
 from app.domain.repositories.documents import IDocumentRepository
 from app.domain.repositories.invites import IInviteRepository
+from app.domain.repositories.prompts import IPromptRepository
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.sqlalchemy.conversation_repository import ConversationSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.document_repository import DocumentSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.invite_repository import InviteSQLAlchemyRepository
+from app.infrastructure.persistence.sqlalchemy.prompt_repository import PromptSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 from app.infrastructure.security.jwt_service import TokenPayload, decode_token
 from app.infrastructure.settings.settings import settings
@@ -84,6 +87,10 @@ def get_conversation_repo(db: AsyncSession = Depends(get_db)) -> IConversationRe
         IConversationRepository: Репозиторий для CRUD операций с беседами
     """
     return ConversationSQLAlchemyRepository(db)
+
+
+def get_prompt_repo(db: AsyncSession = Depends(get_db)) -> IPromptRepository:
+    return PromptSQLAlchemyRepository(db)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:
@@ -154,6 +161,19 @@ def get_conversation_service(
         ConversationService: Сервис с бизнес-логикой бесед (создание, обновление, удаление)
     """
     return ConversationService(conversation_repo)
+
+
+def get_prompt_service(prompt_repo: IPromptRepository = Depends(get_prompt_repo)) -> PromptService:
+    """
+    Создаёт сервис промптов для бизнес-логики работы с промптами.
+
+    Args:
+        prompt_repo: Репозиторий промптов для доступа к данным
+
+    Returns:
+        PromptService: Сервис с бизнес-логикой промптов
+    """
+    return PromptService(prompt_repo)
 
 
 async def get_current_user(
