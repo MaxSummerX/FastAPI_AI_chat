@@ -11,8 +11,13 @@ from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
 from app.infrastructure.task_queue.celery_config import celery
+from app.infrastructure.task_queue.tasks.vacancy_tasks import (
+    ai_analyse_task,
+    clear_lock,
+    import_vacancy_task,
+    sync_archive_statuses_task,
+)
 from app.presentation.dependencies import get_current_admin_user, get_current_user
-from app.tasks.vacancy_tasks import ai_analyse_task, clear_lock, import_vacancy_task, sync_archive_statuses_task
 
 
 router = APIRouter(prefix="/tasks")
