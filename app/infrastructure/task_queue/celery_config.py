@@ -31,12 +31,12 @@ celery.conf.update(
     worker_prefetch_multiplier=1,  # Не забирать задачи заранее
     worker_max_tasks_per_child=100,  # Рестарт воркера после N задач
     imports=[
-        "app.tasks.vacancy_tasks",
+        "app.infrastructure.task_queue.tasks.vacancy_tasks",
     ],
     beat_schedule={
         # Пример: 3 раза в день (каждые 8 часов)
         "periodic-vacancy-import": {
-            "task": "app.tasks.vacancy_tasks.import_vacancy_task",
+            "task": "app.infrastructure.task_queue.tasks.vacancy_tasks.import_vacancy_task",
             "schedule": crontab(hour="*/8"),  # 00:00, 08:00, 16:00
             "args": (
                 "django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado",
@@ -46,7 +46,7 @@ celery.conf.update(
         },
         # Пример: 5 раз в день в конкретное время
         "periodic-vacancy-import-time": {
-            "task": "app.tasks.vacancy_tasks.import_vacancy_task",
+            "task": "app.infrastructure.task_queue.tasks.vacancy_tasks.import_vacancy_task",
             "schedule": crontab(hour="6,10,14,18,22"),  # 06:00, 10:00, 14:00, 18:00, 22:00
             "args": ("django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado", None, "USER_ID"),
         },
