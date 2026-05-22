@@ -18,9 +18,10 @@ class IMemoryService(ABC):
     @abstractmethod
     async def add(
         self,
-        messages: list[dict[str, str]],
+        messages: str | list[dict[str, str]],
         user_id: str,
         run_id: str | None = None,
+        infer: bool = True,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Добавить новые факты в память пользователя.
@@ -29,6 +30,7 @@ class IMemoryService(ABC):
             messages: Сообщения для извлечения фактов
             user_id: Идентификатор пользователя
             run_id: Опциональный ID запуска (для группировки)
+            infer:
             metadata: Дополнительные метаданные для хранения
 
         Returns:
@@ -56,12 +58,13 @@ class IMemoryService(ABC):
         """
 
     @abstractmethod
-    async def get_all(self, user_id: str, limit: int = 100) -> dict[str, Any]:
+    async def get_all(self, user_id: str, limit: int = 100, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """Получить все факты пользователя.
 
         Args:
             user_id: Идентификатор пользователя
             limit: Максимальное количество результатов
+            filters: Дополнительные фильтры для запроса
 
         Returns:
             Все факты пользователя с метаданными

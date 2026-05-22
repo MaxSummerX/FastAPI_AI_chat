@@ -33,9 +33,10 @@ class Mem0MemoryService(IMemoryService):
 
     async def add(
         self,
-        messages: list[dict[str, str]],
+        messages: str | list[dict[str, str]],
         user_id: str,
         run_id: str | None = None,
+        infer: bool = True,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
@@ -47,6 +48,7 @@ class Mem0MemoryService(IMemoryService):
             messages: Сообщения для извлечения фактов
             user_id: Идентификатор пользователя
             run_id: Опциональный ID запуска (для группировки)
+            infer:
             metadata: Дополнительные метаданные (source_type, и т.д.)
 
         Returns:
@@ -56,6 +58,7 @@ class Mem0MemoryService(IMemoryService):
             messages=messages,
             user_id=user_id,
             run_id=run_id,
+            infer=infer,
             metadata=metadata or {},
         )
         return result

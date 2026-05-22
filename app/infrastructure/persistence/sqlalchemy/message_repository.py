@@ -116,3 +116,16 @@ class MessageSQLAlchemyRepository(IMessageRepository):
             timestamp_field="timestamp",
         )
         return messages, next_cursor, has_next
+
+    async def get_messages_by_id(self, message_ids: list[UUID]) -> Sequence[Message]:
+        """
+        Получить сообщения по списку идентификаторов.
+
+        Args:
+            message_ids: Список ID сообщений для получения
+
+        Returns:
+            Последовательность найденных сообщений
+        """
+        messages: Sequence[Message] = (await self.db.scalars(select(Message).where(Message.id.in_(message_ids)))).all()
+        return messages

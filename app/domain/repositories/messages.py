@@ -77,3 +77,16 @@ class IMessageRepository(ABC):
             Кортеж (сообщения, следующий_курсор, есть_ли_следующая_страница)
         """
         pass
+
+    @abstractmethod
+    async def get_messages_by_id(self, message_ids: list[UUID]) -> Sequence[Message]:
+        """
+        Получить сообщения по списку идентификаторов.
+
+        Args:
+            message_ids: Список ID сообщений для получения
+
+        Returns:
+            Последовательность найденных сообщений
+        """
+        pass
