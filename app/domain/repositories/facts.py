@@ -7,6 +7,13 @@ from app.domain.models.fact import Fact
 
 
 class IFactRepository(ABC):
+    """
+    Интерфейс репозитория для работы с фактами.
+
+    Определяет контракт для управления фактами пользователей:
+    создание, получение, обновление и курсорная пагинация.
+    """
+
     @abstractmethod
     async def get_paginated(
         self,
@@ -17,10 +24,34 @@ class IFactRepository(ABC):
         source: FactSource | None = None,
         include_archived: bool = False,
     ) -> tuple[Sequence[Fact], str | None, bool]:
+        """
+        Получить факты пользователя с курсорной пагинацией.
+
+        Args:
+            user_id: ID пользователя
+            cursor: Курсор из предыдущего ответа для следующей страницы
+            limit: Максимальное количество фактов на странице
+            category: Фильтр по категории факта
+            source: Фильтр по источнику факта
+            include_archived: Включать ли архивные факты
+
+        Returns:
+            Кортеж (факты, следующий_курсор, есть_ли_следующая_страница)
+        """
         pass
 
     @abstractmethod
     async def get_by_id(self, fact_id: UUID, user_id: UUID) -> Fact | None:
+        """
+        Получить факт по идентификатору.
+
+        Args:
+            fact_id: ID факта
+            user_id: ID пользователя (для проверки владения)
+
+        Returns:
+            Объект Fact или None, если не найден
+        """
         pass
 
     @abstractmethod
@@ -37,20 +68,87 @@ class IFactRepository(ABC):
         metadata_: dict | None = None,
         mem0_id: UUID | None = None,
     ) -> Fact:
+        """
+        Создать новый факт.
+
+        Args:
+            user_id: ID пользователя, которому принадлежит факт
+            content: Содержание факта
+            category: Категория факта
+            source_type: Источник факта
+            confidence: Уровень уверенности (0.0-1.0)
+            source_conversation_id: ID беседы-источника
+            source_message_id: ID сообщения-источника
+            superseded_by_id: ID факта, которым заменён данный
+            metadata_: Дополнительные метаданные
+            mem0_id: ID факта во внешней системе памяти
+
+        Returns:
+            Созданный объект Fact
+        """
         pass
 
     @abstractmethod
     async def update(self, fact_id: UUID, update_data: dict) -> None:
+        """
+        Обновить данные факта.
+
+        Args:
+            fact_id: ID факта для обновления
+            update_data: Словарь с обновляемыми полями
+        """
         pass
 
     @abstractmethod
     async def get_all_facts_by_source(self, user_id: UUID, source: FactSource) -> Sequence[Fact]:
+        """
+        Получить все факты пользователя по источнику.
+
+        Args:
+            user_id: ID пользователя
+            source: Источник факта для фильтрации
+
+        Returns:
+            Последовательность фактов указанного источника
+        """
         pass
 
     @abstractmethod
     async def save(self, fact: Fact) -> Fact:
+        """
+        Сохранить Changeset факта в базу.
+
+        Args:
+            fact: Объект Fact для сохранения
+
+        Returns:
+            Обновлённый объект Fact
+        """
         pass
 
     @abstractmethod
     async def save_all(self, facts: Sequence[Fact]) -> bool:
+        """
+        Сохранить пакет фактов в базу.
+
+        Args:
+            facts: Последовательность фактов для сохранения
+
+        Returns:
+            True если все факты сохранены успешно
+        """
+        pass
+
+    @abstractmethod
+    async def get_existing_facts(self, source: FactSource, content: list[str]) -> Sequence[Fact]:
+        """
+        Получить существующие факты по источнику и содержанию.
+
+        Args:
+            source: Источник факта для фильтрации
+            content: Список содержаний для поиска
+
+        Returns:
+            Последовательность найденных фактов
+        """
         pass

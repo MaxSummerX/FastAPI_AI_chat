@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.services.auth_service import AuthService
 from app.application.services.conversation_service import ConversationService
 from app.application.services.document_service import DocumentService
+from app.application.services.fact_service import FactService
 from app.application.services.invite_service import InviteService
 from app.application.services.message_service import MessageService
 from app.application.services.prompt_service import PromptService
@@ -23,6 +24,7 @@ from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
 from app.domain.repositories.conversations import IConversationRepository
 from app.domain.repositories.documents import IDocumentRepository
+from app.domain.repositories.facts import IFactRepository
 from app.domain.repositories.invites import IInviteRepository
 from app.domain.repositories.messages import IMessageRepository
 from app.domain.repositories.prompts import IPromptRepository
@@ -42,6 +44,7 @@ from app.infrastructure.persistence.sqlalchemy import (
     PromptSQLAlchemyRepository,
     UserSQLAlchemyRepository,
 )
+from app.infrastructure.persistence.sqlalchemy.fact_repository import FactsSQLAlchemyRepository
 from app.infrastructure.security.jwt_service import TokenPayload, decode_token
 from app.infrastructure.settings.settings import settings
 
@@ -102,6 +105,15 @@ def get_conversation_repo(db: AsyncSession = Depends(get_db)) -> IConversationRe
 
 
 def get_prompt_repo(db: AsyncSession = Depends(get_db)) -> IPromptRepository:
+    """
+    Создаёт репозиторий промптов для работы с БД.
+
+    Args:
+        db: Асинхронная сессия БД
+
+    Returns:
+        IPromptRepository: Репозиторий для CRUD операций с промптами
+    """
     return PromptSQLAlchemyRepository(db)
 
 
@@ -116,6 +128,19 @@ def get_message_repo(db: AsyncSession = Depends(get_db)) -> IMessageRepository:
         IMessageRepository: Репозиторий для CRUD операций с сообщениями
     """
     return MessageSQLAlchemyRepository(db)
+
+
+def get_fact_repo(db: AsyncSession = Depends(get_db)) -> IFactRepository:
+    """
+    Создаёт репозиторий фактов с SQLAlchemy реализацией.
+
+    Args:
+        db: Асинхронная сессия БД
+
+    Returns:
+        IFactRepository: Репозиторий для CRUD операций с фактами
+    """
+    return FactsSQLAlchemyRepository(db)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:
@@ -204,12 +229,25 @@ def get_prompt_service(prompt_repo: IPromptRepository = Depends(get_prompt_repo)
 def get_memory_service(
     memory: AsyncMemory = Depends(get_memory),
 ) -> IMemoryService:
-    """Создаёт Memory сервис для application layer."""
+    """
+    Создаёт сервис памяти для работы с mem0ai.
+
+    Args:
+        memory: Асинхронный клиент mem0ai
+
+    Returns:
+        IMemoryService: Сервис для управления долгосрочной памятью пользователя
+    """
     return create_memory_service(memory)
 
 
 def get_llm_service() -> ILLMService:
-    """Создаёт LLM сервис для application layer."""
+    """
+    Создаёт LLM сервис для генерации ответов.
+
+    Returns:
+        ILLMService: Сервис для работы с языковыми моделями
+    """
     return create_llm_service(base_config_for_llm)
 
 
@@ -220,11 +258,47 @@ def get_message_service(
     llm_service: ILLMService = Depends(get_llm_service),
     memory_service: IMemoryService = Depends(get_memory_service),
 ) -> MessageService:
+    """
+    Создаёт сервис сообщений для бизнес-логики работы с сообщениями.
+
+    Args:
+        message_repo: Репозиторий сообщений для доступа к данным
+        conversation_repo: Репозиторий бесед для доступа к данным
+        prompt_repo: Репозиторий промптов для доступа к данным
+        llm_service: Сервис LLM для генерации ответов
+        memory_service: Сервис памяти для интеграции с mem0ai
+
+    Returns:
+        MessageService: Сервис с бизнес-логикой сообщений
+    """
     return MessageService(
         message_repo=message_repo,
         conversation_repo=conversation_repo,
         prompt_repo=prompt_repo,
         llm_service=llm_service,
+        memory_service=memory_service,
+    )
+
+
+def get_fact_service(
+    fact_repo: IFactRepository = Depends(get_fact_repo),
+    message_repo: IMessageRepository = Depends(get_message_repo),
+    memory_service: IMemoryService = Depends(get_memory_service),
+) -> FactService:
+    """
+    Создаёт сервис фактов для бизнес-логики работы с фактами.
+
+    Args:
+        fact_repo: Репозиторий фактов для доступа к данным
+        message_repo: Репозиторий сообщений для импорта фактов
+        memory_service: Сервис памяти для интеграции с mem0ai
+
+    Returns:
+        FactService: Сервис с бизнес-логикой фактов (CRUD, импорт из mem0ai)
+    """
+    return FactService(
+        fact_repo=fact_repo,
+        message_repo=message_repo,
         memory_service=memory_service,
     )
 
