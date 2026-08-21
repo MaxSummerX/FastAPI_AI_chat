@@ -208,3 +208,18 @@ class ConversationSQLAlchemyRepository(IConversationRepository):
         """
         result: Conversation | None = await self.db.scalar(self._base_query(conversation_id, user_id).with_for_update())
         return result
+
+    async def get_by_source_id_and_source(self, provider: str, source_id: UUID, user_id: UUID) -> Conversation | None:
+        """ """
+        result: Conversation | None = await self.db.scalar(
+            select(Conversation).where(
+                Conversation.source_id == source_id,
+                Conversation.user_id == user_id,
+                Conversation.source == provider,
+            )
+        )
+        return result
+
+    async def save_from_import(self, conversation: Conversation) -> None:
+        self.db.add(conversation)
+        await self.db.commit()

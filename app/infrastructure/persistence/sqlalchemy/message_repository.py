@@ -129,3 +129,14 @@ class MessageSQLAlchemyRepository(IMessageRepository):
         """
         messages: Sequence[Message] = (await self.db.scalars(select(Message).where(Message.id.in_(message_ids)))).all()
         return messages
+
+    async def save(self, message: Message) -> Message:
+        """ """
+        await self.db.commit()
+        await self.db.refresh(message)
+        return message
+
+    async def save_all(self, messages: Sequence[Message]) -> None:
+        """ """
+        self.db.add_all(messages)
+        await self.db.commit()

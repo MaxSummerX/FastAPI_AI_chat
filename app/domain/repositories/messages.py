@@ -90,3 +90,13 @@ class IMessageRepository(ABC):
             Последовательность найденных сообщений
         """
         pass
+
+    @abstractmethod
+    async def save(self, message: Message) -> Message:
+        """ """
+        pass
+
+    @abstractmethod
+    async def save_all(self, messages: Sequence[Message]) -> None:
+        """ """
+        pass

@@ -142,3 +142,13 @@ class IConversationRepository(ABC):
             Объект Conversation или None, если беседа не найдена
         """
         pass
+
+    @abstractmethod
+    async def get_by_source_id_and_source(self, provider: str, source_id: UUID, user_id: UUID) -> Conversation | None:
+        """ """
+        pass
+
+    @abstractmethod
+    async def save_from_import(self, conversation: Conversation) -> None:
+        """ """
+        pass
