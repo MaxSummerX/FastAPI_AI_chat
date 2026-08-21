@@ -157,7 +157,7 @@ async def process_conversations_stream(
         raise
 
 
-async def split_conversations_async(
+async def claude_split_conversations_async(
     input_file: str,
     output_dir: str,
     skip_empty: bool = True,

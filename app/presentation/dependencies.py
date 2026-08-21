@@ -19,6 +19,7 @@ from app.application.services.fact_service import FactService
 from app.application.services.invite_service import InviteService
 from app.application.services.message_service import MessageService
 from app.application.services.prompt_service import PromptService
+from app.application.services.upload_service import UploadService
 from app.application.services.user_service import UserService
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
@@ -301,6 +302,14 @@ def get_fact_service(
         message_repo=message_repo,
         memory_service=memory_service,
     )
+
+
+def get_upload_service(
+    conversation_repo: IConversationRepository = Depends(get_conversation_repo),
+    message_repo: IMessageRepository = Depends(get_message_repo),
+) -> UploadService:
+    """ """
+    return UploadService(conversation_repo, message_repo)
 
 
 def get_researcher_llm() -> AsyncOpenAILLM:

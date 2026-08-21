@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 
 import aiofiles
@@ -68,3 +69,9 @@ async def save_file_with_validation(file: UploadFile, path: Path) -> int:
             await aios.remove(path)
         logger.error(f"Error saving file to {path}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error saving file: {e}") from e
+
+
+async def cleanup(path: Path) -> None:
+    """ """
+    if await aios.path.exists(path):
+        shutil.rmtree(path, ignore_errors=True)

@@ -65,8 +65,7 @@ async def process_conversations_stream(
         async with aiofiles.open(input_file, encoding="utf-8") as f:
             content = await f.read()
 
-        # Парсинг JSON (это CPU операция, но быстрая)
-        conversations = json.loads(content)
+        conversations = await asyncio.to_thread(json.loads, content)
 
         logger.info(f"Загружено {len(conversations)} диалогов")
 
@@ -116,7 +115,7 @@ async def process_conversations_stream(
         raise
 
 
-async def split_conversations_async(
+async def gpt_split_conversations_async(
     input_file: str,
     output_dir: str,
     skip_empty: bool = True,
