@@ -1,7 +1,4 @@
-import os
-from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from loguru import logger
@@ -10,6 +7,7 @@ from app.application.services.upload_service import UploadService
 from app.domain.enums.provider import ImportedProvider
 from app.domain.models.user import User as UserModel
 from app.infrastructure.upload.file_storage import (
+    build_paths,
     save_file_with_validation,
     validate_file_extension,
     validate_mime_type,
@@ -18,17 +16,6 @@ from app.presentation.dependencies import get_current_user, get_upload_service
 
 
 router = APIRouter(prefix="/upload", tags=["Imports_V2"])
-
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
-CONVERSATION_DIR = BASE_DIR / "temp_files"
-os.makedirs(CONVERSATION_DIR, exist_ok=True)
-
-
-def _build_paths(user_id: UUID) -> tuple[Path, Path]:
-    file_path = CONVERSATION_DIR / f"user_{user_id}.json"
-    split_dir = CONVERSATION_DIR / f"dialogs_user_{user_id}"
-    os.makedirs(split_dir, exist_ok=True)
-    return file_path, split_dir
 
 
 @router.post(
@@ -51,7 +38,7 @@ async def conversations_import(
     validate_file_extension(file.filename)
     validate_mime_type(file.content_type)
 
-    file_path, split_dir = _build_paths(current_user.id)
+    file_path, split_dir = build_paths(current_user.id)
     file_size = await save_file_with_validation(file, file_path)
 
     try:

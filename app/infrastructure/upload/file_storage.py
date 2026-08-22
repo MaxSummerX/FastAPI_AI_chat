@@ -1,6 +1,7 @@
 import os
 import shutil
 from pathlib import Path
+from uuid import UUID
 
 import aiofiles
 import aiofiles.os as aios
@@ -13,6 +14,18 @@ ALLOWED_UPLOAD_MIME_TYPES = {"application/json"}
 MAX_UPLOAD_FILE_SIZE_MB = 100
 MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1 MB - размер чанка для чтения файла
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+CONVERSATION_DIR = BASE_DIR / "temp_files"
+
+
+def build_paths(user_id: UUID) -> tuple[Path, Path]:
+    os.makedirs(CONVERSATION_DIR, exist_ok=True)
+    file_path = CONVERSATION_DIR / f"user_{user_id}.json"
+    split_dir = CONVERSATION_DIR / f"dialogs_user_{user_id}"
+    os.makedirs(split_dir, exist_ok=True)
+    return file_path, split_dir
 
 
 def validate_file_extension(filename: str) -> None:

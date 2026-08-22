@@ -1,5 +1,4 @@
 import asyncio
-import os
 from pathlib import Path
 from uuid import UUID
 
@@ -12,14 +11,6 @@ from app.infrastructure.upload.converters.gpt_history_converter import gpt_split
 from app.infrastructure.upload.converters.parser_claude import parse_claude
 from app.infrastructure.upload.converters.parser_gpt import parse_gtp
 from app.infrastructure.upload.file_storage import cleanup
-
-
-SUCCESS_FILE_UPLOADED = "File successfully uploaded"
-
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
-CONVERSATION_DIR = BASE_DIR / "temp_files"
-
-os.makedirs(CONVERSATION_DIR, exist_ok=True)
 
 
 class UploadService:
