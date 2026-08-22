@@ -1,32 +1,19 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from httpx import AsyncClient
 from loguru import logger
-from sqlalchemy import asc, desc, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.exceptions.vacancy import InvalidVacancyCursorError
 from app.application.schemas.pagination import PaginatedResponse
 from app.application.schemas.vacancy import VacancyPaginationResponse, VacancyResponse
-from app.application.services.vacancy_import_service import create_vacancy_object
+from app.application.services.vacancy_service import VacancyService
 from app.domain.enums.experience import Experience, OrderField
 from app.domain.models.user import User as UserModel
-from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
-from app.domain.models.vacancy import Vacancy as VacancyModel
-from app.infrastructure.database.dependencies import get_db
-from app.infrastructure.hh.headhunter_client import get_hh_client
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
-    MAXIMUM_PER_PAGE,
     MINIMUM_PER_PAGE,
-    calculate_has_more,
-    decode_cursor,
-    encode_cursor,
-    trim_excess_item,
-    validate_pagination_limit,
 )
-from app.infrastructure.persistence.sqlalchemy.db_optimizer import optimized_query
-from app.presentation.dependencies import get_current_user
+from app.presentation.dependencies import get_current_user, get_vacancy_service
 from app.presentation.routers.v2 import vacancy_analysis
 
 
@@ -59,86 +46,42 @@ async def get_all_vacancies(
     order_by: OrderField | None = Query(default=None, description="Поле для сортировки"),
     order_desc: bool = Query(default=False, description="Сортировка по убыванию"),
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    vacancy_service: VacancyService = Depends(get_vacancy_service),
 ) -> PaginatedResponse[VacancyPaginationResponse]:
     """
-    Получить вакансий пользователя с пагинацией (курсорной).
+    Получить вакансии пользователя с пагинацией (курсорной).
     """
     logger.info(
         f"Запрос на получение вакансий пользователя {current_user.id} "
         f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
     )
-    # Валидируем limit
-    limit = validate_pagination_limit(limit, default=DEFAULT_PER_PAGE, maximum=MAXIMUM_PER_PAGE)
 
-    # Формируем базовый запрос
-    base_query = optimized_query(VacancyModel, VacancyPaginationResponse)
+    try:
+        page = await vacancy_service.get_paginated(
+            current_user.id,
+            tier=tier,
+            favorite=favorite,
+            order_by=order_by,
+            order_desc=order_desc,
+            cursor=cursor,
+            limit=limit,
+        )
+    except InvalidVacancyCursorError as e:
+        logger.warning(f"Невалидный курсор от пользователя {current_user.id}: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
-    query = base_query.where(VacancyModel.is_archived.is_(False))
+    logger.info(f"Возвращено {len(page.items)} вакансий, has_next={page.has_next}")
 
-    query = query.join(UserVacanciesModel).where(
-        UserVacanciesModel.user_id == current_user.id,
-        UserVacanciesModel.is_active.is_(True),
-    )
-
-    if tier:
-        query = query.where(VacancyModel.experience_id.in_(tier))
-
-    if favorite is not None:
-        query = query.where(UserVacanciesModel.is_favorite == favorite)
-
-    if order_by:
-        direction = desc if order_desc else asc
-        query = query.order_by(direction(getattr(VacancyModel, order_by.value)))
-
-    # Применяем курсор если указан
-    if cursor:
-        try:
-            # Используем составной ключ (timestamp, id_uuid) для точного позиционирования
-            timestamp, cursor_id_str = decode_cursor(cursor)
-            id_uuid = UUID(cursor_id_str)
-
-            query = query.where(
-                (VacancyModel.created_at < timestamp)
-                | ((VacancyModel.created_at == timestamp) & (VacancyModel.id < id_uuid))
-            )
-            logger.debug(f"Применён курсор: timestamp={timestamp}, id={id_uuid}")
-        except ValueError as e:
-            logger.warning(f"Невалидный курсор от пользователя {current_user.id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid cursor format: {str(e)}"
-            ) from None
-
-    # Используем составную сортировку для стабильности результатов
-    query = query.order_by(VacancyModel.created_at.desc(), VacancyModel.id.desc())
-
-    # Берём на один элемент больше для проверки has_next
-    result = await db.execute(query.add_columns(UserVacanciesModel.is_favorite.label("is_favorite")).limit(limit + 1))
-    rows = list(result.all())  # ← кортежи (Vacancy, is_favorite)
-
-    # Эти функции работают с кортежами без изменений!
-    has_next = calculate_has_more(rows, limit)
-    rows = trim_excess_item(rows, limit, reverse=False)
-
-    # Формируем курсор — нужно распаковать кортеж
-    next_cursor = None
-    if rows and has_next:
-        last_vacancy, _ = rows[-1]  # ← распаковываем: Vacancy, is_favorite
-        next_cursor = encode_cursor(last_vacancy.created_at, last_vacancy.id)
-
-    logger.info(f"Возвращено {len(rows)} вакансий, has_next={has_next}")
-
-    # Формируем ответ с is_favorite
     items = []
-    for vacancy, is_fav in rows:  # ← распаковываем кортеж
+    for vacancy, is_fav in page.items:
         item = VacancyPaginationResponse.model_validate(vacancy).model_dump()
         item["is_favorite"] = is_fav
         items.append(VacancyPaginationResponse(**item))
 
     return PaginatedResponse(
         items=items,
-        next_cursor=next_cursor,
-        has_next=has_next,
+        next_cursor=page.next_cursor,
+        has_next=page.has_next,
     )
 
 
@@ -151,8 +94,7 @@ async def get_all_vacancies(
 async def hh_vacancy(
     hh_id_vacancy: str,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    hh_client: AsyncClient = Depends(get_hh_client),
+    vacancy_service: VacancyService = Depends(get_vacancy_service),
 ) -> None:
     """
     Добавляет вакансию по hh_id в пул пользователя.
@@ -160,49 +102,12 @@ async def hh_vacancy(
     Если нет - импортирует из hh.ru и создаёт связь.
     """
     logger.info(f"Запрос на получение вакансии по HH.ru id {hh_id_vacancy} для пользователя {current_user.id}")
-    # Проверяем наличие вакансии в БД (без фильтра по пользователю)
-    base_query = optimized_query(VacancyModel, VacancyResponse)
-    result = await db.scalars(
-        base_query.where(
-            VacancyModel.hh_id == hh_id_vacancy,
-        )
-    )
 
-    vacancy = result.one_or_none()
-
-    # Если вакансии нет в БД - импортируем из hh.ru
-    if not vacancy:
-        logger.info(f"Вакансия {hh_id_vacancy} не найдена в БД, создание")
-        try:
-            vacancy_obj = await create_vacancy_object(
-                hh_id=hh_id_vacancy, query="Personal request", hh_client=hh_client
-            )
-
-            db.add(vacancy_obj)
-            await db.flush()
-
-            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy_obj.id, is_active=True)
-            db.add(link)
-            await db.commit()
-
-            logger.info(f"Вакансия {hh_id_vacancy} успешно импортирована")
-
-        except Exception as e:
-            logger.error(f"Ошибка при импорте вакансии {hh_id_vacancy}: {e}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found") from None
-    else:
-        # Вакансия есть в БД - проверяем есть ли связь с пользователем
-        link_check = await db.execute(
-            select(UserVacanciesModel).where(
-                UserVacanciesModel.user_id == current_user.id,
-                UserVacanciesModel.vacancy_id == vacancy.id,
-            )
-        )
-        if not link_check.one_or_none():
-            # Связи нет - создаём
-            link = UserVacanciesModel(user_id=current_user.id, vacancy_id=vacancy.id, is_active=True)
-            db.add(link)
-            await db.commit()
+    try:
+        await vacancy_service.add_hh_vacancy(current_user.id, hh_id_vacancy)
+    except Exception as e:
+        logger.error(f"Ошибка при импорте вакансии {hh_id_vacancy}: {e}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found") from None
 
     logger.info(f"Вакансия {hh_id_vacancy} добавлена пользователю {current_user.email}")
     return
@@ -217,31 +122,19 @@ async def hh_vacancy(
 async def get_vacancy(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    vacancy_service: VacancyService = Depends(get_vacancy_service),
 ) -> VacancyResponse:
     """
-    Получает вакансию по UUID. Оптимизированный запрос только для полей из VacancyResponse.
+    Получает вакансию по UUID (только активная связь с пользователем).
     """
     logger.info(f"Запрос на получение вакансии {id_vacancy} пользователя {current_user.id}")
 
-    # optimized_query автоматически применяет load_only для полей из VacancyResponse
-    base_query = optimized_query(VacancyModel, VacancyResponse)
-    result = await db.execute(
-        base_query.join(UserVacanciesModel)
-        .where(
-            UserVacanciesModel.user_id == current_user.id,
-            VacancyModel.id == id_vacancy,
-            UserVacanciesModel.is_active.is_(True),
-        )
-        .add_columns(UserVacanciesModel.is_favorite.label("is_favorite"))
-    )
-
-    row = result.one_or_none()
+    row = await vacancy_service.get_user_vacancy(current_user.id, id_vacancy)
 
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
 
-    vacancy, is_favorite = row  # распаковываем кортеж (Vacancy, is_favorite)
+    vacancy, is_favorite = row
     response = VacancyResponse.model_validate(vacancy).model_dump()
     response["is_favorite"] = is_favorite
     return VacancyResponse(**response)
@@ -256,26 +149,15 @@ async def get_vacancy(
 async def delete_vacancy(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    vacancy_service: VacancyService = Depends(get_vacancy_service),
 ) -> None:
     """
     Мягкое удаление вакансии
     """
     logger.info(f"Запрос на удаление вакансии {id_vacancy} пользователя {current_user.id}")
 
-    result = await db.execute(
-        update(UserVacanciesModel)
-        .where(UserVacanciesModel.user_id == current_user.id, UserVacanciesModel.vacancy_id == id_vacancy)
-        .values(is_active=False)
-        .returning(UserVacanciesModel.id)
-    )
-
-    deleted_vacancy = result.scalar_one_or_none()
-
-    if not deleted_vacancy:
+    if not await vacancy_service.deactivate(current_user.id, id_vacancy):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
-
-    await db.commit()
 
     logger.info(f"Вакансия {id_vacancy} удалёна")
 
@@ -289,26 +171,15 @@ async def delete_vacancy(
 async def add_to_favorites(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    vacancy_service: VacancyService = Depends(get_vacancy_service),
 ) -> None:
     """
     Добавить вакансию в избранное
     """
     logger.info(f"Запрос на добавление вакансии {id_vacancy} в избранное")
 
-    result = await db.execute(
-        update(UserVacanciesModel)
-        .where(UserVacanciesModel.user_id == current_user.id, UserVacanciesModel.vacancy_id == id_vacancy)
-        .values(is_favorite=True)
-        .returning(UserVacanciesModel.id)
-    )
-
-    link_id = result.scalar_one_or_none()
-
-    if not link_id:
+    if not await vacancy_service.set_favorite(current_user.id, id_vacancy, True):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
-
-    await db.commit()
 
     logger.info(f"Вакансия {id_vacancy} добавлена в избранное")
     return
@@ -323,26 +194,15 @@ async def add_to_favorites(
 async def remove_from_favorites(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    vacancy_service: VacancyService = Depends(get_vacancy_service),
 ) -> None:
     """
     Удалить вакансию из избранного
     """
     logger.info(f"Запрос на удаление вакансии {id_vacancy} из избранного")
 
-    result = await db.execute(
-        update(UserVacanciesModel)
-        .where(UserVacanciesModel.user_id == current_user.id, UserVacanciesModel.vacancy_id == id_vacancy)
-        .values(is_favorite=False)
-        .returning(UserVacanciesModel.id)
-    )
-
-    link_id = result.scalar_one_or_none()
-
-    if not link_id:
+    if not await vacancy_service.set_favorite(current_user.id, id_vacancy, False):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
-
-    await db.commit()
 
     logger.info(f"Вакансия {id_vacancy} удалена из избранного")
     return

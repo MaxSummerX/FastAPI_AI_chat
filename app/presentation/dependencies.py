@@ -23,6 +23,7 @@ from app.application.services.prompt_service import PromptService
 from app.application.services.upload_service import UploadService
 from app.application.services.user_service import UserService
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
+from app.application.services.vacancy_service import VacancyService
 from app.application.services.vacancy_status_service import VacancyArchiveSync
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
@@ -152,6 +153,11 @@ def get_fact_repo(db: AsyncSession = Depends(get_db)) -> IFactRepository:
 
 def get_vacancy_repo(db: AsyncSession = Depends(get_db)) -> IVacancyRepository:
     return VacancySQLAlchemyRepository(db)
+
+
+def get_vacancy_service(repo: IVacancyRepository = Depends(get_vacancy_repo)) -> VacancyService:
+    """Фабрика сервиса вакансий."""
+    return VacancyService(repo)
 
 
 async def get_vacancy_archive_sync(

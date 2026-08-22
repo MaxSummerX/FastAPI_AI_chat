@@ -6,8 +6,10 @@
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from uuid import UUID
 
+from app.domain.enums.experience import Experience, OrderField
 from app.domain.models.user_vacancies import UserVacancies
 from app.domain.models.vacancy import Vacancy
 
@@ -108,5 +110,95 @@ class IVacancyRepository(ABC):
 
         Returns:
             Количество обновлённых записей
+        """
+        pass
+
+    @abstractmethod
+    async def get_by_hh_id(self, hh_id: str) -> Vacancy | None:
+        """
+        Найти вакансию по hh_id (без проверки владения).
+
+        Returns:
+            Вакансия или None
+        """
+        pass
+
+    @abstractmethod
+    async def get_user_vacancy_with_favorite(self, user_id: UUID, vacancy_id: UUID) -> tuple[Vacancy, bool] | None:
+        """
+        Получить активную вакансию пользователя с флагом избранного.
+
+        Returns:
+            Кортеж (Vacancy, is_favorite) или None
+        """
+        pass
+
+    @abstractmethod
+    async def paginate_user_vacancies(
+        self,
+        user_id: UUID,
+        *,
+        tier: list[Experience] | None = None,
+        favorite: bool | None = None,
+        order_by: OrderField | None = None,
+        order_desc: bool = False,
+        cursor: tuple[datetime, UUID] | None = None,
+        limit: int,
+    ) -> list[tuple[Vacancy, bool]]:
+        """
+        Постраничный список активных вакансий пользователя с флагом избранного.
+
+        Args:
+            user_id: ID пользователя
+            tier: Фильтр по уровням опыта (None — все)
+            favorite: Фильтр по избранному (None — все)
+            order_by: Поле сортировки (None — created_at по убыванию)
+            order_desc: Направление сортировки
+            cursor: Составной ключ (created_at, id) для курсорной пагинации
+            limit: Размер страницы (+1 элемент для определения has_next)
+
+        Returns:
+            Список кортежей (Vacancy, is_favorite)
+        """
+        pass
+
+    @abstractmethod
+    async def has_user_link(self, user_id: UUID, vacancy_id: UUID) -> bool:
+        """
+        Проверить существование связи user<->vacancy (любой активности).
+        """
+        pass
+
+    @abstractmethod
+    async def save_with_link(self, vacancy: Vacancy, user_id: UUID) -> None:
+        """
+        Сохранить новую вакансию и создать активную связь с пользователем.
+        """
+        pass
+
+    @abstractmethod
+    async def create_link(self, user_id: UUID, vacancy_id: UUID) -> None:
+        """
+        Создать активную связь пользователя с существующей вакансией.
+        """
+        pass
+
+    @abstractmethod
+    async def deactivate_user_link(self, user_id: UUID, vacancy_id: UUID) -> bool:
+        """
+        Деактивировать связь пользователя с вакансией (мягкое удаление).
+
+        Returns:
+            True если связь найдена и деактивирована
+        """
+        pass
+
+    @abstractmethod
+    async def set_favorite(self, user_id: UUID, vacancy_id: UUID, is_favorite: bool) -> bool:
+        """
+        Установить/снять избранное для связи user<->vacancy.
+
+        Returns:
+            True если связь найдена и обновлена
         """
         pass

@@ -345,7 +345,9 @@ async def test_get_vacancy_by_hh_id_with_import(
     )
 
     with patch(
-        "app.presentation.routers.v2.vacancy.create_vacancy_object", new_callable=AsyncMock, return_value=mock_vacancy
+        "app.application.services.vacancy_service.create_vacancy_object",
+        new_callable=AsyncMock,
+        return_value=mock_vacancy,
     ):
         # POST request to add vacancy to user's pool
         response = await client.post(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
@@ -360,7 +362,7 @@ async def test_get_vacancy_by_hh_id_not_found_on_hh(client: AsyncClient, auth_he
 
     hh_id = "00000000"
 
-    with patch("app.presentation.routers.v2.vacancy.create_vacancy_object", new_callable=AsyncMock) as mock_create:
+    with patch("app.application.services.vacancy_service.create_vacancy_object", new_callable=AsyncMock) as mock_create:
         mock_create.side_effect = HTTPException(status_code=404, detail="Vacancy not found")
 
         response = await client.post(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
