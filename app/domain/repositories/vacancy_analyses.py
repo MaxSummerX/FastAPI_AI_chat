@@ -62,3 +62,23 @@ class IVacancyAnalysisRepository(ABC):
             Сохранённый объект с присвоенным ID
         """
         pass
+
+    @abstractmethod
+    async def get_by_id_for_user(self, user_id: UUID, analysis_id: UUID) -> VacancyAnalysis | None:
+        """
+        Получить анализ по ID (только владелец).
+
+        Returns:
+            Анализ или None
+        """
+        pass
+
+    @abstractmethod
+    async def delete(self, analysis: VacancyAnalysis) -> None:
+        """
+        Удалить анализ (безвозвратно).
+
+        Args:
+            analysis: Объект VacancyAnalysis для удаления
+        """
+        pass

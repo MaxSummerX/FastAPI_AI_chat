@@ -12,6 +12,7 @@ from loguru import logger
 from app.application.exceptions.analysis import InvalidAnalysisTypeError
 from app.application.exceptions.vacancy import (
     AnalysisAlreadyExistsError,
+    AnalysisNotFoundError,
     ResumeRequiredError,
     ResumeTooShortError,
     VacancyNotFoundError,
@@ -129,3 +130,28 @@ class VacancyAnalysisService:
         saved = await self.analysis_repo.save(analysis)
         logger.info(f"Анализ {analysis_type.value} вакансии {vacancy_id} сохранён: {saved.id}")
         return saved
+
+    async def get_analysis(self, user_id: UUID, analysis_id: UUID) -> VacancyAnalysis:
+        """
+        Получить анализ по ID.
+
+        Raises:
+            AnalysisNotFoundError: Если анализ не найден или принадлежит другому пользователю
+        """
+        analysis = await self.analysis_repo.get_by_id_for_user(user_id, analysis_id)
+        if analysis is None:
+            raise AnalysisNotFoundError(f"Analysis {analysis_id} not found")
+        return analysis
+
+    async def delete_analysis(self, user_id: UUID, analysis_id: UUID) -> None:
+        """
+        Безвозвратно удалить анализ.
+
+        Raises:
+            AnalysisNotFoundError: Если анализ не найден или принадлежит другому пользователю
+        """
+        analysis = await self.analysis_repo.get_by_id_for_user(user_id, analysis_id)
+        if analysis is None:
+            raise AnalysisNotFoundError(f"Analysis {analysis_id} not found")
+        await self.analysis_repo.delete(analysis)
+        logger.info(f"Удалён анализ {analysis_id}")

@@ -43,3 +43,17 @@ class VacancyAnalysisSQLAlchemyRepository(IVacancyAnalysisRepository):
         await self.db.commit()
         await self.db.refresh(analysis)
         return analysis
+
+    async def get_by_id_for_user(self, user_id: UUID, analysis_id: UUID) -> VacancyAnalysis | None:
+        result = await self.db.scalars(
+            select(VacancyAnalysis).where(
+                VacancyAnalysis.id == analysis_id,
+                VacancyAnalysis.user_id == user_id,
+            )
+        )
+        analysis: VacancyAnalysis | None = result.first()
+        return analysis
+
+    async def delete(self, analysis: VacancyAnalysis) -> None:
+        await self.db.delete(analysis)
+        await self.db.commit()

@@ -7,7 +7,7 @@ from app.presentation.middleware.logging import log_middleware
 from app.presentation.middleware.security_middleware import add_security_headers
 from app.presentation.middleware.timing_middleware import TimingMiddleware
 from app.presentation.routers import admin, v1
-from app.presentation.routers.v2 import analysis, task
+from app.presentation.routers.v2 import task
 
 
 app = FastAPI(
@@ -31,7 +31,6 @@ app.middleware("http")(add_security_headers)  # Security headers
 app.include_router(v1.api_v1)
 # Подключаем маршруты 2ой версии
 # Подключаем маршруты 2ой версии (ещё не перенесённые в v1)
-app.include_router(analysis.router, prefix="/api/v2")
 app.include_router(task.router, prefix="/api/v2")
 # Admin routes
 app.include_router(admin.router)

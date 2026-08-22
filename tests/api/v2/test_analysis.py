@@ -25,7 +25,7 @@ from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysi
 @pytest.mark.asyncio
 async def test_get_analysis_unauthorized(client: AsyncClient, test_vacancy_analysis: VacancyAnalysisModel) -> None:
     """Тест: неавторизованный запрос к /analyses/{id_analysis}"""
-    response = await client.get(f"/api/v2/analyses/{test_vacancy_analysis.id}")
+    response = await client.get(f"/api/v1/analyses/{test_vacancy_analysis.id}")
     assert response.status_code == 401
 
 
@@ -34,7 +34,7 @@ async def test_get_analysis_success(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
     """Тест: успешное получение анализа по ID"""
-    response = await client.get(f"/api/v2/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -47,7 +47,7 @@ async def test_get_analysis_success(
 @pytest.mark.asyncio
 async def test_get_analysis_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: попытка получить несуществующий анализ"""
-    response = await client.get(f"/api/v2/analyses/{uuid.uuid4()}", headers=auth_headers)
+    response = await client.get(f"/api/v1/analyses/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -56,7 +56,7 @@ async def test_get_analysis_other_user(
     client: AsyncClient, admin_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
     """Тест: попытка получить анализ другого пользователя"""
-    response = await client.get(f"/api/v2/analyses/{test_vacancy_analysis.id}", headers=admin_headers)
+    response = await client.get(f"/api/v1/analyses/{test_vacancy_analysis.id}", headers=admin_headers)
     assert response.status_code == 404
 
 
@@ -65,7 +65,7 @@ async def test_get_analysis_response_structure(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
     """Тест: проверка структуры ответа для получения анализа"""
-    response = await client.get(f"/api/v2/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -89,7 +89,7 @@ async def test_get_analysis_all_fields(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
     """Тест: проверка, что все поля корректно возвращаются"""
-    response = await client.get(f"/api/v2/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -107,7 +107,7 @@ async def test_get_analysis_all_fields(
 @pytest.mark.asyncio
 async def test_delete_analysis_unauthorized(client: AsyncClient, test_vacancy_analysis: VacancyAnalysisModel) -> None:
     """Тест: удаление анализа без авторизации"""
-    response = await client.delete(f"/api/v2/analyses/{test_vacancy_analysis.id}")
+    response = await client.delete(f"/api/v1/analyses/{test_vacancy_analysis.id}")
     assert response.status_code == 401
 
 
@@ -121,7 +121,7 @@ async def test_delete_analysis_success(
     """Тест: успешное удаление анализа"""
     analysis_id = test_vacancy_analysis.id
 
-    response = await client.delete(f"/api/v2/analyses/{analysis_id}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/analyses/{analysis_id}", headers=auth_headers)
     assert response.status_code == 204
 
     # Проверяем что анализ действительно удалён
@@ -135,7 +135,7 @@ async def test_delete_analysis_success(
 @pytest.mark.asyncio
 async def test_delete_analysis_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: попытка удалить несуществующий анализ"""
-    response = await client.delete(f"/api/v2/analyses/{uuid.uuid4()}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/analyses/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -144,7 +144,7 @@ async def test_delete_analysis_other_user(
     client: AsyncClient, admin_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
     """Тест: попытка удалить анализ другого пользователя"""
-    response = await client.delete(f"/api/v2/analyses/{test_vacancy_analysis.id}", headers=admin_headers)
+    response = await client.delete(f"/api/v1/analyses/{test_vacancy_analysis.id}", headers=admin_headers)
     assert response.status_code == 404
 
 
@@ -159,11 +159,11 @@ async def test_delete_analysis_idempotent(
     analysis_id = test_vacancy_analysis.id
 
     # Первое удаление
-    response1 = await client.delete(f"/api/v2/analyses/{analysis_id}", headers=auth_headers)
+    response1 = await client.delete(f"/api/v1/analyses/{analysis_id}", headers=auth_headers)
     assert response1.status_code == 204
 
     # Второе удаление - должно вернуть 404
-    response2 = await client.delete(f"/api/v2/analyses/{analysis_id}", headers=auth_headers)
+    response2 = await client.delete(f"/api/v1/analyses/{analysis_id}", headers=auth_headers)
     assert response2.status_code == 404
 
 
@@ -172,7 +172,7 @@ async def test_delete_analysis_returns_no_content(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
     """Тест: удаление возвращает 204 No Content без тела ответа"""
-    response = await client.delete(f"/api/v2/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/analyses/{test_vacancy_analysis.id}", headers=auth_headers)
     assert response.status_code == 204
     assert response.content == b""
 
@@ -192,23 +192,23 @@ async def test_get_and_delete_workflow(
 
     # Получаем каждый анализ по ID
     for analysis in analyses:
-        response = await client.get(f"/api/v2/analyses/{analysis.id}", headers=auth_headers)
+        response = await client.get(f"/api/v1/analyses/{analysis.id}", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == str(analysis.id)
 
     # Удаляем первый анализ
     first_analysis = analyses[0]
-    response = await client.delete(f"/api/v2/analyses/{first_analysis.id}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/analyses/{first_analysis.id}", headers=auth_headers)
     assert response.status_code == 204
 
     # Проверяем что удалённый анализ больше не доступен
-    response = await client.get(f"/api/v2/analyses/{first_analysis.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/analyses/{first_analysis.id}", headers=auth_headers)
     assert response.status_code == 404
 
     # Проверяем что другие анализы всё ещё доступны
     for analysis in analyses[1:]:
-        response = await client.get(f"/api/v2/analyses/{analysis.id}", headers=auth_headers)
+        response = await client.get(f"/api/v1/analyses/{analysis.id}", headers=auth_headers)
         assert response.status_code == 200
 
 
@@ -220,7 +220,7 @@ async def test_different_analysis_types(
     from app.domain.enums.analysis import AnalysisType
 
     for analysis in test_vacancy_analyses:
-        response = await client.get(f"/api/v2/analyses/{analysis.id}", headers=auth_headers)
+        response = await client.get(f"/api/v1/analyses/{analysis.id}", headers=auth_headers)
         assert response.status_code == 200
 
         data = response.json()

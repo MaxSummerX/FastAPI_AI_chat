@@ -16,6 +16,12 @@ class AnalysisAlreadyExistsError(Exception):
     pass
 
 
+class AnalysisNotFoundError(Exception):
+    """Анализ не найден или принадлежит другому пользователю."""
+
+    pass
+
+
 class ResumeRequiredError(Exception):
     """Резюме пользователя не загружено."""
 
