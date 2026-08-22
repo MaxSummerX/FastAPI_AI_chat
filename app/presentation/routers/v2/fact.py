@@ -106,10 +106,11 @@ async def create_fact(
     return {"status": "processing", "message": "Факт добавляется", "content": fact_data.content}
 
 
-@router.put("/{fact_id}", status_code=status.HTTP_200_OK, summary="Обновить факт")
+@router.put("/{fact_id}", status_code=status.HTTP_202_ACCEPTED, summary="Обновить факт")
 async def update_fact(
     fact_id: UUID,
     fact_data: FactCreate,
+    background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     fact_service: FactService = Depends(get_fact_service),
 ) -> dict[str, Any]:
@@ -128,13 +129,19 @@ async def update_fact(
     logger.info(f"Запрос на обновление факта {fact_id} пользователя {current_user.id}")
 
     try:
-        await fact_service.update_user_fact(current_user.id, fact_id, fact_data)
-        return {"status": "processing", "message": "Факт обновляется", "content": fact_data.content}
-
+        await fact_service.validate_update(fact_id, current_user.id)
     except FactNotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
     except UserProvidedException as e:
         raise HTTPException(status_code=403, detail=str(e)) from None
+
+    background_tasks.add_task(
+        fact_service.update_user_fact,
+        current_user.id,
+        fact_id,
+        fact_data,
+    )
+    return {"status": "processing", "message": "Факт обновляется", "content": fact_data.content}
 
 
 @router.delete("/{fact_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить факт")

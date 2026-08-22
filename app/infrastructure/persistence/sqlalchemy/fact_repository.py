@@ -198,6 +198,7 @@ class FactsSQLAlchemyRepository(IFactRepository):
             Exception: При ошибке коммита
         """
         try:
+            self.db.add(fact)
             await self.db.commit()
             await self.db.refresh(fact)
             return fact

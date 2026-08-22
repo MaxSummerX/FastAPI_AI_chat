@@ -420,3 +420,7 @@ class FactService:
             raise UserProvidedException(f"Fact {fact_id} not provided")
 
         return fact
+
+    async def validate_update(self, fact_id: UUID, user_id: UUID) -> None:
+        """Проверки 404/403 для обновления факта (вызываются синхронно в роутере)."""
+        await self._get_fact_or_404_or_403(fact_id, user_id)
