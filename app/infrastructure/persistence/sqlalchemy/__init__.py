@@ -4,6 +4,7 @@ from .invite_repository import InviteSQLAlchemyRepository
 from .message_repository import MessageSQLAlchemyRepository
 from .prompt_repository import PromptSQLAlchemyRepository
 from .user_repository import UserSQLAlchemyRepository
+from .vacancy_repository import VacancySQLAlchemyRepository
 
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "MessageSQLAlchemyRepository",
     "PromptSQLAlchemyRepository",
     "UserSQLAlchemyRepository",
+    "VacancySQLAlchemyRepository",
 ]

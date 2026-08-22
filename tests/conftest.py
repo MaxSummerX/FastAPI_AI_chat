@@ -18,6 +18,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
+from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.domain.models import Conversation as ConversationModel
 from app.domain.models import Document as DocumentModel
 from app.domain.models import Fact as FactModel
@@ -606,6 +607,9 @@ async def client_with_mocked_llm(db_session: AsyncSession) -> AsyncGenerator[Asy
     """
     from unittest.mock import patch
 
+    from sqlalchemy import select
+
+    from app.application.exceptions.vacancy import VacancyNotFoundError
     from app.infrastructure.database.dependencies import get_db
 
     # Функция-override для зависимости БД
@@ -615,16 +619,20 @@ async def client_with_mocked_llm(db_session: AsyncSession) -> AsyncGenerator[Asy
     # Подменяем зависимости
     app.dependency_overrides[get_db] = override_get_db
 
-    # Создаём асинхронный мок для analyze_vacancy_from_db
+    # Создаём асинхронный мок для analyze_from_db (ведёт себя как реальный метод)
     async def mock_analyze(*args: object, **kwargs: object) -> tuple[str, str]:
-        """Фейковая функция анализа, которая возвращает тестовые данные"""
+        """Фейковый анализ: 404 для несуществующей вакансии, иначе успех"""
+        vacancy_id = kwargs.get("vacancy_id")
+        exists = await db_session.scalar(select(VacancyModel.id).where(VacancyModel.id == vacancy_id))
+        if not exists:
+            raise VacancyNotFoundError(f"Вакансия {vacancy_id} не найдена")
         return (
             "Test analysis result",
             "Test prompt template",
         )
 
     # Патчим функцию анализа в модуле, где она используется (vacancy_analysis.py)
-    with patch("app.services.ai_research.analyze_vacancy_from_db", side_effect=mock_analyze):
+    with patch.object(VacancyAnalyzer, "analyze_from_db", side_effect=mock_analyze):
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",

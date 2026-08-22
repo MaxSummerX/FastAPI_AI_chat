@@ -21,6 +21,7 @@ from app.application.services.message_service import MessageService
 from app.application.services.prompt_service import PromptService
 from app.application.services.upload_service import UploadService
 from app.application.services.user_service import UserService
+from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
 from app.domain.repositories.conversations import IConversationRepository
@@ -30,6 +31,7 @@ from app.domain.repositories.invites import IInviteRepository
 from app.domain.repositories.messages import IMessageRepository
 from app.domain.repositories.prompts import IPromptRepository
 from app.domain.repositories.users import IUserRepository
+from app.domain.repositories.vacancies import IVacancyRepository
 from app.domain.services.llm import ILLMService
 from app.domain.services.memory import IMemoryService
 from app.infrastructure.database.dependencies import get_db
@@ -44,6 +46,7 @@ from app.infrastructure.persistence.sqlalchemy import (
     MessageSQLAlchemyRepository,
     PromptSQLAlchemyRepository,
     UserSQLAlchemyRepository,
+    VacancySQLAlchemyRepository,
 )
 from app.infrastructure.persistence.sqlalchemy.fact_repository import FactsSQLAlchemyRepository
 from app.infrastructure.security.jwt_service import TokenPayload, decode_token
@@ -142,6 +145,10 @@ def get_fact_repo(db: AsyncSession = Depends(get_db)) -> IFactRepository:
         IFactRepository: Репозиторий для CRUD операций с фактами
     """
     return FactsSQLAlchemyRepository(db)
+
+
+def get_vacancy_repo(db: AsyncSession = Depends(get_db)) -> IVacancyRepository:
+    return VacancySQLAlchemyRepository(db)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:
@@ -315,6 +322,13 @@ def get_upload_service(
 def get_researcher_llm() -> AsyncOpenAILLM:
     """FastAPI зависимость для AI-исследования."""
     return create_analysis_llm()
+
+
+def get_vacancy_analyzer(
+    llm: AsyncOpenAILLM = Depends(get_researcher_llm),
+    vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
+) -> VacancyAnalyzer:
+    return VacancyAnalyzer(llm, vacancy_repo)
 
 
 async def get_current_user(

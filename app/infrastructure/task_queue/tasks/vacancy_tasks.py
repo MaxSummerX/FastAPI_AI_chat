@@ -9,6 +9,7 @@ from loguru import logger
 from sqlalchemy import and_, select
 
 from app.application.schemas.vacancy import VacancyForAnalysis
+from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
@@ -17,9 +18,9 @@ from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.infrastructure.llms.config import analysis_llm_config
 from app.infrastructure.llms.openai import AsyncOpenAILLM
+from app.infrastructure.persistence.sqlalchemy.vacancy_repository import VacancySQLAlchemyRepository
 from app.infrastructure.settings.settings import settings
 from app.infrastructure.task_queue.celery_config import celery
-from app.services.ai_research.analyzer import analyze_vacancy
 from app.services.headhunter import VacancyArchiveSync, import_vacancies
 
 
@@ -197,9 +198,12 @@ def ai_analyse_task(
                         "schedule_id": vacancy.schedule_id,
                         "employment_id": vacancy.employment_id,
                     }
-                    data = await analyze_vacancy(
-                        content=vacancy_data,
+                    analyzer = VacancyAnalyzer(
                         llm=llm,
+                        vacancy_repo=VacancySQLAlchemyRepository(session),
+                    )
+                    data = await analyzer.analyze(
+                        content=vacancy_data,
                         analysis_type=AnalysisType(analysis),
                         resume=vacancy.resume,
                         custom_prompt=custom_prompt,

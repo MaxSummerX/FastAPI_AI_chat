@@ -17,15 +17,14 @@ from app.application.schemas.vacancy_analysis import (
     VacancyListResponse,
     VacancyResponse,
 )
+from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.domain.enums.analysis import AnalysisType
 from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
 from app.infrastructure.database.dependencies import get_db
-from app.infrastructure.llms.openai import AsyncOpenAILLM
-from app.presentation.dependencies import get_current_user, get_researcher_llm
-from app.services.ai_research import analyze_vacancy_from_db
+from app.presentation.dependencies import get_current_user, get_vacancy_analyzer
 
 
 MIN_SIZE_RESUME = 300
@@ -80,7 +79,7 @@ async def create_vacancy_analysis(
     data: VacancyAnalysisCreate,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    llm: AsyncOpenAILLM = Depends(get_researcher_llm),
+    analyzer: VacancyAnalyzer = Depends(get_vacancy_analyzer),
 ) -> VacancyResponse:
     """
     Создает анализ вакансии по заданному типу.
@@ -136,14 +135,12 @@ async def create_vacancy_analysis(
         )
 
     try:
-        result, prompt_template = await analyze_vacancy_from_db(
-            llm=llm,
+        result, prompt_template = await analyzer.analyze_from_db(
             vacancy_id=id_vacancy,
             analysis_type=data.analysis_type,
             custom_prompt=data.custom_prompt if data.custom_prompt else None,
             user_id=current_user.id,
             resume=current_user.resume,
-            session=db,
         )
     except VacancyNotFoundError as e:
         logger.warning(f"Vacancy not found: {e}")
