@@ -48,9 +48,15 @@ class VacancySQLAlchemyRepository(IVacancyRepository):
         self,
         vacancies: list[Vacancy],
         links: list[UserVacancies],
+        user_id: UUID,
     ) -> None:
         self.db.add_all(vacancies)
         await self.db.flush()
+
+        # Связи для новых вакансий — после flush у них есть ID
+        for vacancy in vacancies:
+            self.db.add(UserVacancies(user_id=user_id, vacancy_id=vacancy.id))
+
         self.db.add_all(links)
         await self.db.commit()
 

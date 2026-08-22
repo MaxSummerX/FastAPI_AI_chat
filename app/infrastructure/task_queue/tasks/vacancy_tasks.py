@@ -10,6 +10,7 @@ from sqlalchemy import and_, select
 
 from app.application.schemas.vacancy import VacancyForAnalysis
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
+from app.application.services.vacancy_import_service import VacancyImportService
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
@@ -21,7 +22,7 @@ from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.persistence.sqlalchemy.vacancy_repository import VacancySQLAlchemyRepository
 from app.infrastructure.settings.settings import settings
 from app.infrastructure.task_queue.celery_config import celery
-from app.services.headhunter import VacancyArchiveSync, import_vacancies
+from app.services.headhunter import VacancyArchiveSync
 
 
 LOCK_REDIS_URL = settings.LOCK_REDIS_URL
@@ -94,11 +95,11 @@ def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, 
     async def run_import() -> dict[str, int]:
         """Асинхронная функция импорта вакансий."""
         async with _worker_resources["session_factory"]() as session:
-            return await import_vacancies(
+            import_service = VacancyImportService(VacancySQLAlchemyRepository(session))
+            return await import_service.import_vacancies(
                 query=query,
                 tiers=tiers,
                 user_id=UUID(user_id),
-                session=session,
             )
 
     try:

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.pagination import PaginatedResponse
 from app.application.schemas.vacancy import VacancyPaginationResponse, VacancyResponse
+from app.application.services.vacancy_import_service import create_vacancy_object
 from app.domain.enums.experience import Experience, OrderField
 from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
@@ -27,7 +28,6 @@ from app.infrastructure.persistence.pagination import (
 from app.infrastructure.persistence.sqlalchemy.db_optimizer import optimized_query
 from app.presentation.dependencies import get_current_user
 from app.presentation.routers.v2 import vacancy_analysis
-from app.services.headhunter.find_vacancies import vacancy_create
 
 
 router = APIRouter(prefix="/vacancies")
@@ -174,7 +174,9 @@ async def hh_vacancy(
     if not vacancy:
         logger.info(f"Вакансия {hh_id_vacancy} не найдена в БД, создание")
         try:
-            vacancy_obj = await vacancy_create(hh_id=hh_id_vacancy, query="Personal request", hh_client=hh_client)
+            vacancy_obj = await create_vacancy_object(
+                hh_id=hh_id_vacancy, query="Personal request", hh_client=hh_client
+            )
 
             db.add(vacancy_obj)
             await db.flush()

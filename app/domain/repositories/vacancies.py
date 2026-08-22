@@ -85,13 +85,15 @@ class IVacancyRepository(ABC):
         self,
         vacancies: list[Vacancy],
         links: list[UserVacancies],
+        user_id: UUID,
     ) -> None:
         """
         Сохранить пакет вакансий и связей user<->vacancy одной транзакцией.
 
         Args:
             vacancies: Список объектов Vacancy для создания
-            links: Список объектов UserVacancies для создания связей
+            links: Список объектов UserVacancies для существующих вакансий
+            user_id: ID пользователя для связей с новыми вакансиями
         """
         pass
 
