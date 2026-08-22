@@ -42,7 +42,7 @@ def init_worker(**kwargs: Any) -> None:
     Engine создаётся уже в правильном процессе без привязки к старому loop.
     """
     from app.infrastructure.database.connection import create_session_factory
-    from app.services.headhunter.headhunter_client import get_hh_client
+    from app.infrastructure.hh.headhunter_client import get_hh_client
 
     # Сначала создаём loop
     loop = asyncio.new_event_loop()

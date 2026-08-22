@@ -6,8 +6,8 @@ from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.models.vacancy import Vacancy as VacancyModel
-from app.services.headhunter.exceptions import RateLimitError
-from app.services.headhunter.headhunter_client import HHApiEndpoint
+from app.infrastructure.hh.exceptions import RateLimitError
+from app.infrastructure.hh.headhunter_client import HHApiEndpoint
 
 
 SEMAPHORE_COUNT = 3

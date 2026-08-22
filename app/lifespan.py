@@ -11,8 +11,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
+from app.infrastructure.hh.headhunter_client import close_hh_client, get_hh_client, warmup_hh_client
 from app.infrastructure.memory.dependencies import close_memory, init_memory
-from app.services.headhunter.headhunter_client import close_hh_client, get_hh_client, warmup_hh_client
 
 
 @asynccontextmanager

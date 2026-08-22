@@ -13,6 +13,7 @@ from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.hh.headhunter_client import get_hh_client
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MAXIMUM_PER_PAGE,
@@ -27,7 +28,6 @@ from app.infrastructure.persistence.sqlalchemy.db_optimizer import optimized_que
 from app.presentation.dependencies import get_current_user
 from app.presentation.routers.v2 import vacancy_analysis
 from app.services.headhunter.find_vacancies import vacancy_create
-from app.services.headhunter.headhunter_client import get_hh_client
 
 
 router = APIRouter(prefix="/vacancies")

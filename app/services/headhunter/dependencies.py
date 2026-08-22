@@ -10,7 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.dependencies import get_db
-from app.services.headhunter.headhunter_client import get_hh_client
+from app.infrastructure.hh.headhunter_client import get_hh_client
 from app.services.headhunter.vacancy_status import VacancyArchiveSync
 
 

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.enums.experience import Experience
 from app.domain.models.user_vacancies import UserVacancies
 from app.domain.models.vacancy import Vacancy
-from app.services.headhunter.headhunter_client import (
+from app.infrastructure.hh.headhunter_client import (
     HH_CONCURRENT_REQUESTS,
     HH_MAX_PAGES,
     HH_REQUEST_DELAY,
