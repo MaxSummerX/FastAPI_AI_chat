@@ -558,10 +558,10 @@ async def client_with_mocked_import(db_session: AsyncSession) -> AsyncGenerator[
     # Патчим Redis в task.py
     # Патчим Celery task.apply_async
     with (
-        patch("app.presentation.routers.v2.task.redis_client", mock_redis),
+        patch("app.presentation.routers.v1.task.redis_client", mock_redis),
         patch("app.infrastructure.task_queue.tasks.vacancy_tasks.redis_client", mock_redis),
-        patch("app.presentation.routers.v2.task.import_vacancy_task.apply_async", return_value=mock_task),
-        patch("app.presentation.routers.v2.task.clear_lock", Mock()),
+        patch("app.presentation.routers.v1.task.import_vacancy_task.apply_async", return_value=mock_task),
+        patch("app.presentation.routers.v1.task.clear_lock", Mock()),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app),

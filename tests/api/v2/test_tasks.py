@@ -24,7 +24,7 @@ async def test_import_vacancies_success(
 ) -> None:
     """Тест: успешный запуск импорта вакансий в фоновом режиме"""
     response = await client_with_mocked_import.post(
-        "/api/v2/tasks/import_vacancies",
+        "/api/v1/tasks/import_vacancies",
         headers=auth_headers_import,
         params={"query": "python developer"},
     )
@@ -43,7 +43,7 @@ async def test_import_vacancies_with_tiers(
 ) -> None:
     """Тест: импорт вакансий с фильтрацией по уровню опыта"""
     response = await client_with_mocked_import.post(
-        "/api/v2/tasks/import_vacancies",
+        "/api/v1/tasks/import_vacancies",
         headers=auth_headers_import,
         params={
             "query": "django developer",
@@ -58,7 +58,7 @@ async def test_import_vacancies_with_tiers(
 async def test_import_vacancies_unauthorized(client_with_mocked_import: AsyncClient) -> None:
     """Тест: запуск импорта без авторизации"""
     response = await client_with_mocked_import.post(
-        "/api/v2/tasks/import_vacancies",
+        "/api/v1/tasks/import_vacancies",
         params={"query": "python developer"},
     )
     assert response.status_code == 401
@@ -70,7 +70,7 @@ async def test_import_vacancies_with_all_tiers(
 ) -> None:
     """Тест: импорт вакансий для всех уровней опыта"""
     response = await client_with_mocked_import.post(
-        "/api/v2/tasks/import_vacancies",
+        "/api/v1/tasks/import_vacancies",
         headers=auth_headers_import,
         params={"query": "fastapi developer"},
     )
@@ -90,7 +90,7 @@ async def test_get_task_status_success(
     """Тест: успешная проверка статуса задачи"""
     # Сначала запускаем задачу
     import_response = await client_with_mocked_import.post(
-        "/api/v2/tasks/import_vacancies",
+        "/api/v1/tasks/import_vacancies",
         headers=auth_headers_import,
         params={"query": "test query"},
     )
@@ -101,7 +101,7 @@ async def test_get_task_status_success(
 
     # Проверяем статус
     response = await client_with_mocked_import.get(
-        f"/api/v2/tasks/{task_id}",
+        f"/api/v1/tasks/{task_id}",
         headers=auth_headers_import,
     )
 
@@ -115,7 +115,7 @@ async def test_get_task_status_success(
 @pytest.mark.asyncio
 async def test_get_task_status_unauthorized(client_with_mocked_import: AsyncClient) -> None:
     """Тест: проверка статуса без авторизации"""
-    response = await client_with_mocked_import.get("/api/v2/tasks/some-task-id")
+    response = await client_with_mocked_import.get("/api/v1/tasks/some-task-id")
     assert response.status_code == 401
 
 
@@ -125,7 +125,7 @@ async def test_get_task_status_not_found(
 ) -> None:
     """Тест: проверка статуса несуществующей задачи"""
     response = await client_with_mocked_import.get(
-        "/api/v2/tasks/non-existent-task-id",
+        "/api/v1/tasks/non-existent-task-id",
         headers=auth_headers_import,
     )
 

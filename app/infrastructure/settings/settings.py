@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="Время жизни refresh токена в днях")
     # Приложение
     DEBUG: bool = Field(default=False, description="Режим отладки")
-    API_PREFIX: str = Field(default="/api/v2", description="Префикс API")
+    API_PREFIX: str = Field(default="/api/v1", description="Префикс API")
     # Включить инвайты для регистрации
     REQUIRE_INVITE: bool = Field(
         default=False,

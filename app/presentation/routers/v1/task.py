@@ -22,7 +22,7 @@ from app.presentation.dependencies import get_current_admin_user, get_current_us
 
 router = APIRouter(prefix="/tasks")
 
-TAGS = "Tasks_v2"
+TAGS = "Tasks_v1"
 TIME_LOCK = 300
 
 LOCK_REDIS_URL = os.getenv("LOCK_REDIS_URL")
