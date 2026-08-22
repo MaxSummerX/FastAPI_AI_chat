@@ -5,7 +5,12 @@
 с использованием bcrypt. Stateless функции без зависимости от глобального состояния.
 """
 
+import os
+
 import bcrypt
+
+
+BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", "12"))
 
 
 def hash_password(password: str) -> str:
@@ -21,7 +26,7 @@ def hash_password(password: str) -> str:
     Returns:
         Хэш пароля в формате bcrypt (строка, начинается с $2b$12$)
     """
-    salt = bcrypt.gensalt(rounds=12)
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
     result: str = hashed.decode("utf-8")
     return result

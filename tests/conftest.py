@@ -18,6 +18,9 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
+
+os.environ.setdefault("BCRYPT_ROUNDS", "4")
+
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.domain.models import Conversation as ConversationModel
 from app.domain.models import Document as DocumentModel
@@ -45,19 +48,7 @@ else:
     print("🧪 Test Database: SQLite (in-memory)")
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop]:
-    """
-    Создаёт event loop для всех тестов.
-
-    Явно создаём loop для стабильности в тестах.
-    """
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="session")
 async def db_engine() -> AsyncGenerator[AsyncEngine]:
     """
     Создаёт тестовый движок БД.
@@ -96,8 +87,14 @@ async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
         expire_on_commit=False,
     )
 
+    async def fake_commit() -> None:
+        await session.flush()
+
     async with async_session() as session:
+        nested = await session.begin_nested()
+        session.commit = fake_commit  # type: ignore[method-assign]
         yield session
+        await nested.rollback()
 
 
 @pytest_asyncio.fixture(scope="function")
