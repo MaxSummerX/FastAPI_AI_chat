@@ -39,17 +39,18 @@ class IVacancyRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_existing_hh_ids(self, hh_ids: list[str]) -> set[str]:
+    async def get_existing_hh_id_map(self, hh_ids: list[str]) -> dict[str, UUID]:
         """
-        Получить множество hh_id, уже существующих в базе.
+        Получить мапу существующих в базе вакансий: hh_id -> внутренний ID.
 
-        Используется для дедупликации при импорте вакансий с hh.ru.
+        Используется для дедупликации при импорте и создания связей
+        с уже существующими вакансиями.
 
         Args:
             hh_ids: Список идентификаторов вакансий на hh.ru
 
         Returns:
-            Множество hh_id, которые уже есть в базе
+            Словарь {hh_id: id вакансии в базе}
         """
         pass
 
@@ -95,14 +96,15 @@ class IVacancyRepository(ABC):
         pass
 
     @abstractmethod
-    async def archive_by_hh_ids(self, hh_ids: list[str]) -> int:
+    async def update_archive_statuses(self, hh_ids: dict[str, bool]) -> int:
         """
-        Архивировать вакансии по списку hh_id.
+        Пакетно обновить архивные статусы вакансий.
 
         Args:
-            hh_ids: Список идентификаторов вакансий на hh.ru
+            hh_ids: Словарь {hh_id: is_archived} — каждому hh_id своё значение
+                    (включая разархивацию, если вакансия снова активна на hh.ru)
 
         Returns:
-            Количество заархивированных записей
+            Количество обновлённых записей
         """
         pass
