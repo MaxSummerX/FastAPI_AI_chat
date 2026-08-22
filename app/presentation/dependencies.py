@@ -22,6 +22,7 @@ from app.application.services.message_service import MessageService
 from app.application.services.prompt_service import PromptService
 from app.application.services.upload_service import UploadService
 from app.application.services.user_service import UserService
+from app.application.services.vacancy_analysis_service import VacancyAnalysisService
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.application.services.vacancy_service import VacancyService
 from app.application.services.vacancy_status_service import VacancyArchiveSync
@@ -35,6 +36,7 @@ from app.domain.repositories.messages import IMessageRepository
 from app.domain.repositories.prompts import IPromptRepository
 from app.domain.repositories.users import IUserRepository
 from app.domain.repositories.vacancies import IVacancyRepository
+from app.domain.repositories.vacancy_analyses import IVacancyAnalysisRepository
 from app.domain.services.llm import ILLMService
 from app.domain.services.memory import IMemoryService
 from app.infrastructure.database.dependencies import get_db
@@ -53,6 +55,7 @@ from app.infrastructure.persistence.sqlalchemy import (
     VacancySQLAlchemyRepository,
 )
 from app.infrastructure.persistence.sqlalchemy.fact_repository import FactsSQLAlchemyRepository
+from app.infrastructure.persistence.sqlalchemy.vacancy_analysis_repository import VacancyAnalysisSQLAlchemyRepository
 from app.infrastructure.security.jwt_service import TokenPayload, decode_token
 from app.infrastructure.settings.settings import settings
 
@@ -341,11 +344,24 @@ def get_researcher_llm() -> AsyncOpenAILLM:
     return create_analysis_llm()
 
 
+def get_vacancy_analysis_repo(db: AsyncSession = Depends(get_db)) -> IVacancyAnalysisRepository:
+    return VacancyAnalysisSQLAlchemyRepository(db)
+
+
 def get_vacancy_analyzer(
     llm: AsyncOpenAILLM = Depends(get_researcher_llm),
     vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
 ) -> VacancyAnalyzer:
     return VacancyAnalyzer(llm, vacancy_repo)
+
+
+def get_vacancy_analysis_service(
+    analysis_repo: IVacancyAnalysisRepository = Depends(get_vacancy_analysis_repo),
+    vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
+    analyzer: VacancyAnalyzer = Depends(get_vacancy_analyzer),
+) -> VacancyAnalysisService:
+    """Фабрика сервиса анализов вакансий."""
+    return VacancyAnalysisService(analysis_repo, vacancy_repo, analyzer)
 
 
 async def get_current_user(

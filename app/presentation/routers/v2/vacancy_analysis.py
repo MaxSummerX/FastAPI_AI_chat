@@ -2,13 +2,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.exceptions.analysis import InvalidAnalysisTypeError
 from app.application.exceptions.llm import LLMGenerationError
 from app.application.exceptions.user import UserNotFoundException
-from app.application.exceptions.vacancy import VacancyNotFoundError
+from app.application.exceptions.vacancy import (
+    AnalysisAlreadyExistsError,
+    ResumeRequiredError,
+    ResumeTooShortError,
+    VacancyNotFoundError,
+)
 from app.application.schemas.vacancy_analysis import (
     AnalysisTypeInfo,
     AvailableAnalysesResponse,
@@ -17,17 +20,11 @@ from app.application.schemas.vacancy_analysis import (
     VacancyListResponse,
     VacancyResponse,
 )
-from app.application.services.vacancy_analyzer import VacancyAnalyzer
+from app.application.services.vacancy_analysis_service import VacancyAnalysisService
 from app.domain.enums.analysis import AnalysisType
 from app.domain.models.user import User as UserModel
-from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
-from app.domain.models.vacancy import Vacancy as VacancyModel
-from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
-from app.infrastructure.database.dependencies import get_db
-from app.presentation.dependencies import get_current_user, get_vacancy_analyzer
+from app.presentation.dependencies import get_current_user, get_vacancy_analysis_service
 
-
-MIN_SIZE_RESUME = 300
 
 router = APIRouter(prefix="/{id_vacancy}/analyses", tags=["Vacancy_analyses_V2"])
 
@@ -36,34 +33,19 @@ router = APIRouter(prefix="/{id_vacancy}/analyses", tags=["Vacancy_analyses_V2"]
 async def get_all_vacancy_analyses(
     id_vacancy: UUID,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    analysis_service: VacancyAnalysisService = Depends(get_vacancy_analysis_service),
 ) -> VacancyListResponse:
     """
     Возвращает все анализы вакансии по id вакансии.
+
+    **Возможные ошибки:** `404` — вакансия не найдена или принадлежит другому пользователю.
     """
     logger.info(f"Запрос на получение анализов вакансии {id_vacancy} пользователя {current_user.id}")
 
-    # Проверяем что вакансия существует, активна и связана с пользователем
-    vacancy = await db.scalar(
-        select(VacancyModel.id)
-        .join(UserVacanciesModel)
-        .where(
-            UserVacanciesModel.user_id == current_user.id,
-            VacancyModel.id == id_vacancy,
-            UserVacanciesModel.is_active.is_(True),
-        )
-    )
-
-    if not vacancy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found")
-
-    result = await db.scalars(
-        select(VacancyAnalysisModel).where(
-            VacancyAnalysisModel.vacancy_id == id_vacancy, VacancyAnalysisModel.user_id == current_user.id
-        )
-    )
-
-    analyses = result.all()
+    try:
+        analyses = await analysis_service.get_all_for_vacancy(current_user.id, id_vacancy)
+    except VacancyNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
     # Собираем уникальные типы анализов
     analyses_types = list({AnalysisType(analysis.analysis_type) for analysis in analyses})
@@ -78,8 +60,7 @@ async def create_vacancy_analysis(
     id_vacancy: UUID,
     data: VacancyAnalysisCreate,
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    analyzer: VacancyAnalyzer = Depends(get_vacancy_analyzer),
+    analysis_service: VacancyAnalysisService = Depends(get_vacancy_analysis_service),
 ) -> VacancyResponse:
     """
     Создает анализ вакансии по заданному типу.
@@ -93,64 +74,40 @@ async def create_vacancy_analysis(
     - preparation: Подготовка к собеседованию
     - skill_gap: Анализ пробелов в навыках
     - custom: Пользовательский промпт
+
+    **Возможные ошибки:**
+    - `400` — некорректный тип анализа / нет custom_prompt для CUSTOM
+    - `404` — вакансия не найдена или принадлежит другому пользователю
+    - `409` — анализ этого типа уже существует
+    - `422` — резюме не загружено или слишком короткое
+    - `503` — ошибка AI-сервиса
     """
-    if data.analysis_type == AnalysisType.CUSTOM:
-        if not data.custom_prompt:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="custom_prompt is required for CUSTOM type"
-            )
-        if not data.title:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="title is required for CUSTOM type")
-        title = data.title
-    else:
-        # Системные анализы - title из enum
-        title = data.analysis_type.display_name
-
-    # Проверяем существующий анализ у этого пользователя
-    is_exists = await db.scalar(
-        select(VacancyAnalysisModel.id).where(
-            VacancyAnalysisModel.vacancy_id == id_vacancy,
-            VacancyAnalysisModel.analysis_type == data.analysis_type,
-            VacancyAnalysisModel.user_id == current_user.id,
-        )
-    )
-
-    if is_exists:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=f"Analysis {data.analysis_type.value} already exists"
-        )
-
-    resume = current_user.resume
-
-    if resume is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Resume not found. Please upload your resume first.",
-        )
-
-    if len(resume) < MIN_SIZE_RESUME:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Resume is too short. Minimum {MIN_SIZE_RESUME} characters required.",
-        )
+    logger.info(f"Запрос на создание анализа {data.analysis_type} вакансии {id_vacancy}")
 
     try:
-        result, prompt_template = await analyzer.analyze_from_db(
-            vacancy_id=id_vacancy,
+        analysis = await analysis_service.create_analysis(
+            current_user.id,
+            id_vacancy,
             analysis_type=data.analysis_type,
-            custom_prompt=data.custom_prompt if data.custom_prompt else None,
-            user_id=current_user.id,
+            custom_prompt=data.custom_prompt,
+            title=data.title,
             resume=current_user.resume,
         )
+    except InvalidAnalysisTypeError as e:
+        logger.warning(f"Invalid analysis type: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    except AnalysisAlreadyExistsError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
+    except ResumeRequiredError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
+    except ResumeTooShortError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
     except VacancyNotFoundError as e:
         logger.warning(f"Vacancy not found: {e}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except UserNotFoundException as e:
         logger.warning(f"User not found: {e}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from None
-    except InvalidAnalysisTypeError as e:
-        logger.warning(f"Invalid analysis type: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except LLMGenerationError as e:
         logger.error(f"LLM error: {e}")
         raise HTTPException(
@@ -159,19 +116,6 @@ async def create_vacancy_analysis(
     except Exception as e:
         logger.error(f"Unexpected error during analysis: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from None
-
-    analysis = VacancyAnalysisModel(
-        vacancy_id=id_vacancy,
-        user_id=current_user.id,
-        title=title,
-        analysis_type=data.analysis_type,
-        prompt_template=prompt_template,
-        custom_prompt=data.custom_prompt,
-        result_text=result,
-    )
-    db.add(analysis)
-    await db.commit()
-    await db.refresh(analysis)
 
     return VacancyResponse.model_validate(analysis)
 
