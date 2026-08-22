@@ -201,17 +201,17 @@ async def test_get_messages_limit_minimum(
 
 
 # ============================================================
-# POST /conversations/{id}/messages/stream_v2 - улучшенный стриминг
+# POST /conversations/{id}/messages/stream - улучшенный стриминг
 # ============================================================
 
 
 @pytest.mark.asyncio
-async def test_stream_v2_message_empty_content(
+async def test_stream_message_empty_content(
     client: AsyncClient, auth_headers: dict[str, str], test_conversation: ConversationModel
 ) -> None:
-    """Тест: stream_v2 с пустым контентом"""
+    """Тест: stream с пустым контентом"""
     response = await client.post(
-        f"/api/v1/conversations/{test_conversation.id}/messages/stream_v2",
+        f"/api/v1/conversations/{test_conversation.id}/messages/stream",
         headers=auth_headers,
         json={
             "message": {
@@ -225,10 +225,10 @@ async def test_stream_v2_message_empty_content(
 
 
 @pytest.mark.asyncio
-async def test_stream_v2_invalid_conversation_id(client: AsyncClient, auth_headers: dict[str, str]) -> None:
-    """Тест: stream_v2 с невалидным conversation_id"""
+async def test_stream_invalid_conversation_id(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+    """Тест: stream с невалидным conversation_id"""
     response = await client.post(
-        "/api/v1/conversations/00000000-0000-0000-0000-000000000000/messages/stream_v2",
+        "/api/v1/conversations/00000000-0000-0000-0000-000000000000/messages/stream",
         headers=auth_headers,
         json={"message": {"role": "user", "content": "Test"}},
     )

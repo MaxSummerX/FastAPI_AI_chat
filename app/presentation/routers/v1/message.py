@@ -65,8 +65,8 @@ async def get_messages(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
-@router.post("/stream_v2", status_code=status.HTTP_200_OK, summary="Добавить сообщение с поточным ответом (v2)")
-async def add_message_stream_v2(
+@router.post("/stream", status_code=status.HTTP_200_OK, summary="Добавить сообщение с поточным ответом")
+async def add_message_stream(
     conversation_id: UUID,
     request: MessageStreamRequest,
     current_user: UserModel = Depends(get_current_user),
