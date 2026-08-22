@@ -8,6 +8,7 @@
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
+from httpx import AsyncClient
 from loguru import logger
 from mem0 import AsyncMemory
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from app.application.services.prompt_service import PromptService
 from app.application.services.upload_service import UploadService
 from app.application.services.user_service import UserService
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
+from app.application.services.vacancy_status_service import VacancyArchiveSync
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
 from app.domain.repositories.conversations import IConversationRepository
@@ -35,6 +37,7 @@ from app.domain.repositories.vacancies import IVacancyRepository
 from app.domain.services.llm import ILLMService
 from app.domain.services.memory import IMemoryService
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.hh.headhunter_client import get_hh_client
 from app.infrastructure.llms.config import base_config_for_llm
 from app.infrastructure.llms.factory import create_analysis_llm, create_llm_service
 from app.infrastructure.llms.openai import AsyncOpenAILLM
@@ -149,6 +152,14 @@ def get_fact_repo(db: AsyncSession = Depends(get_db)) -> IFactRepository:
 
 def get_vacancy_repo(db: AsyncSession = Depends(get_db)) -> IVacancyRepository:
     return VacancySQLAlchemyRepository(db)
+
+
+async def get_vacancy_archive_sync(
+    vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
+    hh_client: AsyncClient = Depends(get_hh_client),
+) -> VacancyArchiveSync:
+    """Фабрика сервиса синхронизации архивных статусов вакансий."""
+    return VacancyArchiveSync(vacancy_repo=vacancy_repo, hh_client=hh_client)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:

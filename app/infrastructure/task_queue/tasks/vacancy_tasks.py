@@ -11,6 +11,7 @@ from sqlalchemy import and_, select
 from app.application.schemas.vacancy import VacancyForAnalysis
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.application.services.vacancy_import_service import VacancyImportService
+from app.application.services.vacancy_status_service import VacancyArchiveSync
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
@@ -22,7 +23,6 @@ from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.persistence.sqlalchemy.vacancy_repository import VacancySQLAlchemyRepository
 from app.infrastructure.settings.settings import settings
 from app.infrastructure.task_queue.celery_config import celery
-from app.services.headhunter import VacancyArchiveSync
 
 
 LOCK_REDIS_URL = settings.LOCK_REDIS_URL
@@ -265,7 +265,7 @@ def sync_archive_statuses_task(self: Task) -> dict:
     async def _run() -> dict:
         async with _worker_resources["session_factory"]() as session:
             service = VacancyArchiveSync(
-                db_session=session,
+                vacancy_repo=VacancySQLAlchemyRepository(session),
                 hh_client=_worker_resources["hh_client"],
                 semaphore_count=SEMAPHORE_COUNT,
                 request_delay=REQUEST_DELAY_ARCHIVE,

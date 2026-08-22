@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 
-from app.services.headhunter.dependencies import get_vacancy_archive_sync
-from app.services.headhunter.vacancy_status import VacancyArchiveSync
+from app.application.services.vacancy_status_service import VacancyArchiveSync
+from app.presentation.dependencies import get_vacancy_archive_sync
 
 
 router = APIRouter(prefix="/experiment")
