@@ -23,7 +23,7 @@ from app.domain.models.message import Message as MessageModel
 @pytest.mark.asyncio
 async def test_get_messages_unauthorized(client: AsyncClient, test_conversation: ConversationModel) -> None:
     """Тест: неавторизованный запрос к messages"""
-    response = await client.get(f"/api/v2/conversations/{test_conversation.id}/messages")
+    response = await client.get(f"/api/v1/conversations/{test_conversation.id}/messages")
     assert response.status_code == 401
 
 
@@ -32,7 +32,7 @@ async def test_get_messages_conversation_not_found(client: AsyncClient, auth_hea
     """Тест: запрос сообщений несуществующей беседы"""
     import uuid
 
-    response = await client.get(f"/api/v2/conversations/{uuid.uuid4()}/messages", headers=auth_headers)
+    response = await client.get(f"/api/v1/conversations/{uuid.uuid4()}/messages", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -45,7 +45,7 @@ async def test_get_messages_first_load(
 ) -> None:
     """Тест: первая загрузка сообщений (без cursor)"""
     response = await client.get(
-        f"/api/v2/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 20}
+        f"/api/v1/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 20}
     )
     assert response.status_code == 200
 
@@ -72,14 +72,14 @@ async def test_get_messages_with_cursor(
     """Тест: загрузка более старых сообщений (cursor)"""
     # Первая загрузка
     first_response = await client.get(
-        f"/api/v2/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 20}
+        f"/api/v1/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 20}
     )
     first_data = first_response.json()
     cursor = first_data["next_cursor"]
 
     # Загружаем более старые
     response = await client.get(
-        f"/api/v2/conversations/{test_conversation.id}/messages",
+        f"/api/v1/conversations/{test_conversation.id}/messages",
         headers=auth_headers,
         params={"limit": 10, "cursor": cursor},
     )
@@ -108,7 +108,7 @@ async def test_get_messages_pagination_to_end(
             params["cursor"] = cursor
 
         response = await client.get(
-            f"/api/v2/conversations/{test_conversation.id}/messages", headers=auth_headers, params=params
+            f"/api/v1/conversations/{test_conversation.id}/messages", headers=auth_headers, params=params
         )
         data = response.json()
 
@@ -129,7 +129,7 @@ async def test_get_messages_invalid_cursor(
 ) -> None:
     """Тест: использование невалидного курсора"""
     response = await client.get(
-        f"/api/v2/conversations/{test_conversation.id}/messages",
+        f"/api/v1/conversations/{test_conversation.id}/messages",
         headers=auth_headers,
         params={"cursor": "invalid_cursor_base64"},
     )
@@ -145,7 +145,7 @@ async def test_get_messages_ordering_desc(
 ) -> None:
     """Тест: проверка правильности сортировки (от нового к старому)"""
     response = await client.get(
-        f"/api/v2/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 10}
+        f"/api/v1/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 10}
     )
     assert response.status_code == 200
 
@@ -166,7 +166,7 @@ async def test_get_messages_empty_conversation(
     client: AsyncClient, auth_headers: dict[str, str], test_conversation: ConversationModel
 ) -> None:
     """Тест: получение сообщений из пустой беседы"""
-    response = await client.get(f"/api/v2/conversations/{test_conversation.id}/messages", headers=auth_headers)
+    response = await client.get(f"/api/v1/conversations/{test_conversation.id}/messages", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -182,7 +182,7 @@ async def test_get_messages_limit_validation(
     """Тест: валидация limit параметра"""
     # Слишком большой limit
     response = await client.get(
-        f"/api/v2/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 150}
+        f"/api/v1/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 150}
     )
     # Должен использовать максимальное значение (100)
     assert response.status_code == 200
@@ -194,7 +194,7 @@ async def test_get_messages_limit_minimum(
 ) -> None:
     """Тест: limit меньше минимума возвращает ошибку валидации"""
     response = await client.get(
-        f"/api/v2/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 0}
+        f"/api/v1/conversations/{test_conversation.id}/messages", headers=auth_headers, params={"limit": 0}
     )
     # Query validation в FastAPI возвращает 422 для невалидных значений
     assert response.status_code == 422
@@ -211,7 +211,7 @@ async def test_stream_v2_message_empty_content(
 ) -> None:
     """Тест: stream_v2 с пустым контентом"""
     response = await client.post(
-        f"/api/v2/conversations/{test_conversation.id}/messages/stream_v2",
+        f"/api/v1/conversations/{test_conversation.id}/messages/stream_v2",
         headers=auth_headers,
         json={
             "message": {
@@ -228,7 +228,7 @@ async def test_stream_v2_message_empty_content(
 async def test_stream_v2_invalid_conversation_id(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: stream_v2 с невалидным conversation_id"""
     response = await client.post(
-        "/api/v2/conversations/00000000-0000-0000-0000-000000000000/messages/stream_v2",
+        "/api/v1/conversations/00000000-0000-0000-0000-000000000000/messages/stream_v2",
         headers=auth_headers,
         json={"message": {"role": "user", "content": "Test"}},
     )
@@ -245,5 +245,5 @@ async def test_get_messages_other_user_conversation(
     client: AsyncClient, admin_headers: dict[str, str], test_conversation: ConversationModel
 ) -> None:
     """Тест: попытка получить сообщения из чужой беседы"""
-    response = await client.get(f"/api/v2/conversations/{test_conversation.id}/messages", headers=admin_headers)
+    response = await client.get(f"/api/v1/conversations/{test_conversation.id}/messages", headers=admin_headers)
     assert response.status_code == 404

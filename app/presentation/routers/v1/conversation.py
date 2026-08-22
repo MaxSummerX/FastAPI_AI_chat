@@ -14,7 +14,7 @@ from app.infrastructure.persistence.pagination import (
     InvalidCursorError,
 )
 from app.presentation.dependencies import get_conversation_service, get_current_user
-from app.presentation.routers.v2 import message
+from app.presentation.routers.v1 import message
 
 
 router = APIRouter(prefix="/conversations")

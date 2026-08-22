@@ -26,7 +26,7 @@ from app.domain.models.user import User as UserModel
 from app.presentation.dependencies import get_current_user, get_vacancy_analysis_service
 
 
-router = APIRouter(prefix="/{id_vacancy}/analyses", tags=["Vacancy_analyses_V2"])
+router = APIRouter(prefix="/{id_vacancy}/analyses", tags=["Vacancy_analyses_V1"])
 
 
 @router.get("", status_code=status.HTTP_200_OK, summary="Получить все анализы вакансии")

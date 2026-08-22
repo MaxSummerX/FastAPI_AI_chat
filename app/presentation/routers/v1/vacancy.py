@@ -14,12 +14,12 @@ from app.infrastructure.persistence.pagination import (
     MINIMUM_PER_PAGE,
 )
 from app.presentation.dependencies import get_current_user, get_vacancy_service
-from app.presentation.routers.v2 import vacancy_analysis
+from app.presentation.routers.v1 import vacancy_analysis
 
 
 router = APIRouter(prefix="/vacancies")
 
-TAGS = "Vacancies_v2"
+TAGS = "Vacancies_v1"
 
 
 @router.get(

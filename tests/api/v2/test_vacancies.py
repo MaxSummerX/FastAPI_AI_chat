@@ -33,7 +33,7 @@ from app.domain.models.vacancy import Vacancy as VacancyModel
 @pytest.mark.asyncio
 async def test_get_vacancies_unauthorized(client: AsyncClient) -> None:
     """Тест: неавторизованный запрос к /vacancies"""
-    response = await client.get("/api/v2/vacancies")
+    response = await client.get("/api/v1/vacancies")
     assert response.status_code == 401
 
 
@@ -42,7 +42,7 @@ async def test_get_vacancies_first_page(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancies: list[VacancyModel]
 ) -> None:
     """Тест: получение первой страницы вакансий (без курсора)"""
-    response = await client.get("/api/v2/vacancies", headers=auth_headers)
+    response = await client.get("/api/v1/vacancies", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -61,7 +61,7 @@ async def test_get_vacancies_with_custom_limit(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancies: list[VacancyModel]
 ) -> None:
     """Тест: получение вакансий с кастомным limit"""
-    response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"limit": 10})
+    response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"limit": 10})
     assert response.status_code == 200
 
     data = response.json()
@@ -75,7 +75,7 @@ async def test_get_vacancies_with_cursor(
 ) -> None:
     """Тест: получение второй страницы с курсором"""
     # Первая страница
-    first_response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"limit": 10})
+    first_response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"limit": 10})
     first_data = first_response.json()
     cursor = first_data["next_cursor"]
 
@@ -83,7 +83,7 @@ async def test_get_vacancies_with_cursor(
     assert cursor is not None
 
     # Вторая страница с курсором
-    response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"limit": 10, "cursor": cursor})
+    response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"limit": 10, "cursor": cursor})
     assert response.status_code == 200
 
     data = response.json()
@@ -100,7 +100,7 @@ async def test_get_vacancies_last_page(
 ) -> None:
     """Тест: получение последней страницы"""
     # Запрашиваем больше чем есть
-    response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"limit": 50})
+    response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"limit": 50})
     assert response.status_code == 200
 
     data = response.json()
@@ -112,7 +112,7 @@ async def test_get_vacancies_last_page(
 @pytest.mark.asyncio
 async def test_get_vacancies_invalid_cursor(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение с невалидным курсором"""
-    response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"cursor": "invalid_cursor"})
+    response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"cursor": "invalid_cursor"})
     assert response.status_code == 400
 
 
@@ -120,14 +120,14 @@ async def test_get_vacancies_invalid_cursor(client: AsyncClient, auth_headers: d
 async def test_get_vacancies_limit_validation(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: валидация limit параметра"""
     # Слишком большой limit - должен использовать максимальное значение (100)
-    response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"limit": 150})
+    response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"limit": 150})
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_get_vacancies_empty_db(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение вакансий из пустой БД"""
-    response = await client.get("/api/v2/vacancies", headers=auth_headers)
+    response = await client.get("/api/v1/vacancies", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -142,7 +142,7 @@ async def test_get_vacancies_filter_by_favorite(
 ) -> None:
     """Тест: фильтрация вакансий по избранному"""
     # Получаем только избранные
-    response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"favorite": True})
+    response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"favorite": True})
     assert response.status_code == 200
 
     data = response.json()
@@ -157,7 +157,7 @@ async def test_get_vacancies_exclude_favorite(
 ) -> None:
     """Тест: исключение избранных вакансий"""
     # Получаем всё кроме избранных
-    response = await client.get("/api/v2/vacancies", headers=auth_headers, params={"favorite": False})
+    response = await client.get("/api/v1/vacancies", headers=auth_headers, params={"favorite": False})
     assert response.status_code == 200
 
     data = response.json()
@@ -173,7 +173,7 @@ async def test_get_vacancies_filter_by_tier(
     """Тест: фильтрация вакансий по уровню опыта"""
     # Фильтр по одному уровню опыта
     response = await client.get(
-        "/api/v2/vacancies",
+        "/api/v1/vacancies",
         headers=auth_headers,
         params={"tier": Experience.NO_EXPERIENCE.value},
     )
@@ -192,7 +192,7 @@ async def test_get_vacancies_filter_by_multiple_tiers(
     """Тест: фильтрация вакансий по нескольким уровням опыта"""
     # Фильтр по нескольким уровням опыта
     response = await client.get(
-        "/api/v2/vacancies",
+        "/api/v1/vacancies",
         headers=auth_headers,
         params={
             "tier": [
@@ -219,7 +219,7 @@ async def test_get_vacancy_by_id_success(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel
 ) -> None:
     """Тест: успешное получение вакансии по UUID"""
-    response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{test_vacancy.id}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -234,14 +234,14 @@ async def test_get_vacancy_by_id_success(
 @pytest.mark.asyncio
 async def test_get_vacancy_by_id_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: попытка получить несуществующую вакансию"""
-    response = await client.get(f"/api/v2/vacancies/{uuid.uuid4()}", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_get_vacancy_by_id_unauthorized(client: AsyncClient, test_vacancy: VacancyModel) -> None:
     """Тест: получение вакансии без авторизации"""
-    response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}")
+    response = await client.get(f"/api/v1/vacancies/{test_vacancy.id}")
     assert response.status_code == 401
 
 
@@ -262,7 +262,7 @@ async def test_get_vacancy_by_id_inactive(
     user_vacancy.is_active = False
     await db_session.commit()
 
-    response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{test_vacancy.id}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -295,7 +295,7 @@ async def test_get_vacancy_by_hh_id_from_db(
         await db_session.commit()
 
     # POST request to add existing vacancy to user's pool
-    response = await client.post(f"/api/v2/vacancies/head_hunter/{test_vacancy.hh_id}", headers=auth_headers)
+    response = await client.post(f"/api/v1/vacancies/head_hunter/{test_vacancy.hh_id}", headers=auth_headers)
     assert response.status_code == 204
 
     # Verify the link was created
@@ -350,7 +350,7 @@ async def test_get_vacancy_by_hh_id_with_import(
         return_value=mock_vacancy,
     ):
         # POST request to add vacancy to user's pool
-        response = await client.post(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
+        response = await client.post(f"/api/v1/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
 
         assert response.status_code == 204
 
@@ -365,7 +365,7 @@ async def test_get_vacancy_by_hh_id_not_found_on_hh(client: AsyncClient, auth_he
     with patch("app.application.services.vacancy_service.create_vacancy_object", new_callable=AsyncMock) as mock_create:
         mock_create.side_effect = HTTPException(status_code=404, detail="Vacancy not found")
 
-        response = await client.post(f"/api/v2/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
+        response = await client.post(f"/api/v1/vacancies/head_hunter/{hh_id}", headers=auth_headers_import)
 
         assert response.status_code == 404
 
@@ -373,7 +373,7 @@ async def test_get_vacancy_by_hh_id_not_found_on_hh(client: AsyncClient, auth_he
 @pytest.mark.asyncio
 async def test_get_vacancy_by_hh_id_unauthorized(client: AsyncClient) -> None:
     """Тест: добавление вакансии по hh_id без авторизации"""
-    response = await client.post("/api/v2/vacancies/head_hunter/12345678")
+    response = await client.post("/api/v1/vacancies/head_hunter/12345678")
     assert response.status_code == 401
 
 
@@ -391,7 +391,7 @@ async def test_delete_vacancy_success(
     db_session: AsyncSession,
 ) -> None:
     """Тест: успешное мягкое удаление вакансии"""
-    response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/vacancies/{test_vacancy.id}", headers=auth_headers)
     assert response.status_code == 204
 
     # Проверяем, что вакансия помечена как неактивная через UserVacancies
@@ -405,14 +405,14 @@ async def test_delete_vacancy_success(
 @pytest.mark.asyncio
 async def test_delete_vacancy_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: удаление несуществующей вакансии"""
-    response = await client.delete(f"/api/v2/vacancies/{uuid.uuid4()}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/vacancies/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_delete_vacancy_unauthorized(client: AsyncClient, test_vacancy: VacancyModel) -> None:
     """Тест: удаление вакансии без авторизации"""
-    response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}")
+    response = await client.delete(f"/api/v1/vacancies/{test_vacancy.id}")
     assert response.status_code == 401
 
 
@@ -422,7 +422,7 @@ async def test_delete_other_user_vacancy(
 ) -> None:
     """Тест: попытка удалить вакансию другого пользователя"""
     # test_vacancy принадлежит test_user, а запрашивает admin
-    response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}", headers=admin_headers)
+    response = await client.delete(f"/api/v1/vacancies/{test_vacancy.id}", headers=admin_headers)
     assert response.status_code == 404
 
 
@@ -452,7 +452,7 @@ async def test_add_to_favorites_success(
         link.is_favorite = False
         await db_session.commit()
 
-    response = await client.put(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
+    response = await client.put(f"/api/v1/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
 
     # Проверяем, что вакансия помечена как избранная через UserVacancies
@@ -482,21 +482,21 @@ async def test_add_to_favorites_already_favorite(
         link.is_favorite = True
         await db_session.commit()
 
-    response = await client.put(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
+    response = await client.put(f"/api/v1/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
 
 
 @pytest.mark.asyncio
 async def test_add_to_favorites_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: добавление в избранное несуществующей вакансии"""
-    response = await client.put(f"/api/v2/vacancies/{uuid.uuid4()}/favorite", headers=auth_headers)
+    response = await client.put(f"/api/v1/vacancies/{uuid.uuid4()}/favorite", headers=auth_headers)
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_add_to_favorites_unauthorized(client: AsyncClient, test_vacancy: VacancyModel) -> None:
     """Тест: добавление в избранное без авторизации"""
-    response = await client.put(f"/api/v2/vacancies/{test_vacancy.id}/favorite")
+    response = await client.put(f"/api/v1/vacancies/{test_vacancy.id}/favorite")
     assert response.status_code == 401
 
 
@@ -526,7 +526,7 @@ async def test_remove_from_favorites_success(
         link.is_favorite = True
         await db_session.commit()
 
-    response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
+    response = await client.delete(f"/api/v1/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
 
     # Проверяем, что вакансия помечена как не избранная через UserVacancies
@@ -557,19 +557,19 @@ async def test_remove_from_favorites_not_favorite(
         link.is_favorite = False
         await db_session.commit()
 
-    response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
+    response = await client.delete(f"/api/v1/vacancies/{test_vacancy.id}/favorite", headers=auth_headers)
     assert response.status_code == 204
 
 
 @pytest.mark.asyncio
 async def test_remove_from_favorites_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: удаление из избранного несуществующей вакансии"""
-    response = await client.delete(f"/api/v2/vacancies/{uuid.uuid4()}/favorite", headers=auth_headers)
+    response = await client.delete(f"/api/v1/vacancies/{uuid.uuid4()}/favorite", headers=auth_headers)
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_remove_from_favorites_unauthorized(client: AsyncClient, test_vacancy: VacancyModel) -> None:
     """Тест: удаление из избранного без авторизации"""
-    response = await client.delete(f"/api/v2/vacancies/{test_vacancy.id}/favorite")
+    response = await client.delete(f"/api/v1/vacancies/{test_vacancy.id}/favorite")
     assert response.status_code == 401

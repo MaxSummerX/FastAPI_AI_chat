@@ -104,7 +104,7 @@ async def test_upload_claude_success(
     files = {"file": ("claude_conversations.json", BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -130,7 +130,7 @@ async def test_upload_gpt_success(
     files = {"file": ("gpt_conversations.json", BytesIO(sample_gpt_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=gpt",
+        "/api/v1/upload/conversations_import?provider=gpt",
         headers=auth_headers,
         files=files,
     )
@@ -155,7 +155,7 @@ async def test_upload_unauthorized(
     files = {"file": ("test.json", BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         files=files,
     )
 
@@ -171,7 +171,7 @@ async def test_upload_invalid_extension(
     files = {"file": ("test.txt", BytesIO(b"some text content"), "text/plain")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -190,7 +190,7 @@ async def test_upload_invalid_mime_type(
     files = {"file": ("test.json", BytesIO(b'{"test": "data"}'), "text/plain")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -208,7 +208,7 @@ async def test_upload_empty_file(
     files = {"file": ("empty.json", BytesIO(b""), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -226,7 +226,7 @@ async def test_upload_invalid_json(
     files = {"file": ("invalid.json", BytesIO(b"not a valid json"), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -246,7 +246,7 @@ async def test_upload_missing_provider(
     files = {"file": ("test.json", BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import",
+        "/api/v1/upload/conversations_import",
         headers=auth_headers,
         files=files,
     )
@@ -265,7 +265,7 @@ async def test_upload_invalid_provider(
     files = {"file": ("test.json", BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=unknown_provider",
+        "/api/v1/upload/conversations_import?provider=unknown_provider",
         headers=auth_headers,
         files=files,
     )
@@ -284,7 +284,7 @@ async def test_upload_filename_with_json_extension(
     files = {"file": ("TEST.JSON", BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -303,7 +303,7 @@ async def test_upload_response_fields(
     files = {"file": ("test.json", BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -347,7 +347,7 @@ async def test_upload_special_characters_in_filename(
     files = {"file": (filename, BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )
@@ -367,7 +367,7 @@ async def test_upload_unicode_filename(
     files = {"file": (filename, BytesIO(sample_claude_json), "application/json")}
 
     response = await client_with_mocked_background.post(
-        "/api/v2/upload/conversations_import?provider=claude",
+        "/api/v1/upload/conversations_import?provider=claude",
         headers=auth_headers,
         files=files,
     )

@@ -29,7 +29,7 @@ from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysi
 @pytest.mark.asyncio
 async def test_get_all_analyses_unauthorized(client: AsyncClient, test_vacancy: VacancyModel) -> None:
     """Тест: неавторизованный запрос к /{id_vacancy}/analyses"""
-    response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}/analyses")
+    response = await client.get(f"/api/v1/vacancies/{test_vacancy.id}/analyses")
     assert response.status_code == 401
 
 
@@ -39,7 +39,7 @@ async def test_get_all_analyses_success(
 ) -> None:
     """Тест: успешное получение всех анализов вакансии"""
     vacancy_id = test_vacancy_analyses[0].vacancy_id
-    response = await client.get(f"/api/v2/vacancies/{vacancy_id}/analyses", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{vacancy_id}/analyses", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -56,7 +56,7 @@ async def test_get_all_analyses_empty(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy: VacancyModel
 ) -> None:
     """Тест: получение анализов для вакансии без анализов"""
-    response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}/analyses", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{test_vacancy.id}/analyses", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -67,7 +67,7 @@ async def test_get_all_analyses_empty(
 @pytest.mark.asyncio
 async def test_get_all_analyses_vacancy_not_found(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: попытка получить анализы для несуществующей вакансии"""
-    response = await client.get(f"/api/v2/vacancies/{uuid.uuid4()}/analyses", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{uuid.uuid4()}/analyses", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -89,7 +89,7 @@ async def test_get_all_analyses_inactive_vacancy(
     user_vacancy.is_active = False
     await db_session.commit()
 
-    response = await client.get(f"/api/v2/vacancies/{test_vacancy.id}/analyses", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{test_vacancy.id}/analyses", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -99,7 +99,7 @@ async def test_get_all_analyses_other_user_vacancy(
 ) -> None:
     """Тест: попытка получить анализы вакансии другого пользователя"""
     vacancy_id = test_vacancy_analyses[0].vacancy_id
-    response = await client.get(f"/api/v2/vacancies/{vacancy_id}/analyses", headers=admin_headers)
+    response = await client.get(f"/api/v1/vacancies/{vacancy_id}/analyses", headers=admin_headers)
     assert response.status_code == 404
 
 
@@ -108,7 +108,7 @@ async def test_get_all_analyses_structure(
     client: AsyncClient, auth_headers: dict[str, str], test_vacancy_analysis: VacancyAnalysisModel
 ) -> None:
     """Тест: проверка структуры ответа для списка анализов"""
-    response = await client.get(f"/api/v2/vacancies/{test_vacancy_analysis.vacancy_id}/analyses", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{test_vacancy_analysis.vacancy_id}/analyses", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -128,7 +128,7 @@ async def test_get_all_analyses_unique_types(
 ) -> None:
     """Тест: проверка, что analyses_types содержат только уникальные типы"""
     vacancy_id = test_vacancy_analyses[0].vacancy_id
-    response = await client.get(f"/api/v2/vacancies/{vacancy_id}/analyses", headers=auth_headers)
+    response = await client.get(f"/api/v1/vacancies/{vacancy_id}/analyses", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -145,7 +145,7 @@ async def test_get_all_analyses_unique_types(
 async def test_create_analysis_unauthorized(client: AsyncClient, test_vacancy: VacancyModel) -> None:
     """Тест: создание анализа без авторизации"""
     response = await client.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         json={"analysis_type": AnalysisType.MATCHING.value},
     )
     assert response.status_code == 401
@@ -157,7 +157,7 @@ async def test_create_analysis_builtin_type(
 ) -> None:
     """Тест: успешное создание анализа встроенного типа"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.MATCHING.value},
     )
@@ -175,7 +175,7 @@ async def test_create_analysis_custom_success(
 ) -> None:
     """Тест: успешное создание custom анализа с обязательными полями"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={
             "analysis_type": AnalysisType.CUSTOM.value,
@@ -197,7 +197,7 @@ async def test_create_analysis_custom_missing_prompt(
 ) -> None:
     """Тест: custom анализ без обязательного custom_prompt"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.CUSTOM.value, "title": "Test"},
     )
@@ -211,7 +211,7 @@ async def test_create_analysis_custom_missing_title(
 ) -> None:
     """Тест: custom анализ без обязательного title"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.CUSTOM.value, "custom_prompt": "Test prompt"},
     )
@@ -225,7 +225,7 @@ async def test_create_analysis_already_exists(
 ) -> None:
     """Тест: попытка создать анализ, который уже существует"""
     response = await client.post(
-        f"/api/v2/vacancies/{test_vacancy_analysis.vacancy_id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy_analysis.vacancy_id}/analyses",
         headers=auth_headers,
         json={"analysis_type": AnalysisType.MATCHING.value},
     )
@@ -239,7 +239,7 @@ async def test_create_analysis_vacancy_not_found(
 ) -> None:
     """Тест: создание анализа для несуществующей вакансии"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{uuid.uuid4()}/analyses",
+        f"/api/v1/vacancies/{uuid.uuid4()}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.MATCHING.value},
     )
@@ -255,7 +255,7 @@ async def test_create_analysis_all_builtin_types(
 
     for analysis_type in builtin_types:
         response = await client_with_mocked_llm.post(
-            f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+            f"/api/v1/vacancies/{test_vacancy.id}/analyses",
             headers=auth_headers_llm,
             json={"analysis_type": analysis_type.value},
         )
@@ -269,7 +269,7 @@ async def test_create_analysis_response_structure(
 ) -> None:
     """Тест: проверка структуры ответа при создании анализа"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.PRIORITIZATION.value},
     )
@@ -296,7 +296,7 @@ async def test_create_analysis_response_structure(
 @pytest.mark.asyncio
 async def test_get_available_types_unauthorized(client: AsyncClient) -> None:
     """Тест: получение типов анализа без авторизации (должно работать)"""
-    response = await client.get("/api/v2/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
+    response = await client.get("/api/v1/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
     # Endpoint доступен без авторизации
     assert response.status_code == 200
 
@@ -304,7 +304,7 @@ async def test_get_available_types_unauthorized(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_available_types_success(client: AsyncClient) -> None:
     """Тест: успешное получение доступных типов анализов"""
-    response = await client.get("/api/v2/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
+    response = await client.get("/api/v1/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
     assert response.status_code == 200
 
     data = response.json()
@@ -325,7 +325,7 @@ async def test_get_available_types_success(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_available_types_content(client: AsyncClient) -> None:
     """Тест: проверка содержимого доступных типов"""
-    response = await client.get("/api/v2/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
+    response = await client.get("/api/v1/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
     assert response.status_code == 200
 
     data = response.json()
@@ -344,7 +344,7 @@ async def test_get_available_types_content(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_available_types_all_types_present(client: AsyncClient) -> None:
     """Тест: проверка, что все типы из enum присутствуют в ответе"""
-    response = await client.get("/api/v2/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
+    response = await client.get("/api/v1/vacancies/00000000-0000-0000-0000-000000000000/analyses/types")
     assert response.status_code == 200
 
     data = response.json()
@@ -367,7 +367,7 @@ async def test_create_prioritization_analysis(
 ) -> None:
     """Тест: создание анализа prioritization"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.PRIORITIZATION.value},
     )
@@ -382,7 +382,7 @@ async def test_create_preparation_analysis(
 ) -> None:
     """Тест: создание анализа preparation"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.PREPARATION.value},
     )
@@ -397,7 +397,7 @@ async def test_create_skill_gap_analysis(
 ) -> None:
     """Тест: создание анализа skill_gap"""
     response = await client_with_mocked_llm.post(
-        f"/api/v2/vacancies/{test_vacancy.id}/analyses",
+        f"/api/v1/vacancies/{test_vacancy.id}/analyses",
         headers=auth_headers_llm,
         json={"analysis_type": AnalysisType.SKILL_GAP.value},
     )

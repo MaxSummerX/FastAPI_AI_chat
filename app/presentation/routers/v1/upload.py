@@ -15,7 +15,7 @@ from app.infrastructure.upload.file_storage import (
 from app.presentation.dependencies import get_current_user, get_upload_service
 
 
-router = APIRouter(prefix="/upload", tags=["Imports_V2"])
+router = APIRouter(prefix="/upload", tags=["Imports_V1"])
 
 
 @router.post(

@@ -18,7 +18,7 @@ from app.infrastructure.persistence.pagination import (
 from app.presentation.dependencies import get_current_user, get_fact_service
 
 
-router = APIRouter(prefix="/facts", tags=["Facts_v2"])
+router = APIRouter(prefix="/facts", tags=["Facts_v1"])
 
 
 @router.get(

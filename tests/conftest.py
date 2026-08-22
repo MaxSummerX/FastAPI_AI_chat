@@ -922,7 +922,7 @@ async def client_with_mocked_memory_sync(
     from unittest.mock import AsyncMock, patch
 
     from app.infrastructure.database.dependencies import get_db
-    from app.presentation.routers.v2 import fact as fact_module
+    from app.presentation.routers.v1 import fact as fact_module
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:

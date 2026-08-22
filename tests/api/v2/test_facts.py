@@ -23,14 +23,14 @@ from app.domain.models.fact import Fact as FactModel
 @pytest.mark.asyncio
 async def test_get_facts_unauthorized(client: AsyncClient) -> None:
     """Тест: неавторизованный запрос к facts"""
-    response = await client.get("/api/v2/facts")
+    response = await client.get("/api/v1/facts")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_facts_empty(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: получение фактов когда их нет"""
-    response = await client.get("/api/v2/facts", headers=auth_headers)
+    response = await client.get("/api/v1/facts", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -49,7 +49,7 @@ async def test_get_facts_first_page(
     test_facts: list[FactModel],
 ) -> None:
     """Тест: первая страница фактов (без cursor)"""
-    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 15})
+    response = await client.get("/api/v1/facts", headers=auth_headers, params={"limit": 15})
     assert response.status_code == 200
 
     data = response.json()
@@ -66,13 +66,13 @@ async def test_get_facts_with_cursor(
 ) -> None:
     """Тест: вторая страница фактов (с cursor)"""
     # Первая страница
-    first_response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 10})
+    first_response = await client.get("/api/v1/facts", headers=auth_headers, params={"limit": 10})
     first_data = first_response.json()
     cursor = first_data["next_cursor"]
 
     # Вторая страница
     response = await client.get(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers,
         params={"limit": 10, "cursor": cursor},
     )
@@ -98,7 +98,7 @@ async def test_get_facts_pagination_to_end(
         if cursor:
             params["cursor"] = cursor
 
-        response = await client.get("/api/v2/facts", headers=auth_headers, params=params)
+        response = await client.get("/api/v1/facts", headers=auth_headers, params=params)
         data = response.json()
 
         all_items.extend(data["items"])
@@ -116,7 +116,7 @@ async def test_get_facts_pagination_to_end(
 async def test_get_facts_invalid_cursor(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: использование невалидного курсора"""
     response = await client.get(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers,
         params={"cursor": "invalid_cursor_base64"},
     )
@@ -130,7 +130,7 @@ async def test_get_facts_ordering_desc(
     test_facts: list[FactModel],
 ) -> None:
     """Тест: проверка правильности сортировки (от нового к старому)"""
-    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 10})
+    response = await client.get("/api/v1/facts", headers=auth_headers, params={"limit": 10})
     assert response.status_code == 200
 
     data = response.json()
@@ -151,7 +151,7 @@ async def test_get_facts_filter_by_category(
 ) -> None:
     """Тест: фильтрация фактов по категории"""
     response = await client.get(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers,
         params={"category": "personal", "limit": 100},
     )
@@ -176,13 +176,13 @@ async def test_get_facts_include_inactive(
     await db_session.commit()
 
     # Без include_inactive - неактивные не возвращаются
-    response_active = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 100})
+    response_active = await client.get("/api/v1/facts", headers=auth_headers, params={"limit": 100})
     active_data = response_active.json()
     assert len(active_data["items"]) == 29
 
     # С include_inactive - все факты
     response_all = await client.get(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers,
         params={"include_inactive": True, "limit": 100},
     )
@@ -194,14 +194,14 @@ async def test_get_facts_include_inactive(
 async def test_get_facts_limit_validation(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: валидация limit параметра"""
     # Слишком большой limit - использует максимум
-    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 150})
+    response = await client.get("/api/v1/facts", headers=auth_headers, params={"limit": 150})
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_get_facts_limit_minimum(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: limit меньше минимума возвращает ошибку валидации"""
-    response = await client.get("/api/v2/facts", headers=auth_headers, params={"limit": 0})
+    response = await client.get("/api/v1/facts", headers=auth_headers, params={"limit": 0})
     assert response.status_code == 422
 
 
@@ -213,14 +213,14 @@ async def test_get_facts_limit_minimum(client: AsyncClient, auth_headers: dict[s
 @pytest.mark.asyncio
 async def test_get_fact_unauthorized(client: AsyncClient, test_fact: FactModel) -> None:
     """Тест: получение факта без авторизации"""
-    response = await client.get(f"/api/v2/facts/{test_fact.id}")
+    response = await client.get(f"/api/v1/facts/{test_fact.id}")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_fact_success(client: AsyncClient, auth_headers: dict[str, str], test_fact: FactModel) -> None:
     """Тест: успешное получение факта"""
-    response = await client.get(f"/api/v2/facts/{test_fact.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/facts/{test_fact.id}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -234,7 +234,7 @@ async def test_get_fact_not_found(client: AsyncClient, auth_headers: dict[str, s
     """Тест: получение несуществующего факта"""
     import uuid
 
-    response = await client.get(f"/api/v2/facts/{uuid.uuid4()}", headers=auth_headers)
+    response = await client.get(f"/api/v1/facts/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -249,7 +249,7 @@ async def test_get_fact_inactive(
     test_fact.is_active = False
     await db_session.commit()
 
-    response = await client.get(f"/api/v2/facts/{test_fact.id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/facts/{test_fact.id}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -260,7 +260,7 @@ async def test_get_fact_other_user(
     test_fact: FactModel,
 ) -> None:
     """Тест: попытка получить факт другого пользователя"""
-    response = await client.get(f"/api/v2/facts/{test_fact.id}", headers=admin_headers)
+    response = await client.get(f"/api/v1/facts/{test_fact.id}", headers=admin_headers)
     assert response.status_code == 404
 
 
@@ -273,7 +273,7 @@ async def test_get_fact_other_user(
 async def test_create_fact_unauthorized(client: AsyncClient) -> None:
     """Тест: создание факта без авторизации"""
     response = await client.post(
-        "/api/v2/facts",
+        "/api/v1/facts",
         json={
             "content": "Test fact about user",
             "category": "personal",
@@ -291,7 +291,7 @@ async def test_create_fact_success(
     import asyncio
 
     response = await client_with_mocked_memory_sync.post(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers_memory_sync,
         json={
             "content": "User loves Python programming",
@@ -307,7 +307,7 @@ async def test_create_fact_success(
     await asyncio.sleep(0.1)
 
     # Проверяем через GET всех фактов
-    response = await client_with_mocked_memory_sync.get("/api/v2/facts", headers=auth_headers_memory_sync)
+    response = await client_with_mocked_memory_sync.get("/api/v1/facts", headers=auth_headers_memory_sync)
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) > 0
@@ -330,7 +330,7 @@ async def test_create_fact_default_category(
     import asyncio
 
     response = await client_with_mocked_memory_sync.post(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers_memory_sync,
         json={
             "content": "Another fact",
@@ -342,7 +342,7 @@ async def test_create_fact_default_category(
     await asyncio.sleep(0.1)
 
     # Проверяем через GET всех фактов
-    response = await client_with_mocked_memory_sync.get("/api/v2/facts", headers=auth_headers_memory_sync)
+    response = await client_with_mocked_memory_sync.get("/api/v1/facts", headers=auth_headers_memory_sync)
     assert response.status_code == 200
     data = response.json()
     fact = next((f for f in data["items"] if f["content"] == "Another fact"), None)
@@ -359,7 +359,7 @@ async def test_create_fact_with_metadata(
     import asyncio
 
     response = await client_with_mocked_memory_sync.post(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers_memory_sync,
         json={
             "content": "Fact with metadata",
@@ -373,7 +373,7 @@ async def test_create_fact_with_metadata(
     await asyncio.sleep(0.1)
 
     # Проверяем через GET всех фактов
-    response = await client_with_mocked_memory_sync.get("/api/v2/facts", headers=auth_headers_memory_sync)
+    response = await client_with_mocked_memory_sync.get("/api/v1/facts", headers=auth_headers_memory_sync)
     assert response.status_code == 200
     data = response.json()
     fact = next((f for f in data["items"] if f["content"] == "Fact with metadata"), None)
@@ -385,7 +385,7 @@ async def test_create_fact_with_metadata(
 async def test_create_fact_empty_content(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: создание факта с пустым контентом"""
     response = await client.post(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers,
         json={
             "content": "   ",
@@ -399,7 +399,7 @@ async def test_create_fact_empty_content(client: AsyncClient, auth_headers: dict
 async def test_create_fact_content_too_short(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: контент короче минимума (5 символов)"""
     response = await client.post(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers,
         json={
             "content": "abc",
@@ -412,7 +412,7 @@ async def test_create_fact_content_too_short(client: AsyncClient, auth_headers: 
 async def test_create_fact_invalid_confidence(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     """Тест: невалидное значение confidence"""
     response = await client.post(
-        "/api/v2/facts",
+        "/api/v1/facts",
         headers=auth_headers,
         json={
             "content": "Valid content for fact",
@@ -431,7 +431,7 @@ async def test_create_fact_invalid_confidence(client: AsyncClient, auth_headers:
 async def test_update_fact_unauthorized(client: AsyncClient, test_fact: FactModel) -> None:
     """Тест: обновление факта без авторизации"""
     response = await client.put(
-        f"/api/v2/facts/{test_fact.id}",
+        f"/api/v1/facts/{test_fact.id}",
         json={"content": "Updated content"},
     )
     assert response.status_code == 401
@@ -447,7 +447,7 @@ async def test_update_fact_success(
     import asyncio
 
     response = await client_with_mocked_memory_sync.put(
-        f"/api/v2/facts/{test_fact.id}",
+        f"/api/v1/facts/{test_fact.id}",
         headers=auth_headers_memory_sync,
         json={
             "content": "Updated fact content",
@@ -463,7 +463,7 @@ async def test_update_fact_success(
 
     # Проверяем через GET
     response = await client_with_mocked_memory_sync.get(
-        f"/api/v2/facts/{test_fact.id}",
+        f"/api/v1/facts/{test_fact.id}",
         headers=auth_headers_memory_sync,
     )
     assert response.status_code == 200
@@ -491,7 +491,7 @@ async def test_update_fact_confidence(
     original_category = test_fact.category
 
     response = await client_with_mocked_memory_sync.put(
-        f"/api/v2/facts/{test_fact.id}",
+        f"/api/v1/facts/{test_fact.id}",
         headers=auth_headers_memory_sync,
         json={
             "content": original_content,  # Обязательно при обновлении (перевекторизация)
@@ -506,7 +506,7 @@ async def test_update_fact_confidence(
 
     # Проверяем через GET
     response = await client_with_mocked_memory_sync.get(
-        f"/api/v2/facts/{test_fact.id}",
+        f"/api/v1/facts/{test_fact.id}",
         headers=auth_headers_memory_sync,
     )
     assert response.status_code == 200
@@ -526,7 +526,7 @@ async def test_update_fact_not_found(
     import uuid
 
     response = await client_with_mocked_memory_sync.put(
-        f"/api/v2/facts/{uuid.uuid4()}",
+        f"/api/v1/facts/{uuid.uuid4()}",
         headers=auth_headers_memory_sync,
         json={"content": "Updated"},
     )
@@ -545,7 +545,7 @@ async def test_update_fact_inactive(
     await db_session.commit()
 
     response = await client_with_mocked_memory_sync.put(
-        f"/api/v2/facts/{test_fact.id}",
+        f"/api/v1/facts/{test_fact.id}",
         headers=auth_headers_memory_sync,
         json={"content": "Try to update inactive"},
     )
@@ -561,7 +561,7 @@ async def test_update_fact_other_user(
     """Тест: попытка обновить факт другого пользователя (admin обновляет факт пользователя)"""
     # Admin не может обновлять факты других пользователей - вернёт 404
     response = await client_with_mocked_memory_sync.put(
-        f"/api/v2/facts/{test_fact.id}",
+        f"/api/v1/facts/{test_fact.id}",
         headers=admin_headers_memory_sync,  # Admin токен с замоканным memory
         json={
             "content": "Hacked!",
@@ -579,7 +579,7 @@ async def test_update_fact_other_user(
 @pytest.mark.asyncio
 async def test_delete_fact_unauthorized(client_with_mocked_memory_sync: AsyncClient, test_fact: FactModel) -> None:
     """Тест: удаление факта без авторизации"""
-    response = await client_with_mocked_memory_sync.delete(f"/api/v2/facts/{test_fact.id}")
+    response = await client_with_mocked_memory_sync.delete(f"/api/v1/facts/{test_fact.id}")
     assert response.status_code == 401
 
 
@@ -592,7 +592,7 @@ async def test_delete_fact_success(
 ) -> None:
     """Тест: успешное удаление факта (мягкое)"""
     response = await client_with_mocked_memory_sync.delete(
-        f"/api/v2/facts/{test_fact.id}", headers=auth_headers_memory_sync
+        f"/api/v1/facts/{test_fact.id}", headers=auth_headers_memory_sync
     )
     assert response.status_code == 204
 
@@ -609,7 +609,7 @@ async def test_delete_fact_not_found(
     import uuid
 
     response = await client_with_mocked_memory_sync.delete(
-        f"/api/v2/facts/{uuid.uuid4()}", headers=auth_headers_memory_sync
+        f"/api/v1/facts/{uuid.uuid4()}", headers=auth_headers_memory_sync
     )
     assert response.status_code == 404
 
@@ -626,7 +626,7 @@ async def test_delete_fact_inactive(
     await db_session.commit()
 
     response = await client_with_mocked_memory_sync.delete(
-        f"/api/v2/facts/{test_fact.id}", headers=auth_headers_memory_sync
+        f"/api/v1/facts/{test_fact.id}", headers=auth_headers_memory_sync
     )
     assert response.status_code == 404
 
@@ -639,6 +639,6 @@ async def test_delete_fact_other_user(
 ) -> None:
     """Тест: попытка удалить факт другого пользователя"""
     response = await client_with_mocked_memory_sync.delete(
-        f"/api/v2/facts/{test_fact.id}", headers=admin_headers_memory_sync
+        f"/api/v1/facts/{test_fact.id}", headers=admin_headers_memory_sync
     )
     assert response.status_code == 404
