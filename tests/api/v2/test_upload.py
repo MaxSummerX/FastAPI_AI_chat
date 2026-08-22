@@ -117,7 +117,7 @@ async def test_upload_claude_success(
     assert result["provider"] == "claude"
     assert "size_bytes" in result
     assert "size_mb" in result
-    assert result["message"] == "File successfully uploaded"
+    assert result["message"] == "processing"
 
 
 @pytest.mark.asyncio
@@ -143,7 +143,7 @@ async def test_upload_gpt_success(
     assert result["provider"] == "gpt"
     assert "size_bytes" in result
     assert "size_mb" in result
-    assert result["message"] == "File successfully uploaded"
+    assert result["message"] == "processing"
 
 
 @pytest.mark.asyncio

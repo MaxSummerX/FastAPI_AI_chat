@@ -481,8 +481,8 @@ def mock_background_tasks() -> Generator[None]:
 
     # Патчим функцию конвертации, которая вызывается в background task
     with (
-        patch("app.services.upload.upload_conversations.convert"),
-        patch("app.services.upload.upload_conversations.convert_gtp"),
+        patch("app.application.services.upload_service.UploadService.import_from_claude"),
+        patch("app.application.services.upload_service.UploadService.import_from_gpt"),
     ):
         yield
 
@@ -507,8 +507,8 @@ async def client_with_mocked_background(db_session: AsyncSession) -> AsyncGenera
 
     # Создаём клиент с ASGI транспортом и замоканными background функциями
     with (
-        patch("app.services.upload.upload_conversations.convert"),
-        patch("app.services.upload.upload_conversations.convert_gtp"),
+        patch("app.application.services.upload_service.UploadService.import_from_claude"),
+        patch("app.application.services.upload_service.UploadService.import_from_gpt"),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app),
