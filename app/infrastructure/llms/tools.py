@@ -153,7 +153,7 @@ async def web_fetch(
             result["markdown_tokens"] = markdown_tokens
         if content_signal:
             result["content_signal"] = content_signal
-        return json.dumps(result)
+        return json.dumps(result, ensure_ascii=False)
 
     except Exception as e:
         return json.dumps({"error": str(e), "url": url}, ensure_ascii=False)
