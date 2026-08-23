@@ -108,7 +108,7 @@ def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, 
         result["user_id"] = user_id
         return result
     except Exception as e:
-        logger.error(f"❌ Ошибка: {e}")
+        logger.exception(f"❌ Ошибка импорта: {e}")
         raise self.retry(exc=e, countdown=60) from e
 
 

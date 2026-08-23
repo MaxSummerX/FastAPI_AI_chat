@@ -2,7 +2,8 @@ import asyncio
 from typing import Any
 
 from celery import Celery
-from celery.schedules import crontab
+
+# from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
 
 from app.infrastructure.settings.settings import settings
@@ -34,22 +35,20 @@ celery.conf.update(
         "app.infrastructure.task_queue.tasks.vacancy_tasks",
     ],
     beat_schedule={
-        # Пример: 3 раза в день (каждые 8 часов)
-        "periodic-vacancy-import": {
-            "task": "app.infrastructure.task_queue.tasks.vacancy_tasks.import_vacancy_task",
-            "schedule": crontab(hour="*/8"),  # 00:00, 08:00, 16:00
-            "args": (
-                "django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado",
-                None,
-                "USER_ID",
-            ),  # TODO: заменить на реальный user_id
-        },
-        # Пример: 5 раз в день в конкретное время
-        "periodic-vacancy-import-time": {
-            "task": "app.infrastructure.task_queue.tasks.vacancy_tasks.import_vacancy_task",
-            "schedule": crontab(hour="6,10,14,18,22"),  # 06:00, 10:00, 14:00, 18:00, 22:00
-            "args": ("django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado", None, "USER_ID"),
-        },
+        # "periodic-vacancy-import": {
+        #     "task": "app.infrastructure.task_queue.tasks.vacancy_tasks.import_vacancy_task",
+        #     "schedule": crontab(hour="*/8"),  # 00:00, 08:00, 16:00
+        #     "args": (
+        #         "django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado",
+        #         None,
+        #         "USER_ID",
+        #     ),  # TODO: заменить на реальный user_id
+        # },
+        # "periodic-vacancy-import-time": {
+        #     "task": "app.infrastructure.task_queue.tasks.vacancy_tasks.import_vacancy_task",
+        #     "schedule": crontab(hour="6,10,14,18,22"),  # 06:00, 10:00, 14:00, 18:00, 22:00
+        #     "args": ("django OR fastapi OR aiohttp OR litestar OR flask OR sanic OR tornado", None, "USER_ID"),
+        # },
     },
 )
 
