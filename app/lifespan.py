@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
-from app.infrastructure.hh.headhunter_client import close_hh_client, get_hh_client, warmup_hh_client
+from app.infrastructure.hh.headhunter_client import close_hh_client, get_hh_client
 from app.infrastructure.memory.dependencies import close_memory, init_memory
 
 
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Startup (запуск):
         - Инициализация singleton AsyncMemory (система памяти)
-        - Создание и прогрев HTTP клиента для hh.ru
+        - Создание HTTP клиента для hh.ru
 
     Shutdown (остановка):
         - Закрытие HTTP клиента
@@ -41,7 +41,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("🔌 Инициализация HTTP клиента...")
     await get_hh_client()  # Создаём клиент
-    await warmup_hh_client()  # Прогреваем соединение
     logger.info("✅ HTTP клиенты готовы")
 
     yield

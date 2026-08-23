@@ -4,7 +4,7 @@ from typing import Any
 from celery import Celery
 
 # from celery.schedules import crontab
-from celery.signals import worker_process_init, worker_process_shutdown
+from celery.signals import worker_process_shutdown
 
 from app.infrastructure.settings.settings import settings
 
@@ -51,23 +51,6 @@ celery.conf.update(
         # },
     },
 )
-
-
-@worker_process_init.connect
-def warmup_http_clients(**kwargs: Any) -> None:
-    """
-    Прогрев HTTP соединений при старте Celery воркера.
-
-    Срабатывает после конфигурации Celery, но до обработки задач.
-    Выполняет первый запрос к API hh.ru для установления TLS соединения.
-    """
-
-    async def _warmup() -> None:
-        from app.infrastructure.hh.headhunter_client import warmup_hh_client
-
-        await warmup_hh_client()
-
-    asyncio.run(_warmup())
 
 
 @worker_process_shutdown.connect
