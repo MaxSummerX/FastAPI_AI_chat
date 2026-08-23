@@ -17,6 +17,10 @@ class VacancySQLAlchemyRepository(IVacancyRepository):
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    async def rollback(self) -> None:
+        """Откат текущей транзакции (восстановление после ошибок flush)."""
+        await self.db.rollback()
+
     async def get_active_user_vacancy(self, user_id: UUID, vacancy_id: UUID) -> Vacancy | None:
         result: Vacancy | None = await self.db.scalar(
             select(Vacancy)

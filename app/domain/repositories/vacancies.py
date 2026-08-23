@@ -202,3 +202,13 @@ class IVacancyRepository(ABC):
             True если связь найдена и обновлена
         """
         pass
+
+    @abstractmethod
+    async def rollback(self) -> None:
+        """
+        Откатить текущую транзакцию.
+
+        Используется для восстановления после ошибок flush/commit
+        (например, конфликт уникальности при параллельном импорте).
+        """
+        pass
