@@ -6,7 +6,7 @@
 """
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from app.domain.enums.experience import Experience, OrderField
@@ -71,14 +71,18 @@ class IVacancyRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_active_hh_ids(self) -> set[str]:
+    async def get_active_hh_ids(self, published_older: timedelta | None = None) -> set[str]:
         """
-        Получить hh_id всех неархивированных вакансий.
+        Получить hh_id не архивированных вакансий.
 
         Используется для проверки актуальности статусов на hh.ru.
 
+        Args:
+            published_older: если указано - получить вакансии, опубликованные
+                             на hh.ru более N назад (по published_at)
+
         Returns:
-            Множество hh_id неархивированных вакансий
+            Множество hh_id не архивированных вакансий
         """
         pass
 

@@ -24,8 +24,8 @@ from app.application.services.upload_service import UploadService
 from app.application.services.user_service import UserService
 from app.application.services.vacancy_analysis_service import VacancyAnalysisService
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
+from app.application.services.vacancy_import_service import VacancyImportService
 from app.application.services.vacancy_service import VacancyService
-from app.application.services.vacancy_status_service import VacancyArchiveSync
 from app.domain.enums.role import UserRole
 from app.domain.models.user import User as UserModel
 from app.domain.repositories.conversations import IConversationRepository
@@ -163,12 +163,12 @@ def get_vacancy_service(repo: IVacancyRepository = Depends(get_vacancy_repo)) ->
     return VacancyService(repo)
 
 
-async def get_vacancy_archive_sync(
+async def get_vacancy_import(
     vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
     hh_client: AsyncClient = Depends(get_hh_client),
-) -> VacancyArchiveSync:
-    """Фабрика сервиса синхронизации архивных статусов вакансий."""
-    return VacancyArchiveSync(vacancy_repo=vacancy_repo, hh_client=hh_client)
+) -> VacancyImportService:
+    """Фабрика сервиса импортов вакансий."""
+    return VacancyImportService(vacancy_repo=vacancy_repo, hh_client=hh_client)
 
 
 def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:

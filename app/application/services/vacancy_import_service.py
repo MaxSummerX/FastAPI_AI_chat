@@ -5,9 +5,10 @@
 Персистентность вынесена в IVacancyRepository, HTTP — в infrastructure/hh.
 """
 
+import asyncio
 import json
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -22,9 +23,9 @@ from app.domain.enums.experience import Experience
 from app.domain.models.user_vacancies import UserVacancies
 from app.domain.models.vacancy import Vacancy
 from app.domain.repositories.vacancies import IVacancyRepository
+from app.infrastructure.hh.exceptions import RateLimitError
 from app.infrastructure.hh.headhunter_client import (
     HH_MAX_PAGES,
-    get_hh_client,
 )
 from app.infrastructure.hh.hh_web_parser import (
     fetch_search_page,
@@ -36,6 +37,10 @@ from app.infrastructure.hh.hh_web_parser import (
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 TEMP_DIR = BASE_DIR / "temp_files" / "hh"
+
+# Статус-синк: проверяем вакансии, опубликованные более N назад —
+# молодые почти не архивируются, а каждая проверка — запрос к hh.ru
+SYNC_PUBLISHED_AGE = timedelta(days=21)
 
 
 def get_user_vacancy_files(user_id: UUID) -> tuple[Path, Path]:
@@ -136,8 +141,9 @@ class VacancyImportService:
     3. Сохранение в БД (новые вакансии + связи user<->vacancy)
     """
 
-    def __init__(self, vacancy_repo: IVacancyRepository) -> None:
+    def __init__(self, vacancy_repo: IVacancyRepository, hh_client: httpx.AsyncClient) -> None:
         self.vacancy_repo = vacancy_repo
+        self.hh_client = hh_client
 
     async def import_vacancies(
         self,
@@ -154,16 +160,14 @@ class VacancyImportService:
         """
         logger.info(f"[Background] Начало импорта вакансий: query='{query}', user_id={user_id}")
 
-        hh_client = await get_hh_client()
-
         try:
-            fetch_result = await self._fetch_all_hh_vacancies(query, hh_client, user_id)
+            fetch_result = await self._fetch_all_hh_vacancies(query, self.hh_client, user_id)
             logger.info("[Background] Шаг 1 завершён: вакансии загружены с hh.ru")
 
             filter_result = await self._filtered_vacancies(user_id, tiers)
             logger.info("[Background] Шаг 2 завершён: вакансии отфильтрованы")
 
-            db_result = await self._vacancies_create(query, user_id, hh_client)
+            db_result = await self._vacancies_create(query, user_id, self.hh_client)
             logger.info("[Background] Шаг 3 завершён: вакансии сохранены в БД")
 
             logger.success(f"[Background] ✅ Импорт вакансий успешно завершён: query='{query}'")
@@ -393,3 +397,50 @@ class VacancyImportService:
             "new_links": len(new_links),
             "errors": error_count,
         }
+
+    async def sync_archive_statuses(self) -> dict[str, int]:
+        """
+        Синхронизация архивных статусов: для активных вакансий старше
+        SYNC_PUBLISHED_AGE проверяет на hh.ru (archived / скрыта) и обновляет БД.
+
+        Ходит последовательно с человекоподобными паузами — та же манера,
+        что и импорт: один профиль поведения на все запросы к hh.ru.
+
+        Returns:
+            dict: processed / errors / total
+        """
+        logger.info("Запуск синхронизации статусов вакансий")
+
+        hh_ids = sorted(await self.vacancy_repo.get_active_hh_ids(published_older=SYNC_PUBLISHED_AGE))
+        if not hh_ids:
+            logger.info("Нет вакансий для синхронизации")
+            return {"processed": 0, "errors": 0, "total": 0}
+
+        logger.info(f"Кандидатов на проверку (старше {SYNC_PUBLISHED_AGE.days} дней): {len(hh_ids)}")
+
+        statuses: dict[str, bool] = {}
+        errors = 0
+
+        for processed, hh_id in enumerate(hh_ids, start=1):
+            try:
+                details = await fetch_vacancy_details(self.hh_client, hh_id)
+                # скрытая работодателем страница (404) тоже считаем архивом
+                statuses[hh_id] = True if details is None else bool(details.get("archived", False))
+            except RateLimitError:
+                wait = 30
+                logger.warning(f"429 от hh.ru, ждём {wait}с и продолжаем")
+                await asyncio.sleep(wait)
+            except Exception as e:
+                errors += 1
+                logger.error(f"Ошибка при проверке статуса {hh_id}: {e}")
+            finally:
+                await polite_sleep()
+                if processed % 25 == 0 or processed == len(hh_ids):
+                    logger.info(f"Статус-синк: {processed}/{len(hh_ids)} (ошибок: {errors})")
+
+        if statuses:
+            await self.vacancy_repo.update_archive_statuses(statuses)
+
+        logger.info(f"Синхронизация завершена: обновлено {len(statuses)}, ошибок {errors}")
+
+        return {"processed": len(statuses), "errors": errors, "total": len(hh_ids)}

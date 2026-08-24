@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, asc, case, desc, select, update
+from sqlalchemy import CursorResult, asc, case, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.vacancy import VacancyPaginationResponse, VacancyResponse
@@ -48,8 +48,11 @@ class VacancySQLAlchemyRepository(IVacancyRepository):
         )
         return set(result.scalars().all())
 
-    async def get_active_hh_ids(self) -> set[str]:
-        result = await self.db.scalars(select(Vacancy.hh_id).where(Vacancy.is_archived.is_(False)))
+    async def get_active_hh_ids(self, published_older: timedelta | None = None) -> set[str]:
+        stmt = select(Vacancy.hh_id).where(Vacancy.is_archived.is_(False))
+        if published_older is not None:
+            stmt = stmt.where(Vacancy.published_at < func.now() - published_older)
+        result = await self.db.scalars(stmt)
         return set(result.all())
 
     async def bulk_save_with_links(
