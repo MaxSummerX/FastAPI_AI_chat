@@ -4,6 +4,18 @@ class VacancyNotFoundError(Exception):
     pass
 
 
+class VacancyFetchError(Exception):
+    """Ошибка при загрузке вакансии с hh.ru (сеть/парсинг/анти-бот)."""
+
+    pass
+
+
+class VacancyImportError(Exception):
+    """Ошибка пайплайна импорта вакансий (фильтрация, файлы)."""
+
+    pass
+
+
 class InvalidVacancyCursorError(Exception):
     """Невалидный курсор пагинации вакансий."""
 

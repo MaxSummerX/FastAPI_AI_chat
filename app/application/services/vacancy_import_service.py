@@ -15,10 +15,14 @@ from uuid import UUID
 
 import aiofiles
 import httpx
-from fastapi import HTTPException
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 
+from app.application.exceptions.vacancy import (
+    VacancyFetchError,
+    VacancyImportError,
+    VacancyNotFoundError,
+)
 from app.domain.enums.experience import Experience
 from app.domain.models.user_vacancies import UserVacancies
 from app.domain.models.vacancy import Vacancy
@@ -70,20 +74,21 @@ async def fetch_full_vacancy(
     Получает полное описание вакансии по ID (Scraping страницы hh.ru/vacancy/{id}).
 
     Raises:
-        HTTPException: если вакансия не найдена или произошла ошибка
+        VacancyNotFoundError: вакансия не найдена (страница отдала 404)
+        VacancyFetchError: ошибка сети/парсинга при загрузке
     """
     try:
         details = await fetch_vacancy_details(hh_client, vacancy_id)
         if details is None:
-            raise HTTPException(status_code=404, detail="Вакансия не найдена")
+            raise VacancyNotFoundError(f"Вакансия {vacancy_id} не найдена на hh.ru")
         return details
 
-    except HTTPException:
+    except VacancyNotFoundError:
         raise
 
     except Exception as e:
         logger.error(f"Ошибка при загрузке вакансии {vacancy_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка при загрузке описании вакансии: {e}") from None
+        raise VacancyFetchError(f"Ошибка при загрузке вакансии {vacancy_id}: {e}") from None
 
 
 async def create_vacancy_object(hh_id: str, query: str, hh_client: httpx.AsyncClient) -> Vacancy:
@@ -178,8 +183,8 @@ class VacancyImportService:
                 **db_result,
             }
 
-        except HTTPException as e:
-            logger.error(f"[Background] HTTP {e.status_code}: {str(e)}")
+        except (VacancyFetchError, VacancyImportError) as e:
+            logger.error(f"[Background] Ошибка импорта: {e}")
             raise
         except Exception as e:
             logger.error(f"[Background] ❌ Ошибка при импорте вакансий: {e}", exc_info=True)
@@ -235,13 +240,11 @@ class VacancyImportService:
 
         except httpx.HTTPStatusError as e:
             logger.error(f"❌ HTTP ошибка: {e.response.status_code}")
-            raise HTTPException(
-                status_code=e.response.status_code, detail=f"Ошибка hh.ru: {e.response.status_code}"
-            ) from None
+            raise VacancyFetchError(f"hh.ru вернул {e.response.status_code}") from None
 
         except Exception as e:
             logger.error(f"❌ Ошибка при загрузке вакансий: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Ошибка при загрузке вакансий: {e}") from None
+            raise VacancyFetchError(f"Ошибка при загрузке вакансий: {e}") from None
 
     @staticmethod
     async def _filtered_vacancies(
@@ -290,13 +293,11 @@ class VacancyImportService:
 
         except FileNotFoundError:
             logger.error(f"❌ Файл не найден: {input_path}")
-            raise HTTPException(
-                status_code=404, detail="Файл с вакансиями не найден. Сначала выполните загрузку с hh.ru."
-            ) from None
+            raise VacancyImportError("Файл с вакансиями не найден. Сначала выполните загрузку с hh.ru.") from None
 
         except Exception as e:
             logger.error(f"❌ Ошибка при фильтрации вакансий: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Ошибка при фильтрации вакансий: {e}") from None
+            raise VacancyImportError(f"Ошибка при фильтрации вакансий: {e}") from None
 
     async def _vacancies_create(
         self,
