@@ -12,7 +12,7 @@ from loguru import logger
 
 from app.domain.repositories.vacancies import IVacancyRepository
 from app.infrastructure.hh.exceptions import RateLimitError
-from app.infrastructure.hh.headhunter_client import HHApiEndpoint
+from app.infrastructure.hh.hh_web_parser import fetch_vacancy_details
 
 
 SEMAPHORE_COUNT = 3
@@ -59,23 +59,14 @@ class VacancyArchiveSync:
         """
         async with self.semaphore:
             try:
-                url = HHApiEndpoint.VACANCIES_BY_ID.format(vacancy_id=hh_id)
-                response = await self.hh_client.get(url)
+                details = await fetch_vacancy_details(self.hh_client, hh_id)
 
-                if response.status_code == 429:
-                    raise RateLimitError(f"Rate limit для {hh_id}")
-
-                # если вакансия скрыта работодателем, при попытке запроса она возвращает 404
-                if response.status_code == 404:
+                # если вакансия скрыта работодателем, страница возвращает 404
+                if details is None:
                     logger.warning("Вакансия была скрыта работодателем: {}", hh_id)
                     return True
 
-                if response.status_code != 200:
-                    logger.warning("Неожиданный статус {} для {}", response.status_code, hh_id)
-                    return None
-
-                json_data = response.json()
-                return bool(json_data.get("archived", False))
+                return bool(details.get("archived", False))
 
             except RateLimitError:
                 raise

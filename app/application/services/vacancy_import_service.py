@@ -5,29 +5,32 @@
 Персистентность вынесена в IVacancyRepository, HTTP — в infrastructure/hh.
 """
 
-import asyncio
 import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 import aiofiles
 import httpx
 from fastapi import HTTPException
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from app.domain.enums.experience import Experience
 from app.domain.models.user_vacancies import UserVacancies
 from app.domain.models.vacancy import Vacancy
 from app.domain.repositories.vacancies import IVacancyRepository
 from app.infrastructure.hh.headhunter_client import (
-    HH_CONCURRENT_REQUESTS,
     HH_MAX_PAGES,
-    HH_REQUEST_DELAY,
-    HHApiEndpoint,
     get_hh_client,
+)
+from app.infrastructure.hh.hh_web_parser import (
+    fetch_search_page,
+    fetch_vacancy_details,
+    pages_for_total,
+    polite_sleep,
 )
 
 
@@ -59,20 +62,19 @@ async def fetch_full_vacancy(
     hh_client: httpx.AsyncClient,
 ) -> dict[str, Any]:
     """
-    Получает полное описание вакансии по ID.
+    Получает полное описание вакансии по ID (Scraping страницы hh.ru/vacancy/{id}).
 
     Raises:
         HTTPException: если вакансия не найдена или произошла ошибка
     """
     try:
-        url = HHApiEndpoint.VACANCIES_BY_ID.format(vacancy_id=vacancy_id)
-        response = await hh_client.get(url)
-        response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        details = await fetch_vacancy_details(hh_client, vacancy_id)
+        if details is None:
+            raise HTTPException(status_code=404, detail="Вакансия не найдена")
+        return details
 
-    except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP ошибка: {e.response.status_code}")
-        raise HTTPException(status_code=e.response.status_code, detail="Вакансия не найдена") from None
+    except HTTPException:
+        raise
 
     except Exception as e:
         logger.error(f"Ошибка при загрузке вакансии {vacancy_id}: {e}")
@@ -95,10 +97,10 @@ async def create_vacancy_object(hh_id: str, query: str, hh_client: httpx.AsyncCl
     # Парсинг даты публикации из ISO формата
     published_at_str = details.get("published_at")
     published_at = None
-    if published_at_str:
+    if isinstance(published_at_str, str):
         try:
             published_at = datetime.fromisoformat(published_at_str)
-        except (ValueError, TypeError) as e:
+        except ValueError as e:
             logger.warning(f"Не удалось распарсить дату {published_at_str}: {e}")
 
     return Vacancy(
@@ -123,23 +125,6 @@ async def create_vacancy_object(hh_id: str, query: str, hh_client: httpx.AsyncCl
         raw_data=details,
         published_at=published_at,
     )
-
-
-async def _fetch_with_semaphore(
-    semaphore: asyncio.Semaphore, client: httpx.AsyncClient, params: dict[str, Any]
-) -> dict[str, Any] | None:
-    """Выполняет запрос с ограничением по количеству одновременных соединений."""
-    async with semaphore:
-        try:
-            response = await client.get(HHApiEndpoint.VACANCIES, params=params)
-            if response.status_code != 200:
-                logger.warning(f"Запрос упал с ошибкой: статус {response.status_code}")
-                return None
-            logger.info(f"Успешный запрос: страница {params.get('page', 'N/A')}")
-            return cast(dict[str, Any], response.json())
-        except Exception as e:
-            logger.error(f"Ошибка при выполнении запроса {params}: {e}")
-            return None
 
 
 class VacancyImportService:
@@ -196,41 +181,40 @@ class VacancyImportService:
             logger.error(f"[Background] ❌ Ошибка при импорте вакансий: {e}", exc_info=True)
             raise
 
+    @staticmethod
     async def _fetch_all_hh_vacancies(
-        self,
         query: str,
         hh_client: httpx.AsyncClient,
         user_id: UUID,
         output_path: str | Path | None = None,
     ) -> dict[str, Any]:
-        """Загружает асинхронно несколько страниц с вакансиями и сохраняет в файл."""
+        """
+        Загружает страницы поиска с вакансиями и сохраняет в файл.
+
+        Scraping: страницы проходятся последовательно с паузой и джиттером
+        (параллельные запросы к HTML-страницам быстро ловят анти-бот hh.ru).
+        """
         if output_path is None:
             output_path, _ = get_user_vacancy_files(user_id)
 
         logger.info(f"Получен запрос с query: '{query}'")
         try:
-            pages_response = await hh_client.get(
-                HHApiEndpoint.VACANCIES,
-                params={"text": query, "per_page": 100},
-            )
-            logger.info(f"✅ HTTP ответ получен: статус {pages_response.status_code}")
-            result = pages_response.json()
-            pages = int(result["pages"])
+            vacancies_data: list[dict[str, Any]] = []
+            pages = 0
 
-            if pages >= HH_MAX_PAGES:
-                pages = HH_MAX_PAGES
-                logger.info(f"Ограничено до {HH_MAX_PAGES} страниц")
+            for page in range(HH_MAX_PAGES):
+                items, total = await fetch_search_page(hh_client, query, page)
+                if page == 0:
+                    pages = pages_for_total(total, HH_MAX_PAGES)
+                    logger.info(f"Найдено {total} вакансий, страниц к обходу: {pages}")
 
-            query_params = [{"text": query, "per_page": 100, "page": i} for i in range(pages)]
+                logger.info(f"✅ Страница {page}: {len(items)} вакансий")
+                vacancies_data.extend(items)
 
-            semaphore = asyncio.Semaphore(HH_CONCURRENT_REQUESTS)
-            tasks = [_fetch_with_semaphore(semaphore, hh_client, param) for param in query_params]
-            results = await asyncio.gather(*tasks)
-
-            vacancies_data = []
-            for res in results:
-                if res and "items" in res:
-                    vacancies_data.extend(res["items"])
+                page += 1
+                if page >= pages or not items:
+                    break
+                await polite_sleep()
 
             output_path_obj = Path(output_path)
             output_path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -248,15 +232,15 @@ class VacancyImportService:
         except httpx.HTTPStatusError as e:
             logger.error(f"❌ HTTP ошибка: {e.response.status_code}")
             raise HTTPException(
-                status_code=e.response.status_code, detail=f"Ошибка API hh.ru: {e.response.status_code}"
+                status_code=e.response.status_code, detail=f"Ошибка hh.ru: {e.response.status_code}"
             ) from None
 
         except Exception as e:
             logger.error(f"❌ Ошибка при загрузке вакансий: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Ошибка при загрузке вакансий: {e}") from None
 
+    @staticmethod
     async def _filtered_vacancies(
-        self,
         user_id: UUID,
         tiers: list[Experience] | None = None,
         input_path: str | Path | None = None,
@@ -341,29 +325,71 @@ class VacancyImportService:
         logger.info(f"Новых вакансий: {len(new_vacancies)}")
         logger.info(f"Новых связей: {len(new_links)}")
 
-        vacancies_to_add = []
+        vacancies_to_add: list[Vacancy] = []
         error_count = 0
-
-        for hh_id in new_vacancies:
-            try:
-                vacancies_to_add.append(await create_vacancy_object(hh_id, query, hh_client))
-                await asyncio.sleep(HH_REQUEST_DELAY)
-            except Exception as e:
-                logger.error(f"Ошибка при обработке вакансии {hh_id}: {e}")
-                error_count += 1
-                continue
+        total_new = len(new_vacancies)
+        saved_count = 0
+        chunk_size = 10
 
         # Связи для существующих вакансий (для новых репозиторий создаст сам после flush)
         links_to_add = [UserVacancies(user_id=user_id, vacancy_id=existing_vacancies[hh_id]) for hh_id in new_links]
 
-        await self.vacancy_repo.bulk_save_with_links(vacancies_to_add, links_to_add, user_id)
+        async def save_chunk() -> None:
+            """Коммитит накопленный chunk: обрыв задачи теряет только последний chunk."""
+            nonlocal vacancies_to_add, saved_count, error_count
+            if not vacancies_to_add and not links_to_add:
+                return
+
+            chunk, vacancies_to_add = vacancies_to_add, []
+
+            try:
+                await self.vacancy_repo.bulk_save_with_links(chunk, links_to_add, user_id)
+                saved_count += len(chunk)
+            except IntegrityError:
+                logger.warning("Конфликт уникальности в chunks, переходим на поштучную вставку")
+                await self.vacancy_repo.rollback()
+
+                for vac in chunk:
+                    try:
+                        await self.vacancy_repo.bulk_save_with_links([vac], [], user_id)
+                        saved_count += 1
+                    except IntegrityError:
+                        # вакансию успела вставить параллельная задача — только связываем
+                        await self.vacancy_repo.rollback()
+                        existing = await self.vacancy_repo.get_by_hh_id(vac.hh_id)
+                        if existing is not None:
+                            if not await self.vacancy_repo.has_user_link(user_id, existing.id):
+                                await self.vacancy_repo.create_link(user_id, existing.id)
+                        else:
+                            error_count += 1
+                            logger.error(f"Вакансия {vac.hh_id} конфликтует, но не найдена в БД")
+
+            links_to_add.clear()  # связи существующих пишутся только с первым chunk
+            logger.info(f"💾 Chunk закоммичен: всего сохранено в БД {saved_count} (ошибок: {error_count})")
+
+        for processed, hh_id in enumerate(new_vacancies, start=1):
+            try:
+                vacancies_to_add.append(await create_vacancy_object(hh_id, query, hh_client))
+                await polite_sleep()  # Человекоподобная пауза
+                if len(vacancies_to_add) >= chunk_size:
+                    await save_chunk()
+            except Exception as e:
+                logger.error(f"Ошибка при обработке вакансии {hh_id}: {e}")
+                error_count += 1
+                continue
+            finally:
+                # Каждый запрос деталей ~3-4с, без прогресс-лога цикл выглядит как зависание
+                if processed % 25 == 0 or processed == total_new:
+                    logger.info(f"Детали вакансий: {processed}/{total_new} (ошибок: {error_count})")
+
+        await save_chunk()
 
         logger.info("Загрузка вакансий в БД завершена")
 
         return {
             "total_found": len(all_ids),
             "already_linked": len(linked_ids),
-            "new_vacancies": len(vacancies_to_add),
+            "new_vacancies": saved_count,
             "new_links": len(new_links),
             "errors": error_count,
         }
