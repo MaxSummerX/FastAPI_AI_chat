@@ -1,11 +1,6 @@
-import asyncio
-from typing import Any
-
 from celery import Celery
 
 # from celery.schedules import crontab
-from celery.signals import worker_process_shutdown
-
 from app.infrastructure.settings.settings import settings
 
 
@@ -51,20 +46,3 @@ celery.conf.update(
         # },
     },
 )
-
-
-@worker_process_shutdown.connect
-def shutdown_http_clients(**kwargs: Any) -> None:
-    """
-    Закрытие HTTP клиентов при shutdown воркера.
-
-    Срабатывает при корректном завершении работы Celery воркера
-    (SIGTERM, SIGINT). Закрывает HTTP соединения для освобождения ресурсов.
-    """
-
-    async def _shutdown() -> None:
-        from app.infrastructure.hh.headhunter_client import close_hh_client
-
-        await close_hh_client()
-
-    asyncio.run(_shutdown())

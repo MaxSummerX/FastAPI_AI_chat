@@ -4,14 +4,13 @@ from uuid import UUID
 
 import redis
 from celery import Task
-from celery.signals import worker_process_init
+from celery.signals import worker_process_init, worker_process_shutdown
 from loguru import logger
 from sqlalchemy import and_, select
 
 from app.application.schemas.vacancy import VacancyForAnalysis
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.application.services.vacancy_import_service import VacancyImportService
-from app.application.services.vacancy_status_service import VacancyArchiveSync
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
@@ -27,8 +26,6 @@ from app.infrastructure.task_queue.celery_config import celery
 
 LOCK_REDIS_URL = settings.LOCK_REDIS_URL
 REQUEST_DELAY: float = 0.3
-REQUEST_DELAY_ARCHIVE: float = 2.0
-SEMAPHORE_COUNT: int = 2
 
 redis_client = redis.from_url(LOCK_REDIS_URL, decode_responses=True)
 
@@ -78,7 +75,7 @@ def clear_lock(retval: Any, lock_key: str) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-@celery.task(bind=True, max_retries=3)
+@celery.task(bind=True, max_retries=3, time_limit=14400, soft_time_limit=13800)
 def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, user_id: str) -> dict[str, Any]:
     """
     Импортирует вакансии с hh.ru в фоновом режиме.
@@ -95,7 +92,7 @@ def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, 
     async def run_import() -> dict[str, int]:
         """Асинхронная функция импорта вакансий."""
         async with _worker_resources["session_factory"]() as session:
-            import_service = VacancyImportService(VacancySQLAlchemyRepository(session))
+            import_service = VacancyImportService(VacancySQLAlchemyRepository(session), _worker_resources["hh_client"])
             return await import_service.import_vacancies(
                 query=query,
                 tiers=tiers,
@@ -241,13 +238,13 @@ def ai_analyse_task(
         raise self.retry(exc=e, countdown=60) from e
 
 
-@celery.task(bind=True, max_retries=3)
+@celery.task(bind=True, max_retries=3, time_limit=14400, soft_time_limit=13800)
 def sync_archive_statuses_task(self: Task) -> dict:
     """
     Celery задача для синхронизации архивных статусов вакансий с hh.ru.
 
     Проверяет все активные вакансии в БД и обновляет их статус (archived=True/False)
-    через API hh.ru. Использует VacancyArchiveSync сервис для выполнения синхронизации.
+    через страницы hh.ru. Использует VacancyImportService для выполнения синхронизации.
 
     Args:
         self: Экземпляр Celery задачи (автоматически передаётся при bind=True)
@@ -264,12 +261,7 @@ def sync_archive_statuses_task(self: Task) -> dict:
 
     async def _run() -> dict:
         async with _worker_resources["session_factory"]() as session:
-            service = VacancyArchiveSync(
-                vacancy_repo=VacancySQLAlchemyRepository(session),
-                hh_client=_worker_resources["hh_client"],
-                semaphore_count=SEMAPHORE_COUNT,
-                request_delay=REQUEST_DELAY_ARCHIVE,
-            )
+            service = VacancyImportService(VacancySQLAlchemyRepository(session), _worker_resources["hh_client"])
             return await service.sync_archive_statuses()
 
     try:
@@ -279,3 +271,28 @@ def sync_archive_statuses_task(self: Task) -> dict:
     except Exception as e:
         logger.error(f"❌ Ошибка синхронизации: {e}")
         raise self.retry(exc=e, countdown=60) from e
+
+
+@worker_process_shutdown.connect
+def shutdown_http_clients(**kwargs: Any) -> None:
+    """
+    Закрытие HTTP клиента при остановке/рестарте воркер-процесса.
+    Срабатывает при SIGTERM/SIGINT воркера, а также при рециклинге
+    процесса по worker_max_tasks_per_child.
+    """
+    loop = _worker_resources.get("loop")
+    if loop is None or loop.is_closed():
+        logger.warning("Loop не найден или уже закрыт — пропускаем закрытие hh_client")
+        return
+
+    async def _shutdown() -> None:
+        from app.infrastructure.hh.headhunter_client import close_hh_client
+
+        await close_hh_client()
+
+    try:
+        loop.run_until_complete(_shutdown())
+    except Exception as e:
+        logger.error(f"Ошибка при закрытии hh_client: {e}")
+    finally:
+        loop.close()
