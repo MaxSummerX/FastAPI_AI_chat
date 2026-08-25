@@ -526,7 +526,7 @@ async def client_with_mocked_import(db_session: AsyncSession) -> AsyncGenerator[
     Подменяет Redis, Celery tasks и функции импорта, которые вызываются в background tasks.
     """
     from dataclasses import dataclass
-    from unittest.mock import Mock, patch
+    from unittest.mock import AsyncMock, Mock, patch
 
     from app.infrastructure.database.dependencies import get_db
 
@@ -546,7 +546,7 @@ async def client_with_mocked_import(db_session: AsyncSession) -> AsyncGenerator[
         state: str = "PENDING"
 
     # Мок для Redis клиента
-    mock_redis = Mock()
+    mock_redis = AsyncMock()
     mock_redis.get.return_value = None  # Нет активной задачи
     mock_redis.setex.return_value = True
 
