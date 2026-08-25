@@ -58,7 +58,7 @@ services:
     image: ai-chat:latest
     container_name: AI_chat_celery_worker
     command: >
-      uv run celery -A app.configs.celery_config worker
+      uv run celery -A app.infrastructure.task_queue.celery_config worker
       --pool=prefork
       --concurrency=2
       --loglevel=info
