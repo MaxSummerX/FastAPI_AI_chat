@@ -108,7 +108,7 @@ async def _get_lux_state(
         raise HHAntiBotError(f"403 от hh.ru (возможен блок): {path}")
     response.raise_for_status()
 
-    template = BeautifulSoup(response.text, "html.parser").find("template", id="HH-Lux-InitialState")
+    template = BeautifulSoup(response.text, "lxml").find("template", id="HH-Lux-InitialState")
     content = template.string if template is not None else None
     if content is None:
         raise HHAntiBotError(f"HH-Lux-InitialState не найден: {path}")

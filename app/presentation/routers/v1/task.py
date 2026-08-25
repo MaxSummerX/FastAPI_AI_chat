@@ -1,8 +1,6 @@
-# TODO: Переработать модуль. Использовать redis.asyncio
-import os
 from typing import Any
 
-import redis
+import redis.asyncio as redis
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
@@ -10,6 +8,7 @@ from loguru import logger
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
+from app.infrastructure.settings.settings import settings
 from app.infrastructure.task_queue.celery_config import celery
 from app.infrastructure.task_queue.tasks.vacancy_tasks import (
     ai_analyse_task,
@@ -25,8 +24,7 @@ router = APIRouter(prefix="/tasks")
 TAGS = "Tasks_v1"
 TIME_LOCK = 300
 
-LOCK_REDIS_URL = os.getenv("LOCK_REDIS_URL")
-redis_client = redis.from_url(LOCK_REDIS_URL, decode_responses=True)
+redis_client = redis.from_url(settings.LOCK_REDIS_URL, decode_responses=True)
 
 
 @router.patch(
@@ -42,7 +40,7 @@ async def update_archive_status(
     # Формируем уникальный task_id и lock_key
     task_id = f"update:{current_user.id}:{task_run_name}"
     lock_key = f"active:{task_id}"
-    active_lock = redis_client.get(lock_key)
+    active_lock = await redis_client.get(lock_key)
     if active_lock:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -53,7 +51,7 @@ async def update_archive_status(
             },
         )
     # Ставим блокировку
-    redis_client.setex(lock_key, TIME_LOCK, "1")
+    await redis_client.setex(lock_key, TIME_LOCK, "1")
 
     task = sync_archive_statuses_task.apply_async(
         task_id=task_id,
@@ -102,7 +100,7 @@ async def task_import_vacancies(
     lock_key = f"active:{task_id}"
 
     # Проверяем есть ли активная задача
-    active_lock = redis_client.get(lock_key)
+    active_lock = await redis_client.get(lock_key)
     if active_lock:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -114,7 +112,7 @@ async def task_import_vacancies(
         )
 
     # Ставим блокировку на 5 минут (автоудаление если задача упадёт)
-    redis_client.setex(lock_key, 300, "1")
+    await redis_client.setex(lock_key, 300, "1")
 
     logger.info(f"Запущена фоновая задача {task_id} для импорта вакансий по запросу: {query}")
 
@@ -206,7 +204,7 @@ async def task_analysis_vacancies(
     lock_key = f"active:{task_id}"
 
     # Проверяем есть ли активная задача
-    active_lock = redis_client.get(lock_key)
+    active_lock = await redis_client.get(lock_key)
     if active_lock:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -218,7 +216,7 @@ async def task_analysis_vacancies(
         )
 
     # Ставим блокировку на 5 минут
-    redis_client.setex(lock_key, 300, "1")
+    await redis_client.setex(lock_key, 300, "1")
 
     # Запускаем задачу
     task = ai_analyse_task.apply_async(

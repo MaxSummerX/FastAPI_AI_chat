@@ -13,6 +13,7 @@ from loguru import logger
 
 from app.infrastructure.hh.headhunter_client import close_hh_client, get_hh_client
 from app.infrastructure.memory.dependencies import close_memory, init_memory
+from app.presentation.routers.v1.task import redis_client
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("🛑 Остановка FastAPI приложения...")
     await close_hh_client()
+    await redis_client.aclose()
     logger.info("✅ HTTP клиенты закрыты")
     logger.info("🛑 Закрытие AsyncMemory")
     close_memory()
