@@ -129,7 +129,5 @@ async def test_get_task_status_not_found(
         headers=auth_headers_import,
     )
 
-    # Статус 200 с PENDING для несуществующих задач (особенности Celery)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] in ["PENDING", "FAILURE"]
+    # Несуществующая задача (или чужая) — 404, не раскрываем существование
+    assert response.status_code == 404

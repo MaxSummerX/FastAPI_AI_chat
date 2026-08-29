@@ -550,17 +550,19 @@ async def client_with_mocked_import(db_session: AsyncSession) -> AsyncGenerator[
     mock_redis.get.return_value = None  # Нет активной задачи
     mock_redis.setex.return_value = True
 
-    # Мок для Celery task
-    mock_task = Mock()
-    mock_task.id = "test-task-id-12345"
-    mock_task.state = "PENDING"
+    # Мок для Celery task: возвращает task_id, переданный роутером в apply_async
+    def fake_apply_async(*args: Any, **kwargs: Any) -> Mock:
+        mock_task = Mock()
+        mock_task.id = kwargs.get("task_id", "test-task-id-12345")
+        mock_task.state = "PENDING"
+        return mock_task
 
     # Патчим Redis в task.py
     # Патчим Celery task.apply_async
     with (
         patch("app.presentation.routers.v1.task.redis_client", mock_redis),
         patch("app.infrastructure.task_queue.tasks.vacancy_tasks.redis_client", mock_redis),
-        patch("app.presentation.routers.v1.task.import_vacancy_task.apply_async", return_value=mock_task),
+        patch("app.presentation.routers.v1.task.import_vacancy_task.apply_async", side_effect=fake_apply_async),
         patch("app.presentation.routers.v1.task.clear_lock", Mock()),
     ):
         async with AsyncClient(

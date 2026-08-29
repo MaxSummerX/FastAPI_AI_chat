@@ -146,15 +146,11 @@ async def get_task_status(task_id: str, current_user: UserModel = Depends(get_cu
     - result: результат (если задача завершена)
     - error: ошибка (если задача упала)
     """
+    parts = task_id.split(":", 2)
+    if len(parts) != 3 or parts[1] != str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
     result: AsyncResult[Any] = AsyncResult(task_id, app=celery)
-
-    # Проверяем что пользователь имеет доступ к задаче
-    task_user_id = None
-    if result.successful() and isinstance(result.result, dict):
-        task_user_id = result.result.get("user_id")
-
-    if task_user_id and task_user_id != str(current_user.id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     response: dict[str, Any] = {
         "task_id": task_id,
@@ -164,7 +160,8 @@ async def get_task_status(task_id: str, current_user: UserModel = Depends(get_cu
     if result.successful():
         response["result"] = result.result
     elif result.failed():
-        response["error"] = str(result.info)
+        logger.error("Задача {} упала: {}", task_id, result.info)
+        response["error"] = "Task failed. See server logs for details."
     elif result.state == "PROGRESS":
         response["progress"] = result.info
 
