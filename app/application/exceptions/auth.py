@@ -39,10 +39,3 @@ class InvalidTokenException(Exception):
 
     Возникает при попытке декодировать токен с неверной подписью или структурой.
     """
-
-
-class WrongTokenTypeException(Exception):
-    """Передан не refresh токен.
-
-    Возникает при попытке использовать access токен вместо refresh для обновления.
-    """

@@ -8,7 +8,6 @@ from app.application.exceptions.auth import (
     InvalidTokenException,
     TokenExpiredException,
     UserAlreadyExistsException,
-    WrongTokenTypeException,
 )
 from app.application.exceptions.user import (
     EmailAlreadyExistsException,
@@ -148,7 +147,7 @@ async def get_refresh_token(
     try:
         return await auth_service.refresh_token(refresh_token)
 
-    except (InvalidTokenException, TokenExpiredException, WrongTokenTypeException) as e:
+    except (InvalidTokenException, TokenExpiredException) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),

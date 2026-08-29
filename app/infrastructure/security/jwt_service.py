@@ -33,6 +33,7 @@ class TokenPayload:
         id: Уникальный идентификатор пользователя
         email: Email пользователя
         role: Роль пользователя
+        typ: Тип токена — "access" или "refresh"
         jti: Уникальный идентификатор токена (для refresh токенов)
     """
 
@@ -40,6 +41,7 @@ class TokenPayload:
     id: str
     email: str
     role: str
+    typ: str
     jti: str | None = None
 
 
@@ -64,6 +66,7 @@ def _create_token(payload: TokenPayload, expires_delta: timedelta) -> str:
         "id": payload.id,
         "email": payload.email,
         "role": payload.role,
+        "typ": payload.typ,
         "exp": expire,
         "iat": datetime.now(UTC),
     }
@@ -88,9 +91,9 @@ def create_access_token(username: str, user_id: str, email: str, role: str) -> s
         role: Роль пользователя
 
     Returns:
-        Закодированный JWT access токен
+        Закодированный JWT access токен (с claim typ="access")
     """
-    payload = TokenPayload(sub=username, id=user_id, email=email, role=role)
+    payload = TokenPayload(sub=username, id=user_id, email=email, role=role, typ="access")
     return _create_token(payload, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
 
 
@@ -112,32 +115,42 @@ def create_refresh_token(username: str, user_id: str, email: str, role: str, jti
     Returns:
         Закодированный JWT refresh токен
     """
-    payload = TokenPayload(sub=username, id=user_id, email=email, role=role, jti=jti)
+    payload = TokenPayload(sub=username, id=user_id, email=email, role=role, jti=jti, typ="refresh")
     return _create_token(payload, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
 
 
-def decode_token(token: str) -> TokenPayload:
+def decode_token(token: str, expected_typ: str = "access") -> TokenPayload:
     """
     Декодирует и валидирует JWT токен.
 
-    Проверяет подпись, срок действия и извлекает данные из токена.
-    При ошибке валидации выбрасывает jwt.PyJWTError.
+    Проверяет подпись, срок действия, обязательные claims (exp, sub, typ)
+    и соответствие типа токена ожидаемому. При ошибке выбрасывает jwt.PyJWTError.
 
     Args:
         token: JWT токен для декодирования
+        expected_typ: Ожидаемый тип токена ("access" или "refresh")
 
     Returns:
         TokenPayload с данными из токена
 
     Raises:
         jwt.ExpiredSignatureError: Если токен истёк
-        jwt.PyJWTError: Если токен невалиден или подпись не совпадает
+        jwt.PyJWTError: Если токен невалиден или не тот тип
     """
-    claim = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    claim = jwt.decode(
+        token,
+        SECRET_KEY,
+        algorithms=[ALGORITHM],
+        options={"require": ["exp", "sub", "typ"]},
+    )
+    if claim["typ"] != expected_typ:
+        raise jwt.InvalidTokenError(f"Expected {expected_typ} token")
+
     return TokenPayload(
         sub=claim["sub"],
         id=claim["id"],
         email=claim["email"],
         role=claim["role"],
+        typ=claim["typ"],
         jti=claim.get("jti"),
     )

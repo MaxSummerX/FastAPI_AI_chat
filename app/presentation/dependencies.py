@@ -5,6 +5,8 @@
 в эндпоинты API согласно принципам Dependency Injection и чистой архитектуры.
 """
 
+from uuid import UUID
+
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -370,7 +372,7 @@ async def get_current_user(
     """
     Аутентифицирует пользователя через JWT токен и возвращает модель пользователя.
 
-    Декодирует JWT, извлекает username и загружает пользователя из БД.
+    Декодирует JWT, извлекает id пользователя и загружает его из БД
     Логирует неудачные попытки с IP и endpoint для мониторинга безопасности.
 
     Args:
@@ -393,10 +395,6 @@ async def get_current_user(
     )
     try:
         payload: TokenPayload = decode_token(token)
-        username: str = payload.sub
-        if username is None:
-            logger.warning("JWT без sub | ip={} endpoint={}", client_ip, endpoint)
-            raise credentials_exception from None
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -407,7 +405,8 @@ async def get_current_user(
         logger.warning("Невалидный JWT | ip={} endpoint={}", client_ip, endpoint)
         raise credentials_exception from None
 
-    user = await user_repo.get_by_username(username)
+    user_id: str = payload.id
+    user = await user_repo.get_by_id(UUID(user_id))
     if user is None:
         logger.warning("Пользователь не найден | ip={} endpoint={}", client_ip, endpoint)
         raise credentials_exception from None

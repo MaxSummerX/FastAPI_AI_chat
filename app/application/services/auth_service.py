@@ -11,7 +11,6 @@ from app.application.exceptions.auth import (
     InvalidTokenException,
     TokenExpiredException,
     UserAlreadyExistsException,
-    WrongTokenTypeException,
 )
 from app.application.schemas.auth import RefreshTokenResponse, TokenResponse
 from app.application.schemas.user import UserResponseBase
@@ -208,7 +207,7 @@ class AuthService:
         return user.id, TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            token_type="bearer",
+            token_type="bearer",  # nosec B106
             expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
 
@@ -225,10 +224,9 @@ class AuthService:
         Raises:
             TokenExpiredException: Если токен истёк
             InvalidTokenException: Если токен невалиден или юзер не найден
-            WrongTokenTypeException: Если передан access токен вместо refresh
         """
         try:
-            payload = decode_token(refresh_token)
+            payload = decode_token(refresh_token, expected_typ="refresh")
 
         except jwt.ExpiredSignatureError:
             raise TokenExpiredException("Refresh token has expired") from None
@@ -237,14 +235,9 @@ class AuthService:
             logger.warning("Невалидный JWT при обновлении токена")
             raise InvalidTokenException("Invalid refresh token") from None
 
-        # Проверяем, что это именно refresh токен (у refresh есть jti)
-        if payload.jti is None:
-            logger.warning("Передан access токен вместо refresh | username={}", payload.sub)
-            raise WrongTokenTypeException("Expected refresh token, got access token") from None
-
-        user = await self.user_repo.get_by_username(payload.sub)
+        user = await self.user_repo.get_by_id(UUID(payload.id))
         if not user:
-            logger.warning("Юзер не найден при обновлении токена | username={}", payload.sub)
+            logger.warning("Юзер не найден при обновлении токена | user_id={}", payload.id)
             raise InvalidTokenException("Invalid refresh token") from None
 
         access_token = create_access_token(
@@ -252,5 +245,7 @@ class AuthService:
         )
 
         return RefreshTokenResponse(
-            access_token=access_token, token_type="bearer", expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            access_token=access_token,
+            token_type="bearer",  # nosec B106
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
