@@ -167,9 +167,14 @@ async def test_login_success(client: AsyncClient, test_user: UserModel) -> None:
 
     data = response.json()
     assert "access_token" in data
-    assert "refresh_token" in data
+    assert "refresh_token" not in data  # refresh передаётся только в httpOnly cookie
     assert data["token_type"] == "bearer"
     assert "expires_in" in data
+
+    # Refresh приходит в httpOnly cookie
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "refresh_token=" in set_cookie
+    assert "HttpOnly" in set_cookie
 
 
 @pytest.mark.asyncio
@@ -221,8 +226,8 @@ async def test_login_nonexistent_user(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_token_success(client: AsyncClient, test_user: UserModel) -> None:
-    """Тест: успешное обновление токена"""
-    # Сначала логинимся
+    """Тест: успешное обновление токена через refresh cookie"""
+    # Логин — httpx клиент автоматически сохраняет refresh cookie
     login_response = await client.post(
         "/api/v1/user/token",
         data={
@@ -230,14 +235,11 @@ async def test_refresh_token_success(client: AsyncClient, test_user: UserModel) 
             "password": "TestPassword123!",
         },
     )
-    tokens = login_response.json()
-    refresh_token = tokens["refresh_token"]
+    assert login_response.status_code == 200
+    assert "refresh_token" in client.cookies  # кука сохранилась
 
-    # Обновляем токен
-    response = await client.post(
-        "/api/v1/user/refresh-token",
-        params={"refresh_token": refresh_token},
-    )
+    # Обновляем токен — cookie уйдёт автоматически
+    response = await client.post("/api/v1/user/refresh-token")
     assert response.status_code == 200
 
     data = response.json()
@@ -246,12 +248,17 @@ async def test_refresh_token_success(client: AsyncClient, test_user: UserModel) 
 
 
 @pytest.mark.asyncio
+async def test_refresh_token_without_cookie(client: AsyncClient, test_user: UserModel) -> None:
+    """Тест: обновление без refresh cookie"""
+    response = await client.post("/api/v1/user/refresh-token")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_refresh_token_invalid(client: AsyncClient) -> None:
-    """Тест: обновление с невалидным токеном"""
-    response = await client.post(
-        "/api/v1/user/refresh-token",
-        params={"refresh_token": "invalid_token"},
-    )
+    """Тест: обновление с невалидным токеном в cookie"""
+    client.cookies.set("refresh_token", "invalid_token")
+    response = await client.post("/api/v1/user/refresh-token")
     assert response.status_code == 401
 
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 
@@ -17,7 +17,7 @@ from app.application.exceptions.user import (
     SameUsernameException,
     UsernameAlreadyExistsException,
 )
-from app.application.schemas.auth import RefreshTokenResponse, TokenResponse
+from app.application.schemas.auth import MessageResponse, RefreshTokenResponse, TokenResponse
 from app.application.schemas.user import (
     UserRegister,
     UserResponseBase,
@@ -30,7 +30,9 @@ from app.application.schemas.user import (
 from app.application.services.auth_service import AuthService
 from app.application.services.user_service import UserService
 from app.domain.models.user import User as UserModel
+from app.infrastructure.security.jwt_service import ACCESS_TOKEN_EXPIRE_MINUTES
 from app.presentation.dependencies import get_auth_service, get_current_user, get_user_service
+from app.presentation.security.cookies import REFRESH_COOKIE_NAME, clear_refresh_cookie, set_refresh_cookie
 
 
 router = APIRouter(prefix="/user", tags=["User"])
@@ -104,10 +106,14 @@ async def register_user(
 
 @router.post("/token", summary="Получить JWT токены (логин)")
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), auth_service: AuthService = Depends(get_auth_service)
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> TokenResponse:
     """
-    Аутентифицирует пользователя по username или паролю и возвращает JWT токены.
+    Аутентифицирует пользователя по username или паролю.
+
+    Access токен возвращается в теле ответа, refresh — в httpOnly cookie.
 
     **Возможные ошибки:**
     - `401` — неверный username или пароль
@@ -115,9 +121,14 @@ async def login(
     logger.info("Попытка входа: username={}", form_data.username)
 
     try:
-        user_id, access_token = await auth_service.login(form_data.username, form_data.password)
+        user_id, access_token, refresh_token = await auth_service.login(form_data.username, form_data.password)
         logger.info("Пользователь успешно вошёл: {}", user_id)
-        return access_token
+        set_refresh_cookie(response, refresh_token)
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",  # nosec B106
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
 
     except InvalidCredentialsException as e:
         raise HTTPException(
@@ -136,7 +147,8 @@ async def login(
 
 @router.post("/refresh-token", summary="Обновить access токен")
 async def get_refresh_token(
-    refresh_token: str, auth_service: AuthService = Depends(get_auth_service)
+    refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> RefreshTokenResponse:
     """
     Обновляет access токен с помощью refresh токена.
@@ -144,6 +156,8 @@ async def get_refresh_token(
     **Возможные ошибки:**
     - `401` — неверный, истёкший или неправильный тип токена
     """
+    if not refresh_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token cookie is missing")
     try:
         return await auth_service.refresh_token(refresh_token)
 
@@ -160,6 +174,13 @@ async def get_refresh_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error refreshing token",
         ) from None
+
+
+@router.post("/logout", summary="Выйти")
+async def logout(response: Response) -> MessageResponse:
+    """Завершает сессию: удаляет refresh cookie."""
+    clear_refresh_cookie(response)
+    return MessageResponse(detail="Logged out")
 
 
 @router.patch("/update", status_code=status.HTTP_200_OK, summary="Обновить профиль")

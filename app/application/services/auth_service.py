@@ -12,7 +12,7 @@ from app.application.exceptions.auth import (
     TokenExpiredException,
     UserAlreadyExistsException,
 )
-from app.application.schemas.auth import RefreshTokenResponse, TokenResponse
+from app.application.schemas.auth import RefreshTokenResponse
 from app.application.schemas.user import UserResponseBase
 from app.domain.repositories.invites import IInviteRepository
 from app.domain.repositories.users import IUserRepository
@@ -164,7 +164,7 @@ class AuthService:
         logger.info("Регистрация с инвайтом при REQUIRE_INVITE=False (прямой API вызов) | email={}", email)
         return await self._register_with_invite(invite_code, username, email, password)
 
-    async def login(self, username_or_email: str, password: str) -> tuple[UUID, TokenResponse]:
+    async def login(self, username_or_email: str, password: str) -> tuple[UUID, str, str]:
         """
         Аутентифицирует пользователя и возвращает токены.
 
@@ -173,7 +173,8 @@ class AuthService:
             password: Пароль (plaintext)
 
         Returns:
-            TokenResponse с access и refresh токенами
+            Кортеж (user_id, access_token, refresh_token) - refresh
+            вызывающий слой передаёт клиенту через httpOnly cookie
 
         Raises:
             InvalidCredentialsException: Если неверный username/email или пароль
@@ -204,12 +205,7 @@ class AuthService:
             username=user.username, user_id=str(user.id), email=user.email, role=user.role.value, jti=str(uuid.uuid4())
         )
 
-        return user.id, TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer",  # nosec B106
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
+        return user.id, access_token, refresh_token
 
     async def refresh_token(self, refresh_token: str) -> RefreshTokenResponse:
         """
