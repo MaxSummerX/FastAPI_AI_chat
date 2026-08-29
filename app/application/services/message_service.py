@@ -479,7 +479,7 @@ class MessageService:
                 if not func_args and func_name in ["create_file", "web_search", "web_fetch", "search_documents"]:
                     error_msg = f"⚠️ Пропущен вызов {func_name}: пустые аргументы (невалидный JSON от модели)"
                     logger.warning(error_msg)
-                    return {"role": "tool", "tool_calsl_id": tool_call["id"], "content": error_msg}
+                    return {"role": "tool", "tool_call_id": tool_call["id"], "content": error_msg}
 
                 logger.info(f"🔧 {func_name}({func_args})")
                 try:
