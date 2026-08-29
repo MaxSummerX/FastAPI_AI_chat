@@ -1,21 +1,26 @@
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from loguru import logger
 
-from app.application.exceptions.fact import FactNotFoundException, UserProvidedException
+from app.application.exceptions.fact import FactCreationException, FactNotFoundException, UserProvidedException
 from app.application.schemas.fact import FactCreate, FactResponse
 from app.application.schemas.pagination import PaginatedResponse
 from app.application.services.fact_service import FactService
 from app.domain.models.fact import FactCategory, FactSource
 from app.domain.models.user import User as UserModel
+from app.domain.services.memory import IMemoryService
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
     InvalidCursorError,
 )
-from app.presentation.dependencies import get_current_user, get_fact_service
+from app.presentation.dependencies import (
+    bg_import_facts_from_mem0,
+    get_current_user,
+    get_fact_service,
+    get_memory_service,
+)
 
 
 router = APIRouter(prefix="/facts", tags=["Facts_v1"])
@@ -82,42 +87,45 @@ async def get_fact(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
-@router.post("", status_code=status.HTTP_202_ACCEPTED, summary="Создать новый факт")
+@router.post("", status_code=status.HTTP_201_CREATED, summary="Создать новый факт")
 async def create_fact(
     fact_data: FactCreate,
-    background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     fact_service: FactService = Depends(get_fact_service),
-) -> dict[str, Any]:
+) -> dict[str, str]:
     """
     Создаёт новый факт о пользователе.
 
-    Факт создаётся асинхронно в фоне:
+    Факт:
     1. Добавляется в Qdrant (через mem0ai без связей в Neo4j)
     2. Сохраняется в PostgreSQL с mem0_id
 
     **Возможные ошибки:**
     - `422` — некорректные данные факта
+    - `500` — ошибка создания в mem0ai/Qdrant или PostgreSQL
     """
     logger.info(f"Запрос на создание факта пользователем {current_user.id}")
 
-    background_tasks.add_task(fact_service.create_user_fact, current_user.id, fact_data)
+    try:
+        await fact_service.create_user_fact(current_user.id, fact_data)
+    except FactCreationException:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Memory service error") from None
+    except Exception:
+        logger.exception("Ошибка создания факта | user_id={}", current_user.id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create fact") from None
 
-    return {"status": "processing", "message": "Факт добавляется", "content": fact_data.content}
+    return {"status": "created"}
 
 
-@router.put("/{fact_id}", status_code=status.HTTP_202_ACCEPTED, summary="Обновить факт")
+@router.put("/{fact_id}", status_code=status.HTTP_200_OK, summary="Обновить факт")
 async def update_fact(
     fact_id: UUID,
     fact_data: FactCreate,
-    background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     fact_service: FactService = Depends(get_fact_service),
-) -> dict[str, Any]:
+) -> dict[str, str]:
     """
-    Полностью обновляет факт (PostgreSQL + Qdrant).
-
-    Обновление происходит асинхронно в фоне:
+    Полностью обновляет факт (PostgreSQL + Qdrant):
     1. Удаляет старый вектор из Qdrant
     2. Создаёт новый вектор в Qdrant
     3. Обновляет запись в PostgreSQL
@@ -125,6 +133,7 @@ async def update_fact(
     **Возможные ошибки:**
     - `404` — факт не найден или принадлежит другому пользователю
     - `403` — факт не является USER_PROVIDED (нельзя редактировать EXTRACTED)
+    - `500` — ошибка обновления в mem0ai/Qdrant или PostgreSQL
     """
     logger.info(f"Запрос на обновление факта {fact_id} пользователя {current_user.id}")
 
@@ -135,13 +144,13 @@ async def update_fact(
     except UserProvidedException as e:
         raise HTTPException(status_code=403, detail=str(e)) from None
 
-    background_tasks.add_task(
-        fact_service.update_user_fact,
-        current_user.id,
-        fact_id,
-        fact_data,
-    )
-    return {"status": "processing", "message": "Факт обновляется", "content": fact_data.content}
+    try:
+        await fact_service.update_user_fact(current_user.id, fact_id, fact_data)
+    except Exception:
+        logger.exception("Ошибка обновления факта | user_id={}", current_user.id)
+        raise HTTPException(status_code=500, detail="Failed to update fact") from None
+
+    return {"status": "updated"}
 
 
 @router.delete("/{fact_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить факт")
@@ -173,7 +182,7 @@ async def delete_fact(
 async def import_facts(
     background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
-    fact_service: FactService = Depends(get_fact_service),
+    memory_service: IMemoryService = Depends(get_memory_service),
 ) -> dict[str, str]:
     """
     Импортирует факты из mem0ai в PostgreSQL.
@@ -184,6 +193,6 @@ async def import_facts(
     2. Проверяет существующие факты в PostgreSQL
     3. Создаёт новые записи для неимпортированных фактов
     """
-    background_tasks.add_task(fact_service.import_from_mem0ai_to_postgres_db, current_user.id)
+    background_tasks.add_task(bg_import_facts_from_mem0, current_user.id, memory_service)
 
     return {"status": "processing"}

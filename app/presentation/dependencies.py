@@ -50,13 +50,13 @@ from app.infrastructure.memory.dependencies import create_memory_service, get_me
 from app.infrastructure.persistence.sqlalchemy import (
     ConversationSQLAlchemyRepository,
     DocumentSQLAlchemyRepository,
+    FactsSQLAlchemyRepository,
     InviteSQLAlchemyRepository,
     MessageSQLAlchemyRepository,
     PromptSQLAlchemyRepository,
     UserSQLAlchemyRepository,
     VacancySQLAlchemyRepository,
 )
-from app.infrastructure.persistence.sqlalchemy.fact_repository import FactsSQLAlchemyRepository
 from app.infrastructure.persistence.sqlalchemy.vacancy_analysis_repository import VacancyAnalysisSQLAlchemyRepository
 from app.infrastructure.security.jwt_service import TokenPayload, decode_token
 from app.infrastructure.settings.settings import settings
@@ -436,3 +436,21 @@ async def get_current_admin_user(current_user: UserModel = Depends(get_current_u
             detail="Admin access required",
         ) from None
     return current_user
+
+
+async def bg_import_facts_from_mem0(user_id: UUID, memory_service: IMemoryService) -> None:
+    """Фоновый импорт фактов из mem0: собственная сессия БД."""
+    from app.infrastructure.database.dependencies import async_session_maker
+    from app.infrastructure.persistence.sqlalchemy import FactsSQLAlchemyRepository, MessageSQLAlchemyRepository
+
+    try:
+        async with async_session_maker() as session:
+            service = FactService(
+                fact_repo=FactsSQLAlchemyRepository(session),
+                message_repo=MessageSQLAlchemyRepository(session),
+                memory_service=memory_service,
+            )
+            await service.import_from_mem0ai_to_postgres_db(user_id=user_id)
+
+    except Exception:
+        logger.exception("Фоновый импорт фактов упал | user_id={}", user_id)

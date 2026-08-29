@@ -287,9 +287,7 @@ async def test_create_fact_success(
     client_with_mocked_memory_sync: AsyncClient,
     auth_headers_memory_sync: dict[str, str],
 ) -> None:
-    """Тест: успешное создание факта (через background task)"""
-    import asyncio
-
+    """Тест: успешное создание факта (синхронно в рамках запроса)"""
     response = await client_with_mocked_memory_sync.post(
         "/api/v1/facts",
         headers=auth_headers_memory_sync,
@@ -299,12 +297,9 @@ async def test_create_fact_success(
             "confidence": 0.9,
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 201
     data = response.json()
-    assert data["status"] == "processing"
-
-    # Ждём выполнения background task
-    await asyncio.sleep(0.1)
+    assert data["status"] == "created"
 
     # Проверяем через GET всех фактов
     response = await client_with_mocked_memory_sync.get("/api/v1/facts", headers=auth_headers_memory_sync)
@@ -327,7 +322,6 @@ async def test_create_fact_default_category(
     auth_headers_memory_sync: dict[str, str],
 ) -> None:
     """Тест: создание факта с категорией по умолчанию (personal)"""
-    import asyncio
 
     response = await client_with_mocked_memory_sync.post(
         "/api/v1/facts",
@@ -336,10 +330,7 @@ async def test_create_fact_default_category(
             "content": "Another fact",
         },
     )
-    assert response.status_code == 202
-
-    # Ждём выполнения background task
-    await asyncio.sleep(0.1)
+    assert response.status_code == 201
 
     # Проверяем через GET всех фактов
     response = await client_with_mocked_memory_sync.get("/api/v1/facts", headers=auth_headers_memory_sync)
@@ -356,7 +347,6 @@ async def test_create_fact_with_metadata(
     auth_headers_memory_sync: dict[str, str],
 ) -> None:
     """Тест: создание факта с метаданными"""
-    import asyncio
 
     response = await client_with_mocked_memory_sync.post(
         "/api/v1/facts",
@@ -367,10 +357,7 @@ async def test_create_fact_with_metadata(
             "metadata_": {"source": "manual", "verified": True},
         },
     )
-    assert response.status_code == 202
-
-    # Ждём выполнения background task
-    await asyncio.sleep(0.1)
+    assert response.status_code == 201
 
     # Проверяем через GET всех фактов
     response = await client_with_mocked_memory_sync.get("/api/v1/facts", headers=auth_headers_memory_sync)
@@ -454,9 +441,9 @@ async def test_update_fact_success(
             "category": "learning",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "processing"
+    assert data["status"] == "updated"
 
     # Ждём выполнения background task
     await asyncio.sleep(0.1)
@@ -485,7 +472,6 @@ async def test_update_fact_confidence(
     При обновлении требуется отправить все поля (content обязателен),
     т.к. происходит перевекторизация в Qdrant.
     """
-    import asyncio
 
     original_content = test_fact.content
     original_category = test_fact.category
@@ -499,10 +485,7 @@ async def test_update_fact_confidence(
             "confidence": 0.7,
         },
     )
-    assert response.status_code == 202
-
-    # Ждём выполнения background task
-    await asyncio.sleep(0.1)
+    assert response.status_code == 200
 
     # Проверяем через GET
     response = await client_with_mocked_memory_sync.get(

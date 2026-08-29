@@ -4,7 +4,7 @@ from uuid import UUID
 
 from loguru import logger
 
-from app.application.exceptions.fact import FactNotFoundException, UserProvidedException
+from app.application.exceptions.fact import FactCreationException, FactNotFoundException, UserProvidedException
 from app.application.schemas.fact import FactCreate, FactResponse
 from app.application.schemas.pagination import PaginatedResponse
 from app.domain.enums.fact import FactCategory, FactSource
@@ -137,6 +137,12 @@ class FactService:
                 messages=data.content, user_id=str(user_id), infer=False, metadata=mem0_metadata
             )
 
+            try:
+                mem0_id = result["results"][0]["id"]
+            except (KeyError, IndexError, ValueError, TypeError):
+                logger.error("mem0ai вернул неожиданный ответ: {!r}", result)
+                raise FactCreationException("Memory service returned unexpected response") from None
+
             new_fact = Fact(
                 user_id=user_id,
                 content=data.content,
@@ -144,15 +150,15 @@ class FactService:
                 source_type=FactSource.USER_PROVIDED,
                 confidence=data.confidence,
                 metadata_=data.metadata_,
-                mem0_id=UUID(result["results"][0]["id"]),  # Конвертируем строку в UUID
+                mem0_id=UUID(mem0_id),  # Конвертируем строку в UUID
             )
 
             await self.fact_repo.save(new_fact)
 
             logger.info(f"Факт {new_fact.id} создан с mem0_id {new_fact.mem0_id}")
 
-        except Exception as e:
-            logger.error(f"Ошибка при создании факта: {e}")
+        except Exception:
+            # Логирует роутер
             raise
 
     async def update_user_fact(
