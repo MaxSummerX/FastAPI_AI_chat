@@ -1,17 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from loguru import logger
 
-from app.application.exceptions.analysis import InvalidAnalysisTypeError
-from app.application.exceptions.llm import LLMGenerationError
-from app.application.exceptions.user import UserNotFoundException
-from app.application.exceptions.vacancy import (
-    AnalysisAlreadyExistsError,
-    ResumeRequiredError,
-    ResumeTooShortError,
-    VacancyNotFoundError,
-)
 from app.application.schemas.vacancy_analysis import (
     AnalysisTypeInfo,
     AvailableAnalysesResponse,
@@ -42,10 +33,7 @@ async def get_all_vacancy_analyses(
     """
     logger.info(f"Запрос на получение анализов вакансии {id_vacancy} пользователя {current_user.id}")
 
-    try:
-        analyses = await analysis_service.get_all_for_vacancy(current_user.id, id_vacancy)
-    except VacancyNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    analyses = await analysis_service.get_all_for_vacancy(current_user.id, id_vacancy)
 
     # Собираем уникальные типы анализов
     analyses_types = list({AnalysisType(analysis.analysis_type) for analysis in analyses})
@@ -84,38 +72,14 @@ async def create_vacancy_analysis(
     """
     logger.info(f"Запрос на создание анализа {data.analysis_type} вакансии {id_vacancy}")
 
-    try:
-        analysis = await analysis_service.create_analysis(
-            current_user.id,
-            id_vacancy,
-            analysis_type=data.analysis_type,
-            custom_prompt=data.custom_prompt,
-            title=data.title,
-            resume=current_user.resume,
-        )
-    except InvalidAnalysisTypeError as e:
-        logger.warning(f"Invalid analysis type: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-    except AnalysisAlreadyExistsError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
-    except ResumeRequiredError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
-    except ResumeTooShortError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
-    except VacancyNotFoundError as e:
-        logger.warning(f"Vacancy not found: {e}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-    except UserNotFoundException as e:
-        logger.warning(f"User not found: {e}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from None
-    except LLMGenerationError as e:
-        logger.error(f"LLM error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI service error. Please try again later."
-        ) from None
-    except Exception as e:
-        logger.error(f"Unexpected error during analysis: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from None
+    analysis = await analysis_service.create_analysis(
+        current_user.id,
+        id_vacancy,
+        analysis_type=data.analysis_type,
+        custom_prompt=data.custom_prompt,
+        title=data.title,
+        resume=current_user.resume,
+    )
 
     return VacancyResponse.model_validate(analysis)
 
