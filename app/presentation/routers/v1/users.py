@@ -2,21 +2,6 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from loguru import logger
 
-from app.application.exceptions.auth import (
-    InvalidCredentialsException,
-    InvalidInviteCodeException,
-    InvalidTokenException,
-    TokenExpiredException,
-    UserAlreadyExistsException,
-)
-from app.application.exceptions.user import (
-    EmailAlreadyExistsException,
-    IncorrectPasswordException,
-    SameEmailException,
-    SamePasswordException,
-    SameUsernameException,
-    UsernameAlreadyExistsException,
-)
 from app.application.schemas.auth import MessageResponse, RefreshTokenResponse, TokenResponse
 from app.application.schemas.user import (
     UserRegister,
@@ -49,15 +34,7 @@ async def get_full_user_info(
     current_user: UserModel = Depends(get_current_user), service: UserService = Depends(get_user_service)
 ) -> UserResponseFull:
     """Возвращает расширенную информацию о текущем авторизованном пользователе."""
-    try:
-        return await service.get_full_profile(current_user.id)
-
-    except Exception as e:
-        logger.error("Ошибка при получении полной информации пользователя {}: {}", current_user.id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving user information",
-        ) from None
+    return await service.get_full_profile(current_user.id)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, summary="Зарегистрировать нового пользователя")
@@ -75,33 +52,16 @@ async def register_user(
     - `409` — username или email уже заняты
     """
     invite_info = f" invite={user.invite_code[:4]}..." if user.invite_code else ""
-    logger.info("Попытка регистрации: username={}, email={}{})", user.username, user.email, invite_info)
+    logger.info("Попытка регистрации: username={}, email={}{}", user.username, user.email, invite_info)
 
-    try:
-        new_user = await auth_service.register_user(
-            username=user.username,
-            email=str(user.email),
-            password=user.password,
-            invite_code=user.invite_code,
-        )
-        logger.info("Пользователь успешно зарегистрирован: {}", new_user.id)
-        return new_user
-
-    except InvalidInviteCodeException as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from None
-
-    except UserAlreadyExistsException as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from None
-
-    except Exception as e:
-        logger.error("Непредвиденная ошибка при регистрации: {}", e)
-        raise HTTPException(status_code=500, detail="Internal server error") from None
+    new_user = await auth_service.register_user(
+        username=user.username,
+        email=str(user.email),
+        password=user.password,
+        invite_code=user.invite_code,
+    )
+    logger.info("Пользователь успешно зарегистрирован: {}", new_user.id)
+    return new_user
 
 
 @router.post("/token", summary="Получить JWT токены (логин)")
@@ -120,29 +80,14 @@ async def login(
     """
     logger.info("Попытка входа: username={}", form_data.username)
 
-    try:
-        user_id, access_token, refresh_token = await auth_service.login(form_data.username, form_data.password)
-        logger.info("Пользователь успешно вошёл: {}", user_id)
-        set_refresh_cookie(response, refresh_token)
-        return TokenResponse(
-            access_token=access_token,
-            token_type="bearer",  # nosec B106
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
-
-    except InvalidCredentialsException as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
-
-    except Exception as e:
-        logger.error("Error при входе пользователя {}: {}", form_data.username, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error during login",
-        ) from None
+    user_id, access_token, refresh_token = await auth_service.login(form_data.username, form_data.password)
+    logger.info("Пользователь успешно вошёл: {}", user_id)
+    set_refresh_cookie(response, refresh_token)
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",  # nosec B106
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 @router.post("/refresh-token", summary="Обновить access токен")
@@ -158,22 +103,7 @@ async def get_refresh_token(
     """
     if not refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token cookie is missing")
-    try:
-        return await auth_service.refresh_token(refresh_token)
-
-    except (InvalidTokenException, TokenExpiredException) as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
-
-    except Exception as e:
-        logger.error("Ошибка обновления токена: {}", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error refreshing token",
-        ) from None
+    return await auth_service.refresh_token(refresh_token)
 
 
 @router.post("/logout", summary="Выйти")
@@ -190,16 +120,8 @@ async def update_user_profile(
     user_service: UserService = Depends(get_user_service),
 ) -> UserResponseFull:
     """Обновляет дополнительные данные профиля текущего пользователя."""
-    try:
-        update_user = await user_service.update_user_profile(current_user.id, user_data)
-        return update_user
-
-    except Exception as e:
-        logger.error("Ошибка при обновлении профиля: {}", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error updating profile",
-        ) from None
+    update_user = await user_service.update_user_profile(current_user.id, user_data)
+    return update_user
 
 
 @router.post("/email", status_code=status.HTTP_200_OK, summary="Обновить email")
@@ -220,28 +142,11 @@ async def update_user_email(
     """
     logger.info("Попытка обновления email пользователя: {}", current_user.id)
 
-    try:
-        update_user = await user_service.update_email(
-            current_user.id, str(email_data.new_email), email_data.current_password
-        )
-        logger.info("Email пользователя успешно обновлён: {}", current_user.id)
-        return update_user
-
-    except EmailAlreadyExistsException as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
-
-    except IncorrectPasswordException as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
-
-    except SameEmailException as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
-    except Exception as e:
-        logger.error("Ошибка при обновлении email: {}", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error updating email",
-        ) from None
+    update_user = await user_service.update_email(
+        current_user.id, str(email_data.new_email), email_data.current_password
+    )
+    logger.info("Email пользователя успешно обновлён: {}", current_user.id)
+    return update_user
 
 
 @router.post("/password", status_code=status.HTTP_200_OK, summary="Обновить пароль")
@@ -261,22 +166,11 @@ async def update_user_password(
     """
     logger.info("Попытка обновления пароля пользователя: {}", current_user.id)
 
-    try:
-        update_user = await user_service.change_password(
-            current_user.id, password_data.current_password, password_data.password
-        )
-        logger.info("Пароль пользователя успешно обновлён: {}", current_user.id)
-        return update_user
-
-    except IncorrectPasswordException as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
-
-    except SamePasswordException as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
-    except Exception as e:
-        logger.error("Неожиданная ошибка при обновлении пароля {}: {}", current_user.id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from None
+    update_user = await user_service.change_password(
+        current_user.id, password_data.current_password, password_data.password
+    )
+    logger.info("Пароль пользователя успешно обновлён: {}", current_user.id)
+    return update_user
 
 
 @router.post("/username", status_code=status.HTTP_200_OK, summary="Обновить username")
@@ -297,24 +191,8 @@ async def update_user_username(
     """
     logger.info("Попытка обновления username пользователя: {}", current_user.id)
 
-    try:
-        username_update = await user_service.update_username(
-            current_user.id, username_data.username, username_data.current_password
-        )
-        logger.info("Username пользователя успешно обновлён: {}", current_user.id)
-        return username_update
-
-    except IncorrectPasswordException as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
-
-    except UsernameAlreadyExistsException as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
-
-    except SameUsernameException as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
-
-    except Exception as e:
-        logger.error("Неожиданная ошибка при обновлении username {}: {}", current_user.id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating username"
-        ) from None
+    username_update = await user_service.update_username(
+        current_user.id, username_data.username, username_data.current_password
+    )
+    logger.info("Username пользователя успешно обновлён: {}", current_user.id)
+    return username_update

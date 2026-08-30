@@ -103,8 +103,8 @@ def register_exception_handlers(app: FastAPI) -> None:
 
         if code >= 500:
             logger.exception(f"{type(exc).__name__}: {exc}")
-
-        return JSONResponse(status_code=code, content={"detail": str(exc)})
+        headers = {"WWW-Authenticate": "Bearer"} if code == 401 else None
+        return JSONResponse(status_code=code, content={"detail": str(exc)}, headers=headers)
 
     @app.exception_handler(InvalidCursorError)
     async def cursor_exception_handler(request: Request, exc: InvalidCursorError) -> JSONResponse:
