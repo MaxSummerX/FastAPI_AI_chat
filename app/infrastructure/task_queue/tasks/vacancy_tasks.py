@@ -4,6 +4,7 @@ from uuid import UUID
 
 import redis
 from celery import Task
+from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import worker_process_init, worker_process_shutdown
 from loguru import logger
 from sqlalchemy import and_, select
@@ -109,7 +110,7 @@ def import_vacancy_task(self: Task, query: str, tiers: list[Experience] | None, 
         raise self.retry(exc=e, countdown=60) from e
 
 
-@celery.task(bind=True, max_retries=3)
+@celery.task(bind=True, max_retries=3, time_limit=14400, soft_time_limit=13800)
 def ai_analyse_task(
     self: Task,
     type_analyze: list[AnalysisType],
@@ -179,8 +180,8 @@ def ai_analyse_task(
             vacancies: list[VacancyForAnalysis] = [VacancyForAnalysis.model_validate(row) for row in rows_vacancies]
 
         async with _worker_resources["session_factory"]() as session:
-            analysis_to_add = []
-
+            analyzed = 0
+            skipped = 0
             for vacancy in vacancies:
                 for analysis in type_analyze:
                     vacancy_data = {
@@ -196,36 +197,41 @@ def ai_analyse_task(
                         "schedule_id": vacancy.schedule_id,
                         "employment_id": vacancy.employment_id,
                     }
-                    analyzer = VacancyAnalyzer(
-                        llm=llm,
-                        vacancy_repo=VacancySQLAlchemyRepository(session),
-                    )
-                    data = await analyzer.analyze(
-                        content=vacancy_data,
-                        analysis_type=AnalysisType(analysis),
-                        resume=vacancy.resume,
-                        custom_prompt=custom_prompt,
-                    )
+                    try:
+                        analyzer = VacancyAnalyzer(
+                            llm=llm,
+                            vacancy_repo=VacancySQLAlchemyRepository(session),
+                        )
+                        data = await analyzer.analyze(
+                            content=vacancy_data,
+                            analysis_type=AnalysisType(analysis),
+                            resume=vacancy.resume,
+                            custom_prompt=custom_prompt,
+                        )
 
-                    analysis_vacancy = VacancyAnalysisModel(
-                        vacancy_id=vacancy.id,
-                        user_id=user_id,
-                        title=f"{AnalysisType(analysis).display_name}: {vacancy.title}",
-                        analysis_type=analysis,
-                        prompt_template=AnalysisType(analysis).description,
-                        custom_prompt=custom_prompt if custom_prompt else None,
-                        result_text=data,
-                    )
-
-                    analysis_to_add.append(analysis_vacancy)
+                        session.add(
+                            VacancyAnalysisModel(
+                                vacancy_id=vacancy.id,
+                                user_id=user_id,
+                                title=f"{AnalysisType(analysis).display_name}: {vacancy.title}",
+                                analysis_type=analysis,
+                                prompt_template=AnalysisType(analysis).description,
+                                custom_prompt=custom_prompt if custom_prompt else None,
+                                result_text=data,
+                            )
+                        )
+                        await session.commit()
+                        analyzed += 1
+                    except Exception:
+                        await session.rollback()
+                        skipped += 1
+                        logger.exception(f"Пропущен анализ: vacancy={vacancy.id}, type={analysis}")
                     await asyncio.sleep(REQUEST_DELAY)
 
-            session.add_all(analysis_to_add)
-            await session.commit()
-
         return {
-            "analyzed": len(analysis_to_add),
-            "vacancies": len(rows_vacancies),
+            "analyzed": analyzed,
+            "skipped": skipped,
+            "vacancies": len(vacancies),
             "user_id": user_id,
         }
 
@@ -233,6 +239,11 @@ def ai_analyse_task(
         result: dict[str, Any] = _worker_resources["loop"].run_until_complete(run_ai_analyse())
         logger.success(f"✅ Подсчёт вакансий: {result}")
         return result
+    except SoftTimeLimitExceeded:
+        logger.warning(
+            "Soft time limit в ai_analyse_task (user={}): : частичный результат сохранён, без retry", user_id
+        )
+        return {"status": "partial_timeout", "user_id": user_id}
     except Exception as e:
         logger.error(f"❌ Ошибка: {e}")
         raise self.retry(exc=e, countdown=60) from e
