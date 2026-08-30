@@ -5,14 +5,16 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from loguru import logger
 
+from app.infrastructure.settings.settings import settings
+
 
 logger.add(
     "log_info.log",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
     level="INFO",
     enqueue=True,
-    backtrace=True,
-    diagnose=True,
+    backtrace=settings.DEBUG,
+    diagnose=settings.DEBUG,
 )
 
 
@@ -43,4 +45,4 @@ async def log_middleware(request: Request, call_next: Callable[[Request], Awaita
 
         except Exception as ex:
             logger.error("[{}] ✗ {} {} ERROR: {}", log_id, request.method, request.url.path, ex, exc_info=True)
-            return JSONResponse(content={"success": False, "error": str(ex)}, status_code=500)
+            return JSONResponse(content={"detail": "Internal server error"}, status_code=500)

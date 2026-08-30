@@ -1,9 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from loguru import logger
 
-from app.application.exceptions.fact import FactCreationException, FactNotFoundException, UserProvidedException
 from app.application.schemas.fact import FactCreate, FactResponse
 from app.application.schemas.pagination import PaginatedResponse
 from app.application.services.fact_service import FactService
@@ -13,7 +12,6 @@ from app.domain.services.memory import IMemoryService
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
-    InvalidCursorError,
 )
 from app.presentation.dependencies import (
     bg_import_facts_from_mem0,
@@ -54,19 +52,14 @@ async def get_all_facts(
         f"Запрос на получение фактов пользователя {current_user.id} "
         f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
     )
-    try:
-        return await fact_service.get_user_facts(
-            user_id=current_user.id,
-            cursor=cursor,
-            limit=limit,
-            category=category,
-            source=source_type,
-            include_archived=include_inactive,
-        )
-
-    except InvalidCursorError as e:
-        logger.warning("Невалидный курсор пользователя {}: {}", current_user.id, str(e))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    return await fact_service.get_user_facts(
+        user_id=current_user.id,
+        cursor=cursor,
+        limit=limit,
+        category=category,
+        source=source_type,
+        include_archived=include_inactive,
+    )
 
 
 @router.get("/{fact_id}", status_code=status.HTTP_200_OK, summary="Получить факт по ID")
@@ -81,10 +74,7 @@ async def get_fact(
     **Возможные ошибки:**
     - `404` — факт не найден или принадлежит другому пользователю
     """
-    try:
-        return await fact_service.get_user_fact_by_id(fact_id, current_user.id)
-    except FactNotFoundException as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    return await fact_service.get_user_fact_by_id(fact_id, current_user.id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="Создать новый факт")
@@ -106,13 +96,7 @@ async def create_fact(
     """
     logger.info(f"Запрос на создание факта пользователем {current_user.id}")
 
-    try:
-        await fact_service.create_user_fact(current_user.id, fact_data)
-    except FactCreationException:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Memory service error") from None
-    except Exception:
-        logger.exception("Ошибка создания факта | user_id={}", current_user.id)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create fact") from None
+    await fact_service.create_user_fact(current_user.id, fact_data)
 
     return {"status": "created"}
 
@@ -137,18 +121,9 @@ async def update_fact(
     """
     logger.info(f"Запрос на обновление факта {fact_id} пользователя {current_user.id}")
 
-    try:
-        await fact_service.validate_update(fact_id, current_user.id)
-    except FactNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e)) from None
-    except UserProvidedException as e:
-        raise HTTPException(status_code=403, detail=str(e)) from None
+    await fact_service.validate_update(fact_id, current_user.id)
 
-    try:
-        await fact_service.update_user_fact(current_user.id, fact_id, fact_data)
-    except Exception:
-        logger.exception("Ошибка обновления факта | user_id={}", current_user.id)
-        raise HTTPException(status_code=500, detail="Failed to update fact") from None
+    await fact_service.update_user_fact(current_user.id, fact_id, fact_data)
 
     return {"status": "updated"}
 
@@ -169,13 +144,7 @@ async def delete_fact(
     - `403` — факт не является USER_PROVIDED (нельзя удалять EXTRACTED)
     """
     logger.info(f"Запрос на удаление факта {fact_id} пользователя {current_user.id}")
-    try:
-        await fact_service.delete_user_fact(fact_id, current_user.id)
-
-    except FactNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e)) from None
-    except UserProvidedException as e:
-        raise HTTPException(status_code=403, detail=str(e)) from None
+    await fact_service.delete_user_fact(fact_id, current_user.id)
 
 
 @router.post("/import_facts", status_code=status.HTTP_202_ACCEPTED, summary="Импортировать факты")

@@ -44,6 +44,7 @@ from app.application.exceptions.vacancy import (
     VacancyImportError,
     VacancyNotFoundError,
 )
+from app.infrastructure.persistence.pagination import InvalidCursorError
 
 
 STATUS_MAP: dict[type[BaseAppException], int] = {
@@ -104,3 +105,9 @@ def register_exception_handlers(app: FastAPI) -> None:
             logger.exception(f"{type(exc).__name__}: {exc}")
 
         return JSONResponse(status_code=code, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidCursorError)
+    async def cursor_exception_handler(request: Request, exc: InvalidCursorError) -> JSONResponse:
+        """Невалидный курсор пагинации → 400."""
+        logger.warning(f"Невалидный курсор: {request.url.path}: {exc}")
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
