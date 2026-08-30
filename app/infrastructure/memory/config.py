@@ -124,7 +124,7 @@ def create_memory_config() -> MemoryConfig:
 
     except Exception as e:
         logger.error(f"Ошибка при создании конфигурации mem0ai: {e}")
-        raise ValueError(f"Failed to create memory config: {e}") from e
+        raise ValueError("Failed to create memory config") from e
 
 
 # Создаём и экспортируем конфигурацию

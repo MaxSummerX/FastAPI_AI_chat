@@ -73,7 +73,7 @@ class VacancyService:
                 timestamp, cursor_id_str = decode_cursor(cursor)
                 decoded_cursor = (timestamp, UUID(cursor_id_str))
             except ValueError as e:
-                raise InvalidVacancyCursorError(f"Invalid cursor format: {e}") from e
+                raise InvalidVacancyCursorError("Invalid cursor format") from e
 
         rows = await self.vacancy_repo.paginate_user_vacancies(
             user_id,

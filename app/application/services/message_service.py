@@ -196,7 +196,7 @@ class MessageService:
         conversation = await self.conversation_repo.get_by_id(conversation_id=conversation_id, user_id=user_id)
 
         if not conversation:
-            raise ConversationNotFoundError("Conversation {} не найден", conversation_id)
+            raise ConversationNotFoundError(f"Conversation {conversation_id} не найден")
 
         user_message = await self.message_repo.create(
             conversation_id=conversation_id, role=message_role, content=message, model=self.llm_service.default_model
@@ -240,7 +240,7 @@ class MessageService:
             )
         except Exception as e:
             logger.error("Ошибка при генерации стримингового ответа: {}", e)
-            raise LLMGenerationError(str(e)) from e
+            raise LLMGenerationError("Не удалось получить ответ от LLM") from e
 
         # Создаём фоновую задачу для работы mem0ai
         if mem0ai_save:

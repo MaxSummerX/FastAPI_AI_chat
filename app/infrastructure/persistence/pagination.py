@@ -84,10 +84,10 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
         return timestamp, id_str
 
     except (KeyError, json.JSONDecodeError, ValueError) as e:
-        raise ValueError(f"Invalid cursor format: {e}") from e
+        raise ValueError("Invalid cursor format") from e
 
     except Exception as e:
-        raise ValueError(f"Failed to decode cursor: {e}") from e
+        raise ValueError("Failed to decode cursor") from e
 
 
 def validate_pagination_limit(
@@ -204,7 +204,7 @@ async def paginate_with_cursor[T](
                 (timestamp_attr < timestamp) | ((timestamp_attr == timestamp) & (model.id < cursor_uuid))  # type: ignore[attr-defined]
             )
         except (ValueError, KeyError) as e:
-            raise InvalidCursorError(f"Invalid cursor format: {e}") from e
+            raise InvalidCursorError("Invalid cursor format") from e
 
     # 2. Сортировка
     query = query.order_by(timestamp_attr.desc(), model.id.desc())  # type: ignore[attr-defined]

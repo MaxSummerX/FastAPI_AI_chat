@@ -88,7 +88,7 @@ async def fetch_full_vacancy(
 
     except Exception as e:
         logger.error(f"Ошибка при загрузке вакансии {vacancy_id}: {e}")
-        raise VacancyFetchError(f"Ошибка при загрузке вакансии {vacancy_id}: {e}") from None
+        raise VacancyFetchError(f"Не удалось загрузить вакансию {vacancy_id}") from e
 
 
 async def create_vacancy_object(hh_id: str, query: str, hh_client: httpx.AsyncClient) -> Vacancy:
@@ -240,11 +240,11 @@ class VacancyImportService:
 
         except httpx.HTTPStatusError as e:
             logger.error(f"❌ HTTP ошибка: {e.response.status_code}")
-            raise VacancyFetchError(f"hh.ru вернул {e.response.status_code}") from None
+            raise VacancyFetchError(f"hh.ru вернул {e.response.status_code}") from e
 
         except Exception as e:
             logger.error(f"❌ Ошибка при загрузке вакансий: {e}", exc_info=True)
-            raise VacancyFetchError(f"Ошибка при загрузке вакансий: {e}") from None
+            raise VacancyFetchError("Не удалось загрузить вакансии с hh.ru") from e
 
     @staticmethod
     async def _filtered_vacancies(
@@ -297,7 +297,7 @@ class VacancyImportService:
 
         except Exception as e:
             logger.error(f"❌ Ошибка при фильтрации вакансий: {e}", exc_info=True)
-            raise VacancyImportError(f"Ошибка при фильтрации вакансий: {e}") from None
+            raise VacancyImportError("Ошибка при фильтрации вакансий") from e
 
     async def _vacancies_create(
         self,

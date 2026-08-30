@@ -224,17 +224,17 @@ class AuthService:
         try:
             payload = decode_token(refresh_token, expected_typ="refresh")
 
-        except jwt.ExpiredSignatureError:
-            raise TokenExpiredException("Refresh token has expired") from None
+        except jwt.ExpiredSignatureError as e:
+            raise TokenExpiredException("Refresh token has expired") from e
 
-        except jwt.PyJWTError:
+        except jwt.PyJWTError as e:
             logger.warning("Невалидный JWT при обновлении токена")
-            raise InvalidTokenException("Invalid refresh token") from None
+            raise InvalidTokenException("Invalid refresh token") from e
 
         user = await self.user_repo.get_by_id(UUID(payload.id))
         if not user:
             logger.warning("Юзер не найден при обновлении токена | user_id={}", payload.id)
-            raise InvalidTokenException("Invalid refresh token") from None
+            raise InvalidTokenException("Invalid refresh token")
 
         access_token = create_access_token(
             username=user.username, user_id=str(user.id), email=user.email, role=user.role.value

@@ -91,7 +91,7 @@ class VacancyAnalyzer:
 
         except Exception as e:
             logger.error(f"Неожиданная ошибка при вызове LLM: {e}")
-            raise LLMGenerationError(f"Не удалось получить ответ от LLM: {e}") from e
+            raise LLMGenerationError("Не удалось получить ответ от LLM") from e
 
     async def analyze(
         self,
@@ -136,7 +136,7 @@ class VacancyAnalyzer:
             raise
         except Exception as e:
             logger.error(f"Неожиданная ошибка при анализе: {e}")
-            raise LLMGenerationError(f"Неожиданная ошибка при анализе: {e}") from e
+            raise LLMGenerationError("Неожиданная ошибка при анализе") from e
 
     async def analyze_from_db(
         self,

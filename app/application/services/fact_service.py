@@ -139,9 +139,9 @@ class FactService:
 
             try:
                 mem0_id = result["results"][0]["id"]
-            except (KeyError, IndexError, ValueError, TypeError):
+            except (KeyError, IndexError, ValueError, TypeError) as e:
                 logger.error("mem0ai вернул неожиданный ответ: {!r}", result)
-                raise FactCreationException("Memory service returned unexpected response") from None
+                raise FactCreationException("Memory service returned unexpected response") from e
 
             new_fact = Fact(
                 user_id=user_id,
