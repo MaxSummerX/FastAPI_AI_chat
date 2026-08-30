@@ -3,7 +3,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 
-from app.application.exceptions.vacancy import InvalidVacancyCursorError
 from app.application.schemas.pagination import PaginatedResponse
 from app.application.schemas.vacancy import VacancyPaginationResponse, VacancyResponse
 from app.application.services.vacancy_service import VacancyService
@@ -56,19 +55,15 @@ async def get_all_vacancies(
         f"с пагинацией: limit={limit}, cursor={'да' if cursor else 'нет'}"
     )
 
-    try:
-        page = await vacancy_service.get_paginated(
-            current_user.id,
-            tier=tier,
-            favorite=favorite,
-            order_by=order_by,
-            order_desc=order_desc,
-            cursor=cursor,
-            limit=limit,
-        )
-    except InvalidVacancyCursorError as e:
-        logger.warning(f"Невалидный курсор от пользователя {current_user.id}: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    page = await vacancy_service.get_paginated(
+        current_user.id,
+        tier=tier,
+        favorite=favorite,
+        order_by=order_by,
+        order_desc=order_desc,
+        cursor=cursor,
+        limit=limit,
+    )
 
     logger.info(f"Возвращено {len(page.items)} вакансий, has_next={page.has_next}")
 
@@ -103,11 +98,7 @@ async def hh_vacancy(
     """
     logger.info(f"Запрос на получение вакансии по HH.ru id {hh_id_vacancy} для пользователя {current_user.id}")
 
-    try:
-        await vacancy_service.add_hh_vacancy(current_user.id, hh_id_vacancy)
-    except Exception as e:
-        logger.error(f"Ошибка при импорте вакансии {hh_id_vacancy}: {e}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacancy not found") from None
+    await vacancy_service.add_hh_vacancy(current_user.id, hh_id_vacancy)
 
     logger.info(f"Вакансия {hh_id_vacancy} добавлена пользователю {current_user.email}")
     return
