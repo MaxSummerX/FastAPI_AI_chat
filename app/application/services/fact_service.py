@@ -105,9 +105,10 @@ class FactService:
         Создать факт в PostgreSQL и mem0ai.
 
         Процесс:
-        1. Добавляет факт в Qdrant через mem0ai (infer=False - без связей в Neo4j)
-        2. Получает mem0_id из ответа Qdrant
-        3. Создаёт запись в PostgreSQL с mem0_id
+          1. Добавляет факт в Qdrant через mem0ai (infer=False - без связей в Neo4j)
+          2. Получает mem0_id из ответа Qdrant
+          3. Создаёт запись в PostgreSQL с mem0_id
+          4. При сбое PG - компенсация: вектор удаляется из Qdrant
 
         Args:
             user_id: UUID пользователя
@@ -117,49 +118,53 @@ class FactService:
             None (функция для background task)
 
         Raises:
-            Exception: При ошибке создания в mem0ai или PostgreSQL
+            FactCreationException: Ошибка внешней системы памяти (mem0ai/Qdrant) -> 502
         """
+        category = data.category if data.category else FactCategory.PERSONAL
+
+        mem0_metadata = {
+            "source_type": FactSource.USER_PROVIDED.value,
+            "category": category.value,
+        }
+
+        if data.metadata_:
+            mem0_metadata.update(data.metadata_)
         try:
-            category = data.category
-
-            if category is None:
-                category = FactCategory.PERSONAL
-
-            mem0_metadata = {
-                "source_type": FactSource.USER_PROVIDED.value,
-                "category": category.value,
-            }
-
-            if data.metadata_:
-                mem0_metadata.update(data.metadata_)
-
             result = await self.memory_service.add(
                 messages=data.content, user_id=str(user_id), infer=False, metadata=mem0_metadata
             )
-
-            try:
-                mem0_id = result["results"][0]["id"]
-            except (KeyError, IndexError, ValueError, TypeError) as e:
-                logger.error("mem0ai вернул неожиданный ответ: {!r}", result)
-                raise FactCreationException("Memory service returned unexpected response") from e
-
-            new_fact = Fact(
-                user_id=user_id,
-                content=data.content,
-                category=category,
-                source_type=FactSource.USER_PROVIDED,
-                confidence=data.confidence,
-                metadata_=data.metadata_,
-                mem0_id=UUID(mem0_id),  # Конвертируем строку в UUID
-            )
-
-            await self.fact_repo.save(new_fact)
-
-            logger.info(f"Факт {new_fact.id} создан с mem0_id {new_fact.mem0_id}")
-
-        except Exception:
-            # Логирует роутер
+        except FactCreationException:
             raise
+        except Exception as e:
+            logger.exception(f"Ошибка mem0ai/Qdrant при создании факта | user_id = {user_id}")
+            raise FactCreationException("Memory service error while creating fact") from e
+
+        try:
+            mem0_id = result["results"][0]["id"]
+        except (KeyError, IndexError, ValueError, TypeError) as e:
+            logger.error("mem0ai вернул неожиданный ответ: {!r}", result)
+            raise FactCreationException("Memory service returned unexpected response") from e
+
+        new_fact = Fact(
+            user_id=user_id,
+            content=data.content,
+            category=category,
+            source_type=FactSource.USER_PROVIDED,
+            confidence=data.confidence,
+            metadata_=data.metadata_,
+            mem0_id=UUID(mem0_id),  # Конвертируем строку в UUID
+        )
+
+        try:
+            await self.fact_repo.save(new_fact)
+        except Exception:
+            try:
+                await self.memory_service.delete(memory_id=str(mem0_id))
+            except Exception:
+                logger.exception(f"Вектор-сирота {mem0_id} остался в Qdrant")
+            raise
+
+        logger.info(f"Факт {new_fact.id} создан с mem0_id {new_fact.mem0_id}")
 
     async def update_user_fact(
         self,
@@ -171,9 +176,9 @@ class FactService:
         Обновить факт в PostgreSQL и mem0ai.
 
         Процесс:
-        1. Удаляет старый факт из Qdrant
-        2. Добавляет новый факт в Qdrant
-        3. Обновляет запись в PostgreSQL с новым mem0_id
+        1. Добавить НОВЫЙ вектор в Qdrant (старый пока жив)
+        2. Обновить PG: mem0_id -> новый (сбой -> компенсация: удалить новый вектор)
+        3. Удалить СТАРЫЙ вектор (сбой -> безвредный сирота в логе)
 
         Args:
             user_id: UUID пользователя
@@ -183,48 +188,66 @@ class FactService:
             None (функция для background task)
 
         Raises:
-            ValueError: Если факт не найден
-            Exception: При ошибке обновления в mem0ai или PostgreSQL
+            FactNotFoundException: Факт не найден или недоступен
+            UserProvidedException: Факт не создан пользователем (нельзя редактировать)
+            ValueError: У факта нет mem0_id (невозможное состояние)
+            FactCreationException: Ошибка внешней системы памяти -> 502
         """
+        fact = await self._get_fact_or_404_or_403(fact_id, user_id)
+
+        if not fact.mem0_id:
+            raise ValueError(f"Факт {fact.id} не имеет mem0_id - невозможное состояние")
+
+        old_mem0_id = str(fact.mem0_id)
+
+        category = data.category if data.category else FactCategory.PERSONAL
+
+        mem0_metadata = {
+            "source_type": FactSource.USER_PROVIDED.value,
+            "category": category.value,
+        }
+
+        if data.metadata_:
+            mem0_metadata.update(data.metadata_)
+
         try:
-            fact = await self._get_fact_or_404_or_403(fact_id, user_id)
-
-            if not fact.mem0_id:
-                raise ValueError(f"Факт {fact.id} не имеет mem0_id - невозможное состояние")
-
-            # 1. Удалить старый факт из Qdrant
-            await self.memory_service.delete(memory_id=str(fact.mem0_id))
-            logger.info(f"Удален старый mem0_id {fact.mem0_id} из Qdrant")
-
-            category = data.category if data.category else FactCategory.PERSONAL
-
-            mem0_metadata = {
-                "source_type": FactSource.USER_PROVIDED.value,
-                "category": category.value,
-            }
-
-            if data.metadata_:
-                mem0_metadata.update(data.metadata_)
-
-            # 2. Добавить новый факт в Qdrant
             result = await self.memory_service.add(
                 messages=data.content,
                 user_id=str(user_id),
                 infer=False,
                 metadata=mem0_metadata,
             )
-
-            update_data = data.model_dump(exclude_unset=True, by_alias=False)
-            update_data["mem0_id"] = UUID(result["results"][0]["id"])  # Конвертируем строку в UUID
-            update_data["category"] = category
-
-            await self.fact_repo.update(fact_id, update_data)
-
-            logger.info(f"Факт {fact.id} обновлён с новым mem0_id {result['results'][0]['id']}")
-
+        except FactCreationException:
+            raise
         except Exception as e:
-            logger.error(f"Ошибка при обновлении факта {fact_id}: {e}")
-            raise  # TODO: что если произошел rollback?
+            logger.exception(f"Ошибка mem0ai/Qdrant при обновлении факта {fact_id}")
+            raise FactCreationException("Memory service error while updating fact") from e
+
+        try:
+            new_mem0_id = result["results"][0]["id"]
+        except (KeyError, IndexError, ValueError, TypeError) as e:
+            logger.error("mem0ai вернул неожиданный ответ: {!r}", result)
+            raise FactCreationException("Memory service returned unexpected response") from e
+
+        update_data = data.model_dump(exclude_unset=True, by_alias=False)
+        update_data["mem0_id"] = UUID(str(new_mem0_id))
+        update_data["category"] = category
+
+        try:
+            await self.fact_repo.update(fact_id, update_data)
+        except Exception:
+            try:
+                await self.memory_service.delete(memory_id=str(new_mem0_id))
+            except Exception:
+                logger.exception(f"Вектор-сирота {new_mem0_id} остался в Qdrant")
+            raise
+
+        try:
+            await self.memory_service.delete(memory_id=old_mem0_id)
+        except Exception:
+            logger.exception(f"Старый вектор {old_mem0_id} не удалён из Qdrant")
+
+        logger.info(f"Факт {fact.id} обновлён с новым mem0_id {new_mem0_id}")
 
     async def delete_user_fact(
         self,
