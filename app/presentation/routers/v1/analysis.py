@@ -1,9 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from loguru import logger
 
-from app.application.exceptions.vacancy import AnalysisNotFoundError
 from app.application.schemas.vacancy_analysis import VacancyResponse
 from app.application.services.vacancy_analysis_service import VacancyAnalysisService
 from app.domain.models.user import User as UserModel
@@ -26,10 +25,7 @@ async def get_analysis(
     """
     logger.info(f"Запрос на получение анализа {id_analysis} пользователя {current_user.id}")
 
-    try:
-        analysis = await analysis_service.get_analysis(current_user.id, id_analysis)
-    except AnalysisNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    analysis = await analysis_service.get_analysis(current_user.id, id_analysis)
 
     return VacancyResponse.model_validate(analysis)
 
@@ -49,7 +45,4 @@ async def delete_analysis(
     """
     logger.info(f"Запрос на удаление анализа {id_analysis} пользователем {current_user.id}")
 
-    try:
-        await analysis_service.delete_analysis(current_user.id, id_analysis)
-    except AnalysisNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+    await analysis_service.delete_analysis(current_user.id, id_analysis)
