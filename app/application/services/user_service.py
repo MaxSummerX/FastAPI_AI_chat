@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from app.application.exceptions.user import (
     EmailAlreadyExistsException,
@@ -138,7 +139,10 @@ class UserService:
 
         # 4. Обновляем email
         user.email = new_email
-        result = await self.user_repo.save(user)
+        try:
+            result = await self.user_repo.save(user)
+        except IntegrityError as e:
+            raise EmailAlreadyExistsException("Email already exists") from e
 
         return UserResponseBase.model_validate(result)
 
@@ -181,7 +185,10 @@ class UserService:
 
         # 4. Обновляем username
         user.username = new_username
-        result = await self.user_repo.save(user)
+        try:
+            result = await self.user_repo.save(user)
+        except IntegrityError as e:
+            raise UsernameAlreadyExistsException("Username already exists") from e
 
         return UserResponseBase.model_validate(result)
 
