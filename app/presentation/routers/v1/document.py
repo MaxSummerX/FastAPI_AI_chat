@@ -1,9 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from loguru import logger
+from fastapi import APIRouter, Depends, Query, status
 
-from app.application.exceptions.document import DocumentNotFoundError
 from app.application.schemas.document import (
     BaseResponse,
     DocumentCreate,
@@ -19,7 +17,6 @@ from app.infrastructure.persistence.pagination import (
     DEFAULT_OFFSET,
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
-    InvalidCursorError,
 )
 from app.presentation.dependencies import get_current_user, get_document_service
 
@@ -50,18 +47,13 @@ async def get_all_documents(
     **Возможные ошибки:**
     - `400` — невалидный формат курсора
     """
-    try:
-        return await service.get_user_documents(
-            category=category,
-            limit=limit,
-            cursor=cursor,
-            user_id=current_user.id,
-            include_archived=include_archived,
-        )
-
-    except InvalidCursorError as e:
-        logger.warning("Невалидный курсор пользователя {}: {}", current_user.id, str(e))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    return await service.get_user_documents(
+        category=category,
+        limit=limit,
+        cursor=cursor,
+        user_id=current_user.id,
+        include_archived=include_archived,
+    )
 
 
 @router.get("/search", status_code=status.HTTP_200_OK, summary="Поиск документов по тексту")
@@ -101,16 +93,7 @@ async def get_document(
     **Возможные ошибки:**
     - `404` — документ не найден или принадлежит другому пользователю
     """
-    try:
-        return await service.get_user_document(document_id=document_id, current_user_id=current_user.id)
-    except DocumentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-
-    except Exception as e:
-        logger.error("Ошибка при запросе документа пользователем {}: {}", current_user.id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating document"
-        ) from None
+    return await service.get_user_document(document_id=document_id, current_user_id=current_user.id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="Создать новый документ")
@@ -125,14 +108,7 @@ async def create_document(
     **Возможные ошибки:**
     - `422` — некорректные данные документа
     """
-    try:
-        return await service.create_user_document(document_data=document_data, current_user_id=current_user.id)
-
-    except Exception as e:
-        logger.error("Ошибка при создании документа пользователем {}: {}", current_user.id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating document"
-        ) from None
+    return await service.create_user_document(document_data=document_data, current_user_id=current_user.id)
 
 
 @router.patch("/{document_id}", status_code=status.HTTP_200_OK, summary="Обновить документ")
@@ -150,19 +126,9 @@ async def update_document(
     **Возможные ошибки:**
     - `404` — документ не найден или принадлежит другому пользователю
     """
-    try:
-        return await service.update_user_document(
-            document_id=document_id, document_data=document_data, current_user_id=current_user.id
-        )
-
-    except DocumentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-
-    except Exception as e:
-        logger.error("Ошибка при обновлении документа: {} пользователем {}: {}", document_id, current_user.id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating document"
-        ) from None
+    return await service.update_user_document(
+        document_id=document_id, document_data=document_data, current_user_id=current_user.id
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить документ")
@@ -180,14 +146,4 @@ async def delete_document(
     **Возможные ошибки:**
     - `404` — документ не найден или уже архивирован
     """
-    try:
-        await service.soft_delete_user_document(document_id=document_id, current_user_id=current_user.id)
-
-    except DocumentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-
-    except Exception as e:
-        logger.error("Ошибка при удалении документа: {} пользователем {}: {}", document_id, current_user.id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting document"
-        ) from None
+    await service.soft_delete_user_document(document_id=document_id, current_user_id=current_user.id)
