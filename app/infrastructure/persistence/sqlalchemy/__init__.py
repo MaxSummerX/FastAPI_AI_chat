@@ -4,6 +4,7 @@ from .fact_repository import FactsSQLAlchemyRepository
 from .invite_repository import InviteSQLAlchemyRepository
 from .message_repository import MessageSQLAlchemyRepository
 from .prompt_repository import PromptSQLAlchemyRepository
+from .unit_of_work import SqlAlchemyUnitOfWork
 from .user_repository import UserSQLAlchemyRepository
 from .vacancy_repository import VacancySQLAlchemyRepository
 
@@ -17,4 +18,5 @@ __all__ = [
     "UserSQLAlchemyRepository",
     "VacancySQLAlchemyRepository",
     "FactsSQLAlchemyRepository",
+    "SqlAlchemyUnitOfWork",
 ]

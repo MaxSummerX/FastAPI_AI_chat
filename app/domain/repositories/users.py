@@ -167,3 +167,18 @@ class IUserRepository(ABC):
             Объект User или None, если пользователь не найден
         """
         pass
+
+    @abstractmethod
+    async def create_without_commit(self, username: str, email: str, password_hash: str) -> User:
+        """
+        Создать пользователя без коммита (flush для получения ID).
+
+        Args:
+            username: Имя пользователя
+            email: Email адрес
+            password_hash: Хэш пароля
+
+        Returns:
+            Объект User
+        """
+        pass

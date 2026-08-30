@@ -200,3 +200,23 @@ class UserSQLAlchemyRepository(IUserRepository):
         )
         user: User | None = result.scalar_one_or_none()
         return user
+
+    async def create_without_commit(self, username: str, email: str, password_hash: str) -> User:
+        """
+        Создать пользователя без коммита (flush для получения ID).
+
+        Коммит выполняет вызывающий сервис - паттерн Unit of Work
+        для составных транзакций (например, регистрация с инвайтом).
+
+        Args:
+            username: Имя пользователя
+            email: Email адрес
+            password_hash: Хэш пароля
+
+        Returns:
+            Объект User
+        """
+        new_user = User(username=username, email=email, password_hash=password_hash)
+        self.db.add(new_user)
+        await self.db.flush()
+        return new_user

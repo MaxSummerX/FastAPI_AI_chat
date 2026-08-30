@@ -15,6 +15,7 @@ from app.application.exceptions.auth import (
 from app.application.schemas.auth import RefreshTokenResponse
 from app.application.schemas.user import UserResponseBase
 from app.domain.repositories.invites import IInviteRepository
+from app.domain.repositories.unit_of_work import IUnitOfWork
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.security import hash_password, verify_password
 from app.infrastructure.security.jwt_service import (
@@ -28,9 +29,12 @@ from app.infrastructure.security.jwt_service import (
 class AuthService:
     """Сервис для аутентификации и регистрации пользователей"""
 
-    def __init__(self, user_repo: IUserRepository, invite_repo: IInviteRepository, require_invite: bool = False):
+    def __init__(
+        self, user_repo: IUserRepository, invite_repo: IInviteRepository, uow: IUnitOfWork, require_invite: bool = False
+    ):
         self.user_repo = user_repo
         self.invite_repo = invite_repo
+        self.uow = uow
         self.require_invite = require_invite
 
     async def register_user(
@@ -132,9 +136,11 @@ class AuthService:
 
         hashed_password = hash_password(password)
 
-        new_user = await self.user_repo.create(username=username, email=email, password_hash=hashed_password)
-
+        new_user = await self.user_repo.create_without_commit(
+            username=username, email=email, password_hash=hashed_password
+        )
         await self.invite_repo.mark_as_used(invite, new_user.id)
+        await self.uow.commit()
 
         return UserResponseBase.model_validate(new_user)
 

@@ -51,6 +51,9 @@ class InviteSQLAlchemyRepository(IInviteRepository):
         """
         Получить доступный (неиспользованный) инвайт по коду.
 
+        Блокирует строку до конца транзакции (SELECT ... FOR UPDATE):
+        параллельная регистрация тем же кодом получит None.
+
         Args:
             code: Инвайт-код
 
@@ -58,7 +61,7 @@ class InviteSQLAlchemyRepository(IInviteRepository):
             Объект Invite или None если не найден или уже использован
         """
         result: Invite | None = await self.db.scalar(
-            select(Invite).where(Invite.code == code, Invite.is_used.is_(False))
+            select(Invite).where(Invite.code == code, Invite.is_used.is_(False)).with_for_update()
         )
         return result
 
@@ -81,7 +84,8 @@ class InviteSQLAlchemyRepository(IInviteRepository):
         """
         Пометить инвайт как использованный.
 
-        Устанавливает флаг is_used, сохраняет ID пользователя и время использования.
+        Устанавливает флаг is_used, ID пользователя и время использования.
+        Коммит выполняет вызывающий сервис — единая транзакция с созданием пользователя.
 
         Args:
             invite: Объект инвайта
@@ -93,7 +97,7 @@ class InviteSQLAlchemyRepository(IInviteRepository):
         invite.is_used = True
         invite.used_by_user_id = user_id
         invite.used_at = datetime.now(UTC)
-        return await self.save(invite)
+        return invite
 
     async def save(self, invite: Invite) -> Invite:
         """

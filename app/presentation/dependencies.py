@@ -54,6 +54,7 @@ from app.infrastructure.persistence.sqlalchemy import (
     InviteSQLAlchemyRepository,
     MessageSQLAlchemyRepository,
     PromptSQLAlchemyRepository,
+    SqlAlchemyUnitOfWork,
     UserSQLAlchemyRepository,
     VacancySQLAlchemyRepository,
 )
@@ -187,7 +188,9 @@ def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserServ
 
 
 def get_auth_service(
-    user_repo: IUserRepository = Depends(get_user_repo), invite_repo: IInviteRepository = Depends(get_invite_repo)
+    user_repo: IUserRepository = Depends(get_user_repo),
+    invite_repo: IInviteRepository = Depends(get_invite_repo),
+    session: AsyncSession = Depends(get_db),
 ) -> AuthService:
     """
     Создаёт сервис авторизации для бизнес-логики аутентификации.
@@ -195,11 +198,12 @@ def get_auth_service(
     Args:
         user_repo: Репозиторий пользователей для доступа к данным
         invite_repo: Репозиторий приглашений для регистрации по инвайту
+        session:
 
     Returns:
         AuthService: Сервис с бизнес-логикой авторизации (логин, регистрация, токены)
     """
-    return AuthService(user_repo, invite_repo, require_invite=settings.REQUIRE_INVITE)
+    return AuthService(user_repo, invite_repo, SqlAlchemyUnitOfWork(session), require_invite=settings.REQUIRE_INVITE)
 
 
 def get_invite_service(invite_repo: IInviteRepository = Depends(get_invite_repo)) -> InviteService:
