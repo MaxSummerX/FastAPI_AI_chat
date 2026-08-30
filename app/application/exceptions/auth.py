@@ -4,29 +4,31 @@
 Каждое исключение описывает конкретную ошибку при операциях аутентификации.
 """
 
+from app.application.exceptions.base import BaseAppException
 
-class UserAlreadyExistsException(Exception):
+
+class UserAlreadyExistsException(BaseAppException):
     """Пользователь с таким username или email уже существует.
 
     Возникает при попытке зарегистрировать пользователя с занятыми учетными данными.
     """
 
 
-class InvalidCredentialsException(Exception):
+class InvalidCredentialsException(BaseAppException):
     """Неверный username или пароль.
 
     Возникает при попытке входа с несуществующим пользователем или неверным паролем.
     """
 
 
-class InvalidInviteCodeException(Exception):
+class InvalidInviteCodeException(BaseAppException):
     """Неверный или уже использованный инвайт-код.
 
     Возникает при регистрации по инвайту с недействительным кодом.
     """
 
 
-class TokenExpiredException(Exception):
+class TokenExpiredException(BaseAppException):
     """Refresh токен истёк.
 
     Возникает при попытке обновить access токен по просроченному refresh токену.
@@ -34,7 +36,7 @@ class TokenExpiredException(Exception):
     """
 
 
-class InvalidTokenException(Exception):
+class InvalidTokenException(BaseAppException):
     """Невалидный токен.
 
     Возникает при попытке декодировать токен с неверной подписью или структурой.

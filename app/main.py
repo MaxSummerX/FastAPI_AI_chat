@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.infrastructure.settings.settings import settings
 from app.lifespan import lifespan
+from app.presentation.exceptions import register_exception_handlers
 from app.presentation.middleware.logging import log_middleware
 from app.presentation.middleware.security_middleware import add_security_headers
 from app.presentation.middleware.timing_middleware import TimingMiddleware
@@ -23,6 +24,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 app.add_middleware(TimingMiddleware)  # Замер времени
+register_exception_handlers(app)
 app.middleware("http")(log_middleware)
 app.middleware("http")(add_security_headers)  # Security headers
 

@@ -1,16 +1,19 @@
-class FactNotFoundException(Exception):
+from app.application.exceptions.base import BaseAppException
+
+
+class FactNotFoundException(BaseAppException):
     """Факт не найден"""
 
     pass
 
 
-class UserProvidedException(Exception):
+class UserProvidedException(BaseAppException):
     """Факт не был создан пользователем (нельзя редактировать/удалять)"""
 
     pass
 
 
-class FactCreationException(Exception):
+class FactCreationException(BaseAppException):
     """Ошибка создания факта во внешней системе памяти (mem0ai/Qdrant)."""
 
     pass
