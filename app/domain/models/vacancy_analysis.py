@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, types
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, types
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -91,6 +91,7 @@ class VacancyAnalysis(Base):
 
     # Индексы
     __table_args__ = (
+        UniqueConstraint("user_id", "vacancy_id", "analysis_type", name="uq_vacancy_analysis_user_vacancy_type"),
         Index("ix_vacancy_analyses_vacancy_type_created", "vacancy_id", "analysis_type", "created_at"),
         Index("ix_vacancy_analyses_user_created", "user_id", "created_at"),
         Index("ix_vacancy_analyses_pagination_created", "user_id", "created_at", "id"),

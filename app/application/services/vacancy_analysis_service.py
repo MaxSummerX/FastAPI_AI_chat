@@ -8,6 +8,7 @@ Use cases: список анализов вакансии, создание ан
 from uuid import UUID
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from app.application.exceptions.analysis import InvalidAnalysisTypeError
 from app.application.exceptions.vacancy import (
@@ -127,7 +128,10 @@ class VacancyAnalysisService:
             custom_prompt=custom_prompt,
             result_text=result,
         )
-        saved = await self.analysis_repo.save(analysis)
+        try:
+            saved = await self.analysis_repo.save(analysis)
+        except IntegrityError as e:
+            raise AnalysisAlreadyExistsError(f"Analysis {analysis_type.value} already exists") from e
         logger.info(f"Анализ {analysis_type.value} вакансии {vacancy_id} сохранён: {saved.id}")
         return saved
 
