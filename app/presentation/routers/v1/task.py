@@ -1,3 +1,4 @@
+import hashlib
 from typing import Any
 
 import redis.asyncio as redis
@@ -27,6 +28,11 @@ TIME_LOCK = 300
 redis_client = redis.from_url(settings.LOCK_REDIS_URL, decode_responses=True)
 
 
+async def acquire_lock(lock_key: str, ttl_seconds: int) -> bool:
+    """Атомарно захватить блокировку (SET NX EX)."""
+    return bool(await redis_client.set(lock_key, "1", nx=True, ex=ttl_seconds))
+
+
 @router.patch(
     "/update_archive_status/{task_run_name}",
     status_code=status.HTTP_202_ACCEPTED,
@@ -40,8 +46,7 @@ async def update_archive_status(
     # Формируем уникальный task_id и lock_key
     task_id = f"update:{current_user.id}:{task_run_name}"
     lock_key = f"active:{task_id}"
-    active_lock = await redis_client.get(lock_key)
-    if active_lock:
+    if not await acquire_lock(lock_key, TIME_LOCK):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -50,8 +55,6 @@ async def update_archive_status(
                 "task_id": task_id,
             },
         )
-    # Ставим блокировку
-    await redis_client.setex(lock_key, TIME_LOCK, "1")
 
     task = sync_archive_statuses_task.apply_async(
         task_id=task_id,
@@ -95,13 +98,14 @@ async def task_import_vacancies(
     - moreThan6: Более 6 лет
     """
 
+    query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+
     # Формируем уникальный task_id и lock_key
-    task_id = f"import:{current_user.id}:{query}"
+    task_id = f"import:{current_user.id}:{query_hash}"
     lock_key = f"active:{task_id}"
 
     # Проверяем есть ли активная задача
-    active_lock = await redis_client.get(lock_key)
-    if active_lock:
+    if not await acquire_lock(lock_key, TIME_LOCK):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -110,9 +114,6 @@ async def task_import_vacancies(
                 "task_id": task_id,
             },
         )
-
-    # Ставим блокировку на 5 минут (автоудаление если задача упадёт)
-    await redis_client.setex(lock_key, 300, "1")
 
     logger.info(f"Запущена фоновая задача {task_id} для импорта вакансий по запросу: {query}")
 
@@ -201,8 +202,7 @@ async def task_analysis_vacancies(
     lock_key = f"active:{task_id}"
 
     # Проверяем есть ли активная задача
-    active_lock = await redis_client.get(lock_key)
-    if active_lock:
+    if not await acquire_lock(lock_key, TIME_LOCK):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -211,9 +211,6 @@ async def task_analysis_vacancies(
                 "task_id": task_id,
             },
         )
-
-    # Ставим блокировку на 5 минут
-    await redis_client.setex(lock_key, 300, "1")
 
     # Запускаем задачу
     task = ai_analyse_task.apply_async(
