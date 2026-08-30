@@ -41,36 +41,28 @@ async def conversations_import(
     file_path, split_dir = build_paths(current_user.id)
     file_size = await save_file_with_validation(file, file_path)
 
-    try:
-        if provider == ImportedProvider.GPT:
-            background_tasks.add_task(
-                upload_service.import_from_gpt,
-                current_user.id,
-                provider.value,
-                file_path,
-                split_dir,
-            )
-        elif provider == ImportedProvider.CLAUDE:
-            background_tasks.add_task(
-                upload_service.import_from_claude,
-                current_user.id,
-                provider.value,
-                file_path,
-                split_dir,
-            )
+    if provider == ImportedProvider.GPT:
+        background_tasks.add_task(
+            upload_service.import_from_gpt,
+            current_user.id,
+            provider.value,
+            file_path,
+            split_dir,
+        )
+    elif provider == ImportedProvider.CLAUDE:
+        background_tasks.add_task(
+            upload_service.import_from_claude,
+            current_user.id,
+            provider.value,
+            file_path,
+            split_dir,
+        )
 
-        return {
-            "filename": file.filename,
-            "content_type": file.content_type,
-            "size_bytes": file_size,
-            "size_mb": round(file_size / (1024 * 1024), 2),
-            "message": "processing",
-            "provider": provider.value,
-        }
-
-    except Exception as e:
-        logger.error(f"Unexpected error при загрузке файла {file.filename}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="File upload failed",
-        ) from None
+    return {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size_bytes": file_size,
+        "size_mb": round(file_size / (1024 * 1024), 2),
+        "message": "processing",
+        "provider": provider.value,
+    }
