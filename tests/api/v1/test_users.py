@@ -11,9 +11,10 @@
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.domain.models.user import User as UserModel
+from tests.conftest import TEST_DATABASE_URL
 
 
 # ============================================================
@@ -493,6 +494,81 @@ async def test_register_with_invite_success(client: AsyncClient, db_session: Asy
         },
     )
     assert response.status_code == 201
+
+
+@pytest.mark.skipif("sqlite" in TEST_DATABASE_URL, reason="Гонка требует PostgreSQL: FOR UPDATE и реальные коммиты")
+@pytest.mark.asyncio
+async def test_register_same_invite_concurrently(
+    client: AsyncClient, db_session: AsyncSession, db_engine: AsyncEngine
+) -> None:
+    """Тест: гонка двух одновременных регистраций с одним инвайтом.
+
+    До фикса (FOR UPDATE + единая транзакция) оба запроса могли пройти
+    проверку get_available_invite и создать двух пользователей на один код.
+    После — вторая регистрация обязана получить 403.
+
+    Требует PostgreSQL (TEST_DATABASE_URL): SQLite игнорирует FOR UPDATE.
+    """
+    import asyncio
+    import uuid
+    from collections.abc import AsyncGenerator
+    from datetime import UTC, datetime
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.domain.models.invite import Invite as InviteModel
+    from app.infrastructure.database.dependencies import get_db
+    from app.main import app as main_app
+
+    test_session_maker = async_sessionmaker(db_engine, expire_on_commit=False)
+
+    # Инвайт создаём реальным коммитом: db_session работает в savepoint
+    # с fake_commit, его данные не видны другим соединениям.
+    async with test_session_maker() as setup_session:
+        invite = InviteModel(
+            id=uuid.uuid4(),
+            code="RACECODE123",
+            is_used=False,
+            created_at=datetime.now(UTC),
+        )
+        setup_session.add(invite)
+        await setup_session.commit()
+
+    # Гонка требует независимых сессий: дефолтный override отдаёт ОДНУ session
+    # на все запросы, а AsyncSession не допускает конкурентного доступа.
+    # Свежая сессия из ТЕСТОВОГО engine для каждого запроса.
+
+    async def per_request_session() -> AsyncGenerator:
+        async with test_session_maker() as session:
+            yield session
+
+    main_app.dependency_overrides[get_db] = per_request_session
+
+    # Две регистрации одним кодом строго параллельно
+    responses = await asyncio.gather(
+        client.post(
+            "/api/v1/user/register",
+            json={
+                "username": "race_user_1",
+                "email": "race1@example.com",
+                "password": "RacePassword123!",
+                "invite_code": "RACECODE123",
+            },
+        ),
+        client.post(
+            "/api/v1/user/register",
+            json={
+                "username": "race_user_2",
+                "email": "race2@example.com",
+                "password": "RacePassword123!",
+                "invite_code": "RACECODE123",
+            },
+        ),
+    )
+
+    # Ровно одна успешна (201), вторая — 403 (инвайт уже использован)
+    statuses = sorted(r.status_code for r in responses)
+    assert statuses == [201, 403], f"Ожидались статусы [201, 403], получены: {statuses}"
 
 
 @pytest.mark.asyncio

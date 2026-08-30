@@ -234,6 +234,39 @@ async def test_create_analysis_already_exists(
 
 
 @pytest.mark.asyncio
+async def test_create_analysis_race_integrity_error() -> None:
+    """
+    Тест: гонка создания анализа — UNIQUE-констрейнт даёт IntegrityError → 409.
+    """
+    from unittest.mock import AsyncMock
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.application.exceptions.vacancy import AnalysisAlreadyExistsError
+    from app.application.services.vacancy_analysis_service import VacancyAnalysisService
+
+    repo = AsyncMock()
+    repo.exists_for = AsyncMock(return_value=False)  # fast-path пройден (гонка!)
+    repo.save = AsyncMock(side_effect=IntegrityError("duplicate key", None, Exception("unique violation")))
+
+    vacancy_repo = AsyncMock()
+    analyzer = AsyncMock()
+    analyzer.analyze_from_db = AsyncMock(return_value=("результат анализа", "prompt template"))
+
+    service = VacancyAnalysisService(analysis_repo=repo, vacancy_repo=vacancy_repo, analyzer=analyzer)
+
+    with pytest.raises(AnalysisAlreadyExistsError):
+        await service.create_analysis(
+            uuid.uuid4(),
+            uuid.uuid4(),
+            analysis_type=AnalysisType.MATCHING,
+            custom_prompt=None,
+            title=None,
+            resume="Резюме " * 50,  # > 300 символов: проходит проверку MIN_SIZE_RESUME
+        )
+
+
+@pytest.mark.asyncio
 async def test_create_analysis_vacancy_not_found(
     client_with_mocked_llm: AsyncClient, auth_headers_llm: dict[str, str]
 ) -> None:
