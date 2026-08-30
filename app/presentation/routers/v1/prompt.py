@@ -1,9 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from loguru import logger
+from fastapi import APIRouter, Depends, Query, status
 
-from app.application.exceptions.prompt import PromptNotFoundError
 from app.application.schemas.pagination import PaginatedResponse
 from app.application.schemas.prompt import PromptCreate, PromptResponse, PromptUpdate
 from app.application.services.prompt_service import PromptService
@@ -11,7 +9,6 @@ from app.domain.models.user import User as UserModel
 from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
-    InvalidCursorError,
 )
 from app.presentation.dependencies import get_current_user, get_prompt_service
 
@@ -41,16 +38,12 @@ async def get_user_prompts(
     **Возможные ошибки:**
     - `400` — невалидный формат курсора
     """
-    try:
-        return await service.get_user_prompts(
-            limit=limit,
-            cursor=cursor,
-            user_id=current_user.id,
-            include_inactive=include_inactive,
-        )
-    except InvalidCursorError as e:
-        logger.warning("Невалидный курсор пользователя {}: {}", current_user.id, str(e))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    return await service.get_user_prompts(
+        limit=limit,
+        cursor=cursor,
+        user_id=current_user.id,
+        include_inactive=include_inactive,
+    )
 
 
 @router.get(
@@ -69,15 +62,7 @@ async def get_prompt(
     **Возможные ошибки:**
     - `404` — промпт не найден или принадлежит другому пользователю
     """
-    try:
-        return await service.get_user_prompt(prompt_id=prompt_id, user_id=current_user.id)
-    except PromptNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-    except Exception as e:
-        logger.error("Ошибка при получении промпта {} пользователем {}: {}", prompt_id, current_user.id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error retrieving prompt"
-        ) from None
+    return await service.get_user_prompt(prompt_id=prompt_id, user_id=current_user.id)
 
 
 @router.post(
@@ -96,11 +81,7 @@ async def create_prompt(
     **Возможные ошибки:**
     - `422` — некорректные данные промпта
     """
-    try:
-        return await service.create_prompt(prompt_data=prompt_data, user_id=current_user.id)
-    except Exception as e:
-        logger.error("Ошибка при создании промпта пользователем {}: {}", current_user.id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating prompt") from None
+    return await service.create_prompt(prompt_data=prompt_data, user_id=current_user.id)
 
 
 @router.patch(
@@ -122,13 +103,7 @@ async def update_prompt(
     **Возможные ошибки:**
     - `404` — промпт не найден или принадлежит другому пользователю
     """
-    try:
-        return await service.update_prompt(prompt_id=prompt_id, prompt_data=prompt_data, user_id=current_user.id)
-    except PromptNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-    except Exception as e:
-        logger.error("Ошибка при обновлении промпта {} пользователем {}: {}", prompt_id, current_user.id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating prompt") from None
+    return await service.update_prompt(prompt_id=prompt_id, prompt_data=prompt_data, user_id=current_user.id)
 
 
 @router.delete(
@@ -149,10 +124,4 @@ async def delete_prompt(
     **Возможные ошибки:**
     - `404` — промпт не найден или принадлежит другому пользователю
     """
-    try:
-        await service.soft_delete_user_prompt(prompt_id=prompt_id, user_id=current_user.id)
-    except PromptNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-    except Exception as e:
-        logger.error("Ошибка при удаление промпта: {} пользователем {}: {}", prompt_id, current_user.id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting prompt") from None
+    await service.soft_delete_user_prompt(prompt_id=prompt_id, user_id=current_user.id)
