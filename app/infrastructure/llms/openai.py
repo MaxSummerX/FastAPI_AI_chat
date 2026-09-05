@@ -72,7 +72,7 @@ class AsyncOpenAILLM(LLMBase):
             self.client = AsyncOpenAI(
                 api_key=os.environ.get("OPENROUTER_API_KEY"),
                 base_url=base_url,
-                timeout=Timeout(connect=CONNECT_TIMEOUT_SEC, read=READ_TIMEOUT_SEC, write=WRITE_TIMEOUT_SEC),
+                timeout=Timeout(connect=CONNECT_TIMEOUT_SEC, read=READ_TIMEOUT_SEC, write=WRITE_TIMEOUT_SEC, pool=5),
                 max_retries=MAX_RETRIES,
             )
         else:
@@ -88,7 +88,7 @@ class AsyncOpenAILLM(LLMBase):
             self.client = AsyncOpenAI(
                 api_key=api_key,
                 base_url=openai_base_url,
-                timeout=Timeout(connect=CONNECT_TIMEOUT_SEC, read=READ_TIMEOUT_SEC, write=WRITE_TIMEOUT_SEC),
+                timeout=Timeout(connect=CONNECT_TIMEOUT_SEC, read=READ_TIMEOUT_SEC, write=WRITE_TIMEOUT_SEC, pool=5),
                 max_retries=MAX_RETRIES,
             )
 

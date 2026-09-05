@@ -69,6 +69,19 @@ def _unescape_values(node: Any) -> Any:
     return node
 
 
+def _extract_lux_state(response_text: str, path: str) -> dict[str, Any]:
+    """
+    Извлечь Lux-InitialState из HTML страницы: CPU-блок парсинга.
+    """
+    template = BeautifulSoup(response_text, "lxml").find("template", id="HH-Lux-InitialState")
+    content = template.string if template is not None else None
+    if content is None:
+        raise HHAntiBotError(f"HH-Lux-InitialState не найден: {path}")
+
+    state: dict[str, Any] = _unescape_values(json.loads(content))
+    return state
+
+
 async def _get_lux_state(
     client: httpx.AsyncClient,
     path: str,
@@ -113,9 +126,7 @@ async def _get_lux_state(
     if content is None:
         raise HHAntiBotError(f"HH-Lux-InitialState не найден: {path}")
 
-    # Сначала парсим JSON "как есть", затем разэкранируем HTML-сущности
-    # в значениях (внутри description встречаются &quot; и т.п.)
-    state: dict[str, Any] = _unescape_values(json.loads(content))
+    state: dict[str, Any] = await asyncio.to_thread(_extract_lux_state, response.text, path)
     return state
 
 
