@@ -10,10 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.infrastructure.settings.settings import settings
 
 
-DATABASE_URL = settings.DATABASE_URL
-
-# Создаём engine (echo=True, для вывода сообщений в консоль)
-async_engine = create_async_engine(DATABASE_URL, echo=True)
+async_engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=settings.DEBUG,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=1800,
+)
 
 # Настраиваем фабрику сеансов
 async_session_maker = async_sessionmaker(async_engine, expire_on_commit=False, class_=AsyncSession)
@@ -33,8 +37,11 @@ def create_session_factory() -> async_sessionmaker:
         проблемы с совместным использованием соединений между процессами.
     """
     engine = create_async_engine(
-        DATABASE_URL,
+        settings.DATABASE_URL,
         pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=1800,
     )
     return async_sessionmaker(
         engine,
