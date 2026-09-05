@@ -4,6 +4,7 @@ from uuid import UUID
 
 import jwt
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from app.application.exceptions.auth import (
     InvalidCredentialsException,
@@ -97,8 +98,11 @@ class AuthService:
 
         hashed_password = hash_password(password)
 
-        new_user = await self.user_repo.create(username=username, email=email, password_hash=hashed_password)
-
+        try:
+            new_user = await self.user_repo.create(username=username, email=email, password_hash=hashed_password)
+        except IntegrityError as e:
+            logger.warning("Гонка регистрации: username или email занят | email = {}", email)
+            raise UserAlreadyExistsException("Username or email already exists") from e
         return UserResponseBase.model_validate(new_user)
 
     async def _register_with_invite(
@@ -136,11 +140,16 @@ class AuthService:
 
         hashed_password = hash_password(password)
 
-        new_user = await self.user_repo.create_without_commit(
-            username=username, email=email, password_hash=hashed_password
-        )
-        await self.invite_repo.mark_as_used(invite, new_user.id)
-        await self.uow.commit()
+        try:
+            new_user = await self.user_repo.create_without_commit(
+                username=username, email=email, password_hash=hashed_password
+            )
+            await self.invite_repo.mark_as_used(invite, new_user.id)
+            await self.uow.commit()
+        except IntegrityError as e:
+            await self.uow.rollback()
+            logger.warning("Гонка регистрации с инвайтом: username или email занят | email={}", email)
+            raise UserAlreadyExistsException("Username or email already exists") from e
 
         return UserResponseBase.model_validate(new_user)
 
