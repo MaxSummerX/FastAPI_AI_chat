@@ -2,7 +2,9 @@ import asyncio
 import html
 import json
 import re
+import socket
 from collections.abc import Awaitable, Callable
+from ipaddress import ip_address
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -73,6 +75,45 @@ def _to_markdown(html_code: str) -> str:
     return _normalize(_strip_tags(text))
 
 
+def _is_private_host(host: str) -> bool:
+    """
+    Явный внутренний хост: localhost, *.localhost, литеральные private/link-local IP. Домены проверяются резолвом отдельно.
+    """
+    hostname = (host or "").split(":")[0].lower()
+    if not hostname or hostname == "localhost" or hostname.endswith(".localhost"):
+        return True
+    try:
+        ip = ip_address(hostname)
+    except ValueError:
+        return False
+
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+
+
+async def _resolve_and_check(url: str) -> str | None:
+    """
+    Резолвит домен; возвращает текст ошибки, если host ведёт на внутренний IP. Защита от доменов с A-записью на 192.168.x.x
+    """
+    try:
+        host = urlparse(url).hostname or ""
+    except Exception as e:
+        return str(e)
+
+    if _is_private_host(host):
+        return f"Host '{host}' is not allowed"
+
+    if not host.replace(".", "").isdigit():
+        try:
+            infos = await asyncio.to_thread(socket.getaddrinfo, host, None)
+        except OSError as e:
+            return f"DNS resolution failed: {e}"
+        for info in infos:
+            ip = ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return f"Host '{host}' resolves to internal address {ip}"
+    return None
+
+
 async def web_search(query: str, max_results: int = 5) -> str | None:
     """Поиск через DuckDuckGo (бесплатно, без ключа)."""
     try:
@@ -102,11 +143,31 @@ async def web_fetch(
 ) -> str:
     """Извлечь через Readability (fallback)."""
     try:
+        ok, err = _validate_url(url)
+
+        if not ok:
+            return json.dumps({"error": f"URL rejected: {err}", "url": url}, ensure_ascii=False)
+
+        resolve_err = await _resolve_and_check(url)
+        if resolve_err:
+            return json.dumps({"error": f"URL rejected: {resolve_err}", "url": url}, ensure_ascii=False)
+
         headers = {"User-Agent": USER_AGENT}
         if accept_markdown:
             headers["Accept"] = "text/markdown, text/html, */*"
 
-        async with httpx.AsyncClient(follow_redirects=True, max_redirects=MAX_REDIRECTS, timeout=30.0) as client:
+        def _reject_private_redirect(request: httpx.Request) -> None:
+            """SSRF-защита: блокирует редиректы на внутренние хосты"""
+            host = request.url.host or ""
+            if _is_private_host(host):
+                raise httpx.ConnectError(f"Redirect to internal host '{host}' blocked")
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            max_redirects=MAX_REDIRECTS,
+            timeout=30.0,
+            event_hooks={"request": [_reject_private_redirect]},
+        ) as client:
             r = await client.get(url, headers=headers)
             r.raise_for_status()
 
