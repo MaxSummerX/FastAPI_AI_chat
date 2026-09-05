@@ -7,11 +7,19 @@ from collections.abc import AsyncIterator, Awaitable
 from typing import Any
 
 from loguru import logger
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, Timeout
 
 from app.infrastructure.llms.base import LLMBase
 from app.infrastructure.llms.configs.base import BaseLlmConfig
 from app.infrastructure.llms.configs.openai import OpenAIConfig
+
+
+FALLBACK_MODEL = "gpt-5-nano"  # модель, если в конфиге пусто
+CONNECT_TIMEOUT_SEC = 5  # установка соединения
+READ_TIMEOUT_SEC = 120  # ожидание данных из сокета (между чанками)
+WRITE_TIMEOUT_SEC = 10  # отправка запроса
+MAX_RETRIES = 3  # ретраи SDK
+STREAM_RESULT_TIMEOUT_SEC = 120  # страховка get_result: брошенный стрим read-таймаут не ловит
 
 
 def extract_json(text: str) -> str:
@@ -50,7 +58,7 @@ class AsyncOpenAILLM(LLMBase):
         super().__init__(config)
 
         if not self.config.model:
-            self.config.model = "gpt-5-nano"
+            self.config.model = FALLBACK_MODEL
 
         if os.environ.get("OPENROUTER_API_KEY"):  # Использование OpenRouter
             base_url: str = "https://openrouter.ai/api/v1"
@@ -61,7 +69,12 @@ class AsyncOpenAILLM(LLMBase):
                 if env_url:
                     base_url = env_url
 
-            self.client = AsyncOpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url=base_url)
+            self.client = AsyncOpenAI(
+                api_key=os.environ.get("OPENROUTER_API_KEY"),
+                base_url=base_url,
+                timeout=Timeout(connect=CONNECT_TIMEOUT_SEC, read=READ_TIMEOUT_SEC, write=WRITE_TIMEOUT_SEC),
+                max_retries=MAX_RETRIES,
+            )
         else:
             api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
             openai_base_url: str = "https://api.openai.com/v1"
@@ -72,7 +85,12 @@ class AsyncOpenAILLM(LLMBase):
                 if env_url:
                     openai_base_url = env_url
 
-            self.client = AsyncOpenAI(api_key=api_key, base_url=openai_base_url)
+            self.client = AsyncOpenAI(
+                api_key=api_key,
+                base_url=openai_base_url,
+                timeout=Timeout(connect=CONNECT_TIMEOUT_SEC, read=READ_TIMEOUT_SEC, write=WRITE_TIMEOUT_SEC),
+                max_retries=MAX_RETRIES,
+            )
 
     @staticmethod
     def _parse_response(response: Any, tools: list[dict[str, Any]] | None) -> str | dict[str, Any]:
@@ -309,7 +327,7 @@ class AsyncOpenAILLM(LLMBase):
             Returns:
                 dict: {"content": str, "tool_calls": list[dict]}
             """
-            await stream_completed.wait()
+            await asyncio.wait_for(stream_completed.wait(), timeout=STREAM_RESULT_TIMEOUT_SEC)
 
             result: dict[str, Any] = {"content": "".join(chunks), "tool_calls": []}
 
