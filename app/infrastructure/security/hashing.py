@@ -5,6 +5,7 @@
 с использованием bcrypt. Stateless функции без зависимости от глобального состояния.
 """
 
+import asyncio
 import os
 
 import bcrypt
@@ -48,3 +49,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     hashed_bytes = hashed_password.encode("utf-8")
     is_valid: bool = bcrypt.checkpw(plain_password.encode("utf-8"), hashed_bytes)
     return is_valid
+
+
+async def hash_password_async(password: str) -> str:
+    """Асинхронная обёртка: hash_password."""
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """Асинхронная обёртка: verify_password."""
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)

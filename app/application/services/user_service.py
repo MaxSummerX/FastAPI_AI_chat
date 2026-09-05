@@ -16,7 +16,7 @@ from app.application.exceptions.user import (
 from app.application.schemas.user import UserResponseBase, UserResponseFull, UserUpdateProfile
 from app.domain.enums.role import UserRole
 from app.domain.repositories.users import IUserRepository
-from app.infrastructure.security import hash_password, verify_password
+from app.infrastructure.security import hash_password_async, verify_password_async
 
 
 class UserService:
@@ -125,7 +125,7 @@ class UserService:
             raise UserNotFoundException("User not found")
 
         # 1. Проверяем текущий пароль
-        if not verify_password(current_password, str(user.password_hash)):
+        if not await verify_password_async(current_password, str(user.password_hash)):
             logger.warning("Неверный пароль при попытке обновления email для: {}", user_id)
             raise IncorrectPasswordException("Incorrect current password")
 
@@ -171,7 +171,7 @@ class UserService:
             raise UserNotFoundException("User not found")
 
         # 1. Проверяем текущий пароль
-        if not verify_password(current_password, str(user.password_hash)):
+        if not await verify_password_async(current_password, str(user.password_hash)):
             logger.warning("Неверный пароль при попытке обновления username: {}", user_id)
             raise IncorrectPasswordException("Incorrect current password")
 
@@ -216,17 +216,17 @@ class UserService:
             raise UserNotFoundException("User not found")
 
         # 1. Проверяем что old_password совпадает с тем что бд
-        if not verify_password(old_password, str(user.password_hash)):
+        if not await verify_password_async(old_password, str(user.password_hash)):
             logger.warning("Неверный пароль при попытке обновления пароля: {}", user_id)
             raise IncorrectPasswordException("Incorrect current password")
 
         # 2. Проверяем что new_password пароль отличается от текущего
-        if verify_password(new_password, str(user.password_hash)):
+        if await verify_password_async(new_password, str(user.password_hash)):
             logger.warning("Новый пароль совпадает с текущим: {}", user_id)
             raise SamePasswordException("New password is the same as the current password")
 
         # 3. Хешируем новый пароль
-        user.password_hash = hash_password(new_password)
+        user.password_hash = await hash_password_async(new_password)
         # 4. Обновляем пароль
         result = await self.user_repo.save(user)
 

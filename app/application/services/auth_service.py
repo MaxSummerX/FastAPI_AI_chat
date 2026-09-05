@@ -18,12 +18,13 @@ from app.application.schemas.user import UserResponseBase
 from app.domain.repositories.invites import IInviteRepository
 from app.domain.repositories.unit_of_work import IUnitOfWork
 from app.domain.repositories.users import IUserRepository
-from app.infrastructure.security import hash_password, verify_password
-from app.infrastructure.security.jwt_service import (
+from app.infrastructure.security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     create_refresh_token,
     decode_token,
+    hash_password_async,
+    verify_password_async,
 )
 
 
@@ -96,7 +97,7 @@ class AuthService:
             logger.warning("Попытка регистрации с занятым email: {}", email)
             raise UserAlreadyExistsException("Email already exists")
 
-        hashed_password = hash_password(password)
+        hashed_password = await hash_password_async(password)
 
         try:
             new_user = await self.user_repo.create(username=username, email=email, password_hash=hashed_password)
@@ -138,7 +139,7 @@ class AuthService:
             logger.warning("Попытка регистрации с занятым email: {}", email)
             raise UserAlreadyExistsException("Email already exists")
 
-        hashed_password = hash_password(password)
+        hashed_password = await hash_password_async(password)
 
         try:
             new_user = await self.user_repo.create_without_commit(
@@ -203,7 +204,7 @@ class AuthService:
             raise InvalidCredentialsException("Incorrect username or password")
 
         # Проверяем пароль
-        if not verify_password(password, user.password_hash):
+        if not await verify_password_async(password, user.password_hash):
             logger.warning("Неверный пароль для username: {}", username_or_email)
             raise InvalidCredentialsException("Incorrect username or password")
 
