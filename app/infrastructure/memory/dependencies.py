@@ -30,6 +30,8 @@ def close_memory() -> None:
     Закрывает singleton AsyncMemory. Вызывается из lifespan при остановке приложения.
     """
     global _memory_service
+    if _memory_service is not None:
+        _memory_service.close()
     _memory_service = None
 
 

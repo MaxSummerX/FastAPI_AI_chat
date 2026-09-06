@@ -2,7 +2,6 @@ import asyncio
 from typing import Any
 from uuid import UUID
 
-import redis
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import worker_process_init, worker_process_shutdown
@@ -18,18 +17,14 @@ from app.domain.models.user import User as UserModel
 from app.domain.models.user_vacancies import UserVacancies as UserVacanciesModel
 from app.domain.models.vacancy import Vacancy as VacancyModel
 from app.domain.models.vacancy_analysis import VacancyAnalysis as VacancyAnalysisModel
+from app.infrastructure.cache.redis import redis_sync as redis_client
 from app.infrastructure.llms.config import analysis_llm_config
 from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.persistence.sqlalchemy.vacancy_repository import VacancySQLAlchemyRepository
-from app.infrastructure.settings.settings import settings
 from app.infrastructure.task_queue.celery_config import celery
 
 
-LOCK_REDIS_URL = settings.LOCK_REDIS_URL
 REQUEST_DELAY: float = 0.3
-
-redis_client = redis.from_url(LOCK_REDIS_URL, decode_responses=True)
-
 
 _worker_resources: dict = {}
 
@@ -48,7 +43,7 @@ def init_worker(**kwargs: Any) -> None:
     asyncio.set_event_loop(loop)
 
     # Потом engine — он создаётся внутри этого loop
-    _worker_resources["session_factory"] = create_session_factory()
+    _worker_resources["session_factory"], _worker_resources["engine"] = create_session_factory()
     _worker_resources["loop"] = loop
 
     async def init_hh() -> None:
@@ -300,6 +295,7 @@ def shutdown_http_clients(**kwargs: Any) -> None:
         from app.infrastructure.hh.headhunter_client import close_hh_client
 
         await close_hh_client()
+        await _worker_resources["engine"].dispose()
 
     try:
         loop.run_until_complete(_shutdown())

@@ -1,7 +1,6 @@
 import hashlib
 from typing import Any
 
-import redis.asyncio as redis
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
@@ -9,7 +8,7 @@ from loguru import logger
 from app.domain.enums.analysis import AnalysisType
 from app.domain.enums.experience import Experience
 from app.domain.models.user import User as UserModel
-from app.infrastructure.settings.settings import settings
+from app.infrastructure.cache.redis import redis_async as redis_client
 from app.infrastructure.task_queue.celery_config import celery
 from app.infrastructure.task_queue.tasks.vacancy_tasks import (
     ai_analyse_task,
@@ -24,8 +23,6 @@ router = APIRouter(prefix="/tasks")
 
 TAGS = "Tasks_v1"
 TIME_LOCK = 300
-
-redis_client = redis.from_url(settings.LOCK_REDIS_URL, decode_responses=True)
 
 
 async def acquire_lock(lock_key: str, ttl_seconds: int) -> bool:

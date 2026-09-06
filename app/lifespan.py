@@ -11,9 +11,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
+from app.infrastructure.cache.redis import ping_redis, redis_async
 from app.infrastructure.hh.headhunter_client import close_hh_client, get_hh_client
 from app.infrastructure.memory.dependencies import close_memory, init_memory
-from app.presentation.routers.v1.task import redis_client
 
 
 @asynccontextmanager
@@ -39,7 +39,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("🚀 Запуск FastAPI приложения...")
     logger.info("🚀 Инициализация AsyncMemory")
     init_memory()
-
+    if await ping_redis():
+        logger.info("✅ Redis (замки) доступен")
+    else:
+        logger.warning("⚠️ Redis недоступен.")
     logger.info("🔌 Инициализация HTTP клиента...")
     await get_hh_client()  # Создаём клиент
     logger.info("✅ HTTP клиенты готовы")
@@ -48,7 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("🛑 Остановка FastAPI приложения...")
     await close_hh_client()
-    await redis_client.aclose()
+    await redis_async.aclose()
     logger.info("✅ HTTP клиенты закрыты")
     logger.info("🛑 Закрытие AsyncMemory")
     close_memory()

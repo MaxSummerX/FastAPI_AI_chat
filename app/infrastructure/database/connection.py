@@ -5,7 +5,7 @@
 Универсальный - поддерживает PostgreSQL, MySQL, SQLite и другие БД через DATABASE_URL.
 """
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.infrastructure.settings.settings import settings
 
@@ -23,14 +23,15 @@ async_engine = create_async_engine(
 async_session_maker = async_sessionmaker(async_engine, expire_on_commit=False, class_=AsyncSession)
 
 
-def create_session_factory() -> async_sessionmaker:
+def create_session_factory() -> tuple[async_sessionmaker, AsyncEngine]:
     """
     Создаёт новый engine и фабрику сессий.
 
     Использовать после fork процесса для создания изолированных соединений.
 
     Returns:
-        Фабрика сессий async_sessionmaker для создания новых AsyncSession.
+        Кортеж (фабрика сессий async_sessionmaker, engine) — engine отдаётся наружу,
+        чтобы владелец (например, celery-воркер) мог вызвать dispose() при остановке.
 
     Note:
         Вызывать необходимо после fork процесса, иначе могут возникать
@@ -43,8 +44,9 @@ def create_session_factory() -> async_sessionmaker:
         max_overflow=20,
         pool_recycle=1800,
     )
-    return async_sessionmaker(
+    factory = async_sessionmaker(
         engine,
         expire_on_commit=False,
         class_=AsyncSession,
     )
+    return factory, engine
