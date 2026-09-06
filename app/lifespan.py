@@ -50,8 +50,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("🛑 Остановка FastAPI приложения...")
-    await close_hh_client()
-    await redis_async.aclose()
-    logger.info("✅ HTTP клиенты закрыты")
-    logger.info("🛑 Закрытие AsyncMemory")
-    close_memory()
+
+    try:
+        logger.info("🛑 Закрытие hh_client")
+        await close_hh_client()
+    except Exception as e:
+        logger.error("Ошибка при закрытии hh-клиента: {}", e)
+
+    try:
+        logger.info("🛑 Закрытие Redis")
+        await redis_async.aclose()
+    except Exception as e:
+        logger.error("Ошибка при закрытии Redis: {}", e)
+
+    try:
+        logger.info("🛑 Закрытие AsyncMemory")
+        close_memory()
+    except Exception as e:
+        logger.error("Ошибка при закрытии AsyncMemory: {}", e)

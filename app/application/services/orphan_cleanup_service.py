@@ -47,8 +47,9 @@ class OrphanCleanupService:
         Returns:
             Отчёт со статистикой сверки и удаления.
         """
-        pg_ids: set[UUID] = await self.fact_repo.get_all_mem0_ids()
+
         qdrant_ids: set[UUID] = await self.scanner.get_all_points_ids()
+        pg_ids: set[UUID] = await self.fact_repo.get_all_mem0_ids()
 
         orphan_ids = qdrant_ids - pg_ids
         logger.info("Сверка Qdrant <-> PG: qdrant={}, pg={}, сирот={}", len(qdrant_ids), len(pg_ids), len(orphan_ids))

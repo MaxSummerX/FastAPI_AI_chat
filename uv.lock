@@ -31,6 +31,7 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
+    { name = "qdrant-client" },
     { name = "rank-bm25" },
     { name = "readability-lxml" },
     { name = "redis" },
@@ -75,6 +76,7 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.10.1" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "python-multipart", specifier = ">=0.0.20" },
+    { name = "qdrant-client", specifier = ">=1.19.0,<2.0.0" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "readability-lxml", specifier = ">=0.8.4.1" },
     { name = "redis", specifier = ">=7.1.1" },
@@ -2590,7 +2592,7 @@ name = "scipy"
 version = "1.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "python_full_version < '3.15'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7e/74/66de6258867beb2ef08f35f9f2ac017a52cacd5081714d239ff1a442d458/scipy-1.18.1.tar.gz", hash = "sha256:52c4b7422442aba924d03ad4019852b08a92e64ea187b933135687bfe2747307", size = 30781235, upload-time = "2026-08-21T23:28:50.599Z" }
 wheels = [

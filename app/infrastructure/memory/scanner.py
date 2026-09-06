@@ -4,6 +4,7 @@
 
 from uuid import UUID
 
+from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
 from app.infrastructure.memory.config import QDRANT_API_KEY, QDRANT_BASE_URL, QDRANT_COLLECTION_NAME
@@ -45,7 +46,13 @@ class QdrantPointScanner:
             )
             for point in points:
                 point_id = point.id
-                ids.add(point_id if isinstance(point_id, UUID) else UUID(str(point_id)))
+                if not isinstance(point_id, UUID):
+                    try:
+                        point_id = UUID(str(point_id))
+                    except ValueError:
+                        logger.warning("Пропущена точка с не-UUID id: {}", point_id)
+                        continue
+                ids.add(point_id)
             if offset is None:
                 break
         return ids
