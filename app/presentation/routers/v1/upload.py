@@ -38,7 +38,7 @@ async def conversations_import(
     validate_file_extension(file.filename)
     validate_mime_type(file.content_type)
 
-    file_path, split_dir = build_paths(current_user.id)
+    file_path, split_dir = await build_paths(current_user.id)
     file_size = await save_file_with_validation(file, file_path)
 
     if provider == ImportedProvider.GPT:

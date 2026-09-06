@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 from pathlib import Path
@@ -20,11 +21,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 CONVERSATION_DIR = BASE_DIR / "temp_files"
 
 
-def build_paths(user_id: UUID) -> tuple[Path, Path]:
-    os.makedirs(CONVERSATION_DIR, exist_ok=True)
+async def build_paths(user_id: UUID) -> tuple[Path, Path]:
     file_path = CONVERSATION_DIR / f"user_{user_id}.json"
     split_dir = CONVERSATION_DIR / f"dialogs_user_{user_id}"
-    os.makedirs(split_dir, exist_ok=True)
+    await asyncio.to_thread(os.makedirs, CONVERSATION_DIR, exist_ok=True)
+    await asyncio.to_thread(os.makedirs, split_dir, exist_ok=True)
     return file_path, split_dir
 
 
@@ -85,6 +86,6 @@ async def save_file_with_validation(file: UploadFile, path: Path) -> int:
 
 
 async def cleanup(path: Path) -> None:
-    """ """
+    """Асинхронно удаляет файл или директорию, если существует."""
     if await aios.path.exists(path):
-        shutil.rmtree(path, ignore_errors=True)
+        await asyncio.to_thread(lambda: shutil.rmtree(path, ignore_errors=True))

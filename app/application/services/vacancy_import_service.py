@@ -279,14 +279,14 @@ class VacancyImportService:
             logger.info(f"✅ Найдено {len(result)} вакансий из {len(vacancies)}")
 
             output_path_obj = Path(output_path)
-            output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(output_path_obj.parent.mkdir, parents=True, exist_ok=True)
 
             temp_output_path = output_path_obj.with_suffix(f"{output_path_obj.suffix}.tmp")
 
             async with aiofiles.open(temp_output_path, mode="w", encoding="utf-8") as file:
                 await file.write(json.dumps(result, indent=2, ensure_ascii=False))
 
-            shutil.move(temp_output_path, output_path)
+            await asyncio.to_thread(shutil.move, temp_output_path, output_path)
 
             logger.info(f"💾 Результат сохранён в: {output_path}")
             return {"filtered": len(result)}

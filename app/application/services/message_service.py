@@ -75,6 +75,7 @@ class MessageService:
         self.prompt_repo = prompt_repo
         self.llm_service = llm_service
         self.memory_service = memory_service
+        self._memory_tasks: set[asyncio.Task] = set()
 
     async def get_user_messages(
         self,
@@ -252,7 +253,8 @@ class MessageService:
                     metadata={"source_type": FactSource.EXTRACTED.value},
                 )
             )
-
+            self._memory_tasks.add(task)
+            task.add_done_callback(self._memory_tasks.discard)
             task.add_done_callback(_handle_memory_result)
 
         logger.info("Сообщение добавлено в беседу {}, стриминг запущен", conversation_id)
