@@ -100,8 +100,7 @@ async def process_conversations_stream(
         async with aiofiles.open(input_file, encoding="utf-8") as f:
             content = await f.read()
 
-        # Парсинг JSON (это CPU операция, но быстрая)
-        conversations = json.loads(content)
+        conversations = await asyncio.to_thread(json.loads, content)
 
         logger.info(f"Загружено {len(conversations)} диалогов")
 

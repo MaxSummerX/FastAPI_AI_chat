@@ -268,7 +268,7 @@ class VacancyImportService:
 
             async with aiofiles.open(input_path, encoding="utf-8") as file:
                 content = await file.read()
-                vacancies = json.loads(content)
+                vacancies = await asyncio.to_thread(json.loads, content)
 
             result = []
             for vacancy in vacancies:
@@ -315,7 +315,7 @@ class VacancyImportService:
 
         async with aiofiles.open(input_path, encoding="utf-8") as file:
             content = await file.read()
-            vacancies = json.loads(content)
+            vacancies = await asyncio.to_thread(json.loads, content)
 
         all_ids = [vac.get("id") for vac in vacancies if vac.get("id")]
 
