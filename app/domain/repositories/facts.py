@@ -152,3 +152,13 @@ class IFactRepository(ABC):
             Последовательность найденных фактов
         """
         pass
+
+    @abstractmethod
+    async def get_all_mem0_ids(self) -> set[UUID]:
+        """
+        Все mem0_id из PG (для сверки с Qdrant и поиска векторов-сирот).
+
+        Returns:
+            Множество mem0_id всех фактов
+        """
+        pass

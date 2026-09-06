@@ -242,3 +242,14 @@ class FactsSQLAlchemyRepository(IFactRepository):
             await self.db.scalars(select(Fact).where(Fact.content.in_(content), Fact.source_type == source))
         ).all()
         return existing_facts
+
+    async def get_all_mem0_ids(self) -> set[UUID]:
+        """
+        Все mem0_id из PG (для сверки с Qdrant и поиска векторов-сирот).
+
+        Returns:
+            Множество mem0_id всех фактов (без None)
+        """
+        stmt = select(Fact.mem0_id).where(Fact.mem0_id.isnot(None))
+        result = await self.db.execute(stmt)
+        return {row[0] for row in result.all()}

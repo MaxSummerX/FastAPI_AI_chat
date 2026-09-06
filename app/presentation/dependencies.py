@@ -5,6 +5,7 @@
 в эндпоинты API согласно принципам Dependency Injection и чистой архитектуры.
 """
 
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 import jwt
@@ -21,6 +22,7 @@ from app.application.services.document_service import DocumentService
 from app.application.services.fact_service import FactService
 from app.application.services.invite_service import InviteService
 from app.application.services.message_service import MessageService
+from app.application.services.orphan_cleanup_service import OrphanCleanupService
 from app.application.services.prompt_service import PromptService
 from app.application.services.upload_service import UploadService
 from app.application.services.user_service import UserService
@@ -47,6 +49,7 @@ from app.infrastructure.llms.config import base_config_for_llm
 from app.infrastructure.llms.factory import create_analysis_llm, create_llm_service
 from app.infrastructure.llms.openai import AsyncOpenAILLM
 from app.infrastructure.memory.dependencies import create_memory_service, get_memory
+from app.infrastructure.memory.scanner import QdrantPointScanner
 from app.infrastructure.persistence.sqlalchemy import (
     ConversationSQLAlchemyRepository,
     DocumentSQLAlchemyRepository,
@@ -440,6 +443,43 @@ async def get_current_admin_user(current_user: UserModel = Depends(get_current_u
             detail="Admin access required",
         ) from None
     return current_user
+
+
+async def get_qdrant_scanner() -> AsyncIterator[QdrantPointScanner]:
+    """
+    Провайдер сканера точек Qdrant с гарантированным закрытием клиента.
+
+    Yields:
+        QdrantPointScanner: Сканер коллекции Qdrant (read-only)
+    """
+    scanner = QdrantPointScanner()
+    try:
+        yield scanner
+    finally:
+        await scanner.close()
+
+
+def get_orphan_cleanup_service(
+    fact_repo: IFactRepository = Depends(get_fact_repo),
+    memory_service: IMemoryService = Depends(get_memory_service),
+    scanner: QdrantPointScanner = Depends(get_qdrant_scanner),
+) -> OrphanCleanupService:
+    """
+    Создаёт сервис подчистки векторов-сирот.
+
+    Args:
+        fact_repo: Репозиторий фактов PG
+        memory_service: Сервис памяти (mem0)
+        scanner: Сканер точек Qdrant
+
+    Returns:
+        OrphanCleanupService: Сервис сверки Qdrant с PG
+    """
+    return OrphanCleanupService(
+        fact_repo=fact_repo,
+        memory_service=memory_service,
+        scanner=scanner,
+    )
 
 
 async def bg_import_facts_from_mem0(user_id: UUID, memory_service: IMemoryService) -> None:
