@@ -161,11 +161,28 @@ def get_fact_repo(db: AsyncSession = Depends(get_db)) -> IFactRepository:
 
 
 def get_vacancy_repo(db: AsyncSession = Depends(get_db)) -> IVacancyRepository:
+    """
+    Создаёт репозиторий вакансий с SQLAlchemy реализацией.
+
+    Args:
+        db: Асинхронная сессия БД
+
+    Returns:
+        IVacancyRepository: Репозиторий для CRUD операций с вакансиями
+    """
     return VacancySQLAlchemyRepository(db)
 
 
 def get_vacancy_service(repo: IVacancyRepository = Depends(get_vacancy_repo)) -> VacancyService:
-    """Фабрика сервиса вакансий."""
+    """
+    Создаёт сервис вакансий для бизнес-логики работы с вакансиями.
+
+    Args:
+        repo: Репозиторий вакансий для доступа к данным
+
+    Returns:
+        VacancyService: Сервис с бизнес-логикой вакансий
+    """
     return VacancyService(repo)
 
 
@@ -173,7 +190,16 @@ async def get_vacancy_import(
     vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
     hh_client: AsyncClient = Depends(get_hh_client),
 ) -> VacancyImportService:
-    """Фабрика сервиса импортов вакансий."""
+    """
+    Создаёт сервис импорта вакансий с hh.ru.
+
+    Args:
+        vacancy_repo: Репозиторий вакансий для доступа к данным
+        hh_client: HTTP-клиент hh.ru
+
+    Returns:
+        VacancyImportService: Сервис импорта и синхронизации вакансий
+    """
     return VacancyImportService(vacancy_repo=vacancy_repo, hh_client=hh_client)
 
 
@@ -344,16 +370,39 @@ def get_upload_service(
     conversation_repo: IConversationRepository = Depends(get_conversation_repo),
     message_repo: IMessageRepository = Depends(get_message_repo),
 ) -> UploadService:
-    """ """
+    """
+    Создаёт сервис импорта диалогов из внешних экспортов (GPT/Claude).
+
+    Args:
+        conversation_repo: Репозиторий бесед для доступа к данным
+        message_repo: Репозиторий сообщений для доступа к данным
+
+    Returns:
+        UploadService: Сервис с бизнес-логикой импорта диалогов
+    """
     return UploadService(conversation_repo, message_repo)
 
 
 def get_researcher_llm() -> AsyncOpenAILLM:
-    """FastAPI зависимость для AI-исследования."""
+    """
+    Создаёт LLM-клиент для AI-исследования вакансий.
+
+    Returns:
+        AsyncOpenAILLM: LLM-клиент с конфигурацией анализа
+    """
     return create_analysis_llm()
 
 
 def get_vacancy_analysis_repo(db: AsyncSession = Depends(get_db)) -> IVacancyAnalysisRepository:
+    """
+    Создаёт репозиторий анализов вакансий с SQLAlchemy реализацией.
+
+    Args:
+        db: Асинхронная сессия БД
+
+    Returns:
+        IVacancyAnalysisRepository: Репозиторий для CRUD операций с анализами
+    """
     return VacancyAnalysisSQLAlchemyRepository(db)
 
 
@@ -361,6 +410,16 @@ def get_vacancy_analyzer(
     llm: AsyncOpenAILLM = Depends(get_researcher_llm),
     vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
 ) -> VacancyAnalyzer:
+    """
+    Создаёт анализатор вакансий на базе LLM.
+
+    Args:
+        llm: LLM-клиент для исследования
+        vacancy_repo: Репозиторий вакансий для доступа к данным
+
+    Returns:
+        VacancyAnalyzer: Сервис AI-анализа вакансий
+    """
     return VacancyAnalyzer(llm, vacancy_repo)
 
 
@@ -369,7 +428,17 @@ def get_vacancy_analysis_service(
     vacancy_repo: IVacancyRepository = Depends(get_vacancy_repo),
     analyzer: VacancyAnalyzer = Depends(get_vacancy_analyzer),
 ) -> VacancyAnalysisService:
-    """Фабрика сервиса анализов вакансий."""
+    """
+    Создаёт сервис анализов вакансий.
+
+    Args:
+        analysis_repo: Репозиторий анализов для доступа к данным
+        vacancy_repo: Репозиторий вакансий для доступа к данным
+        analyzer: AI-анализатор вакансий
+
+    Returns:
+        VacancyAnalysisService: Сервис с бизнес-логикой анализов
+    """
     return VacancyAnalysisService(analysis_repo, vacancy_repo, analyzer)
 
 
@@ -480,21 +549,3 @@ def get_orphan_cleanup_service(
         memory_service=memory_service,
         scanner=scanner,
     )
-
-
-async def bg_import_facts_from_mem0(user_id: UUID, memory_service: IMemoryService) -> None:
-    """Фоновый импорт фактов из mem0: собственная сессия БД."""
-    from app.infrastructure.database.dependencies import async_session_maker
-    from app.infrastructure.persistence.sqlalchemy import FactsSQLAlchemyRepository, MessageSQLAlchemyRepository
-
-    try:
-        async with async_session_maker() as session:
-            service = FactService(
-                fact_repo=FactsSQLAlchemyRepository(session),
-                message_repo=MessageSQLAlchemyRepository(session),
-                memory_service=memory_service,
-            )
-            await service.import_from_mem0ai_to_postgres_db(user_id=user_id)
-
-    except Exception:
-        logger.exception("Фоновый импорт фактов упал | user_id={}", user_id)

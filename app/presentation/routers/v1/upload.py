@@ -3,7 +3,6 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from loguru import logger
 
-from app.application.services.upload_service import UploadService
 from app.domain.enums.provider import ImportedProvider
 from app.domain.models.user import User as UserModel
 from app.infrastructure.upload.file_storage import (
@@ -12,7 +11,8 @@ from app.infrastructure.upload.file_storage import (
     validate_file_extension,
     validate_mime_type,
 )
-from app.presentation.dependencies import get_current_user, get_upload_service
+from app.presentation.background import bg_import_conversation
+from app.presentation.dependencies import get_current_user
 
 
 router = APIRouter(prefix="/upload", tags=["Imports_V1"])
@@ -27,7 +27,6 @@ async def conversations_import(
     provider: ImportedProvider,
     background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
-    upload_service: UploadService = Depends(get_upload_service),
     file: UploadFile = File(...),
 ) -> dict[str, Any]:
     """ """
@@ -41,22 +40,7 @@ async def conversations_import(
     file_path, split_dir = await build_paths(current_user.id)
     file_size = await save_file_with_validation(file, file_path)
 
-    if provider == ImportedProvider.GPT:
-        background_tasks.add_task(
-            upload_service.import_from_gpt,
-            current_user.id,
-            provider.value,
-            file_path,
-            split_dir,
-        )
-    elif provider == ImportedProvider.CLAUDE:
-        background_tasks.add_task(
-            upload_service.import_from_claude,
-            current_user.id,
-            provider.value,
-            file_path,
-            split_dir,
-        )
+    background_tasks.add_task(bg_import_conversation, current_user.id, provider.value, file_path, split_dir)
 
     return {
         "filename": file.filename,

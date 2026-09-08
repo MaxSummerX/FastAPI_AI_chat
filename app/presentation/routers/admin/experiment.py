@@ -1,7 +1,8 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, status
+from httpx import AsyncClient
 
-from app.application.services.vacancy_import_service import VacancyImportService
-from app.presentation.dependencies import get_vacancy_import
+from app.infrastructure.hh.headhunter_client import get_hh_client
+from app.presentation.background import bg_sync_archive_statuses
 
 
 router = APIRouter(prefix="/experiment")
@@ -10,11 +11,11 @@ router = APIRouter(prefix="/experiment")
 @router.patch("/sync-archive", status_code=status.HTTP_200_OK, summary="Синхронизировать статусы архивации вакансий")
 async def sync_vacancies(
     background_tasks: BackgroundTasks,
-    service: VacancyImportService = Depends(get_vacancy_import),
+    hh_client: AsyncClient = Depends(get_hh_client),
 ) -> None:
     """
     Запускает фоновую синхронизацию статусов архивации вакансий с hh.ru.
 
     Операция выполняется асинхронно, ответ возвращается немедленно.
     """
-    background_tasks.add_task(service.sync_archive_statuses)
+    background_tasks.add_task(bg_sync_archive_statuses, hh_client)

@@ -9,8 +9,9 @@ import asyncio
 # Тестовая БД (SQLite по умолчанию, можно переопределить через TEST_DATABASE_URL)
 import os
 import uuid
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -467,34 +468,20 @@ async def test_prompts(db_session: AsyncSession, test_user: UserModel) -> list[P
 # ============================================================
 
 
-@pytest.fixture(scope="function")
-def mock_background_tasks() -> Generator[None]:
-    """
-    Создаёт мок для BackgroundTasks.
-
-    Используется для тестирования endpoints, которые используют
-    фоновые задачи, чтобы избежать их реального выполнения.
-    """
-    from unittest.mock import patch
-
-    # Патчим функцию конвертации, которая вызывается в background task
-    with (
-        patch("app.application.services.upload_service.UploadService.import_from_claude"),
-        patch("app.application.services.upload_service.UploadService.import_from_gpt"),
-    ):
-        yield
-
-
 @pytest_asyncio.fixture(scope="function")
-async def client_with_mocked_background(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
+async def client_with_mocked_background(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> AsyncGenerator[AsyncClient]:
     """
-    Создаёт HTTP клиент с замоканными фоновыми задачами.
-
-    Подменяет функции конвертации, которые вызываются в background tasks.
+    Создаёт HTTP клиент с замоканной фоновой задачей импорта бесед.
     """
     from unittest.mock import patch
 
     from app.infrastructure.database.dependencies import get_db
+
+    monkeypatch.setattr("app.infrastructure.upload.file_storage.CONVERSATION_DIR", tmp_path)
 
     # Функция-override для зависимости БД
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
@@ -505,8 +492,7 @@ async def client_with_mocked_background(db_session: AsyncSession) -> AsyncGenera
 
     # Создаём клиент с ASGI транспортом и замоканными background функциями
     with (
-        patch("app.application.services.upload_service.UploadService.import_from_claude"),
-        patch("app.application.services.upload_service.UploadService.import_from_gpt"),
+        patch("app.presentation.routers.v1.upload.bg_import_conversation"),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app),

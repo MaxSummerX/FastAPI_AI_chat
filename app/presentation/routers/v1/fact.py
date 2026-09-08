@@ -13,8 +13,8 @@ from app.infrastructure.persistence.pagination import (
     DEFAULT_PER_PAGE,
     MINIMUM_PER_PAGE,
 )
+from app.presentation.background import bg_import_facts_from_mem0
 from app.presentation.dependencies import (
-    bg_import_facts_from_mem0,
     get_current_user,
     get_fact_service,
     get_memory_service,
