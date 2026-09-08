@@ -44,6 +44,7 @@ from app.application.exceptions.vacancy import (
     VacancyImportError,
     VacancyNotFoundError,
 )
+from app.domain.exceptions import DomainError
 from app.infrastructure.persistence.pagination import InvalidCursorError
 
 
@@ -111,3 +112,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         """Невалидный курсор пагинации → 400."""
         logger.warning(f"Невалидный курсор: {request.url.path}: {exc}")
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(DomainError)
+    async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+        """Доменное исключение, не перехваченное сервисом, непредвиденный сбой -> 500."""
+        logger.exception(f"Неперехваченное доменное исключение: {request.url.path}: {exc}")
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})

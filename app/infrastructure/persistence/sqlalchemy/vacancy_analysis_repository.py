@@ -1,9 +1,11 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums.analysis import AnalysisType
+from app.domain.exceptions import UniqueConstraintViolationError
 from app.domain.models.vacancy_analysis import VacancyAnalysis
 from app.domain.repositories.vacancy_analyses import IVacancyAnalysisRepository
 
@@ -40,7 +42,11 @@ class VacancyAnalysisSQLAlchemyRepository(IVacancyAnalysisRepository):
 
     async def save(self, analysis: VacancyAnalysis) -> VacancyAnalysis:
         self.db.add(analysis)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise UniqueConstraintViolationError("Сохранение анализа вакансии") from e
         await self.db.refresh(analysis)
         return analysis
 

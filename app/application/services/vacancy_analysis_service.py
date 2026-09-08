@@ -8,7 +8,6 @@ Use cases: список анализов вакансии, создание ан
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy.exc import IntegrityError
 
 from app.application.exceptions.analysis import InvalidAnalysisTypeError
 from app.application.exceptions.vacancy import (
@@ -20,6 +19,7 @@ from app.application.exceptions.vacancy import (
 )
 from app.application.services.vacancy_analyzer import VacancyAnalyzer
 from app.domain.enums.analysis import AnalysisType
+from app.domain.exceptions import UniqueConstraintViolationError
 from app.domain.models.vacancy_analysis import VacancyAnalysis
 from app.domain.repositories.vacancies import IVacancyRepository
 from app.domain.repositories.vacancy_analyses import IVacancyAnalysisRepository
@@ -130,7 +130,7 @@ class VacancyAnalysisService:
         )
         try:
             saved = await self.analysis_repo.save(analysis)
-        except IntegrityError as e:
+        except UniqueConstraintViolationError as e:
             raise AnalysisAlreadyExistsError(f"Analysis {analysis_type.value} already exists") from e
         logger.info(f"Анализ {analysis_type.value} вакансии {vacancy_id} сохранён: {saved.id}")
         return saved

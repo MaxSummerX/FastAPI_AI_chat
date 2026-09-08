@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.exceptions import UniqueConstraintViolationError
 from app.domain.models.invite import Invite
 from app.domain.repositories.invites import IInviteRepository
 
@@ -136,29 +137,27 @@ class InviteSQLAlchemyRepository(IInviteRepository):
         """
         Массово создать инвайты (одна транзакция).
 
-        При наличии дубликатов кодов пропускает их и возвращает только успешно созданные.
-
         Args:
             invites: Последовательность объектов Invite для создания
 
         Returns:
-            Список успешно созданных инвайтов с id и created_at из БД
+            Список созданных инвайтов с id и created_at из БД
+
+        Raises:
+            UniqueConstraintViolationError: При конфликте уникальности кода
         """
+        try:
+            for invite in invites:
+                self.db.add(invite)
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise UniqueConstraintViolationError("Массовое создание инвайтов") from e
+
         for invite in invites:
-            self.db.add(invite)
+            await self.db.refresh(invite)
 
-        await self.db.commit()
-
-        created_invites = []
-        for invite in invites:
-            try:
-                await self.db.refresh(invite)
-                created_invites.append(invite)
-            except IntegrityError:
-                # Пропускаем дубликаты кодов
-                continue
-
-        return created_invites
+        return list(invites)
 
     async def delete_all_unused(self) -> int:
         """

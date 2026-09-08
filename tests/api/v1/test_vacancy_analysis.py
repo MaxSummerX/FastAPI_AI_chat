@@ -240,14 +240,13 @@ async def test_create_analysis_race_integrity_error() -> None:
     """
     from unittest.mock import AsyncMock
 
-    from sqlalchemy.exc import IntegrityError
-
     from app.application.exceptions.vacancy import AnalysisAlreadyExistsError
     from app.application.services.vacancy_analysis_service import VacancyAnalysisService
+    from app.domain.exceptions import UniqueConstraintViolationError
 
     repo = AsyncMock()
     repo.exists_for = AsyncMock(return_value=False)  # fast-path пройден (гонка!)
-    repo.save = AsyncMock(side_effect=IntegrityError("duplicate key", None, Exception("unique violation")))
+    repo.save = AsyncMock(side_effect=UniqueConstraintViolationError("Сохранение анализа вакансии"))
 
     vacancy_repo = AsyncMock()
     analyzer = AsyncMock()

@@ -8,8 +8,10 @@ SQLAlchemy реализация репозитория пользователе�
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.exceptions import UniqueConstraintViolationError
 from app.domain.models.user import User
 from app.domain.repositories.users import IUserRepository
 
@@ -99,7 +101,11 @@ class UserSQLAlchemyRepository(IUserRepository):
         Returns:
             Обновлённый объект User из БД
         """
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise UniqueConstraintViolationError("Сохранение пользователя") from e
         await self.db.refresh(user)
         return user
 
@@ -116,8 +122,12 @@ class UserSQLAlchemyRepository(IUserRepository):
             Созданный объект User с присвоенным ID
         """
         new_user = User(username=username, email=email, password_hash=password_hash)
-        self.db.add(new_user)
-        await self.db.commit()
+        try:
+            self.db.add(new_user)
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise UniqueConstraintViolationError("Создание пользователя") from e
         await self.db.refresh(new_user)
         return new_user
 
@@ -217,6 +227,9 @@ class UserSQLAlchemyRepository(IUserRepository):
             Объект User
         """
         new_user = User(username=username, email=email, password_hash=password_hash)
-        self.db.add(new_user)
-        await self.db.flush()
+        try:
+            self.db.add(new_user)
+            await self.db.flush()
+        except IntegrityError as e:
+            raise UniqueConstraintViolationError("Создание пользователя") from e
         return new_user

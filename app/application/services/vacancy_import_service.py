@@ -16,7 +16,6 @@ from uuid import UUID
 import aiofiles
 import httpx
 from loguru import logger
-from sqlalchemy.exc import IntegrityError
 
 from app.application.exceptions.vacancy import (
     VacancyFetchError,
@@ -24,6 +23,7 @@ from app.application.exceptions.vacancy import (
     VacancyNotFoundError,
 )
 from app.domain.enums.experience import Experience
+from app.domain.exceptions import UniqueConstraintViolationError
 from app.domain.models.user_vacancies import UserVacancies
 from app.domain.models.vacancy import Vacancy
 from app.domain.repositories.vacancies import IVacancyRepository
@@ -350,17 +350,15 @@ class VacancyImportService:
             try:
                 await self.vacancy_repo.bulk_save_with_links(chunk, links_to_add, user_id)
                 saved_count += len(chunk)
-            except IntegrityError:
+            except UniqueConstraintViolationError:
                 logger.warning("Конфликт уникальности в chunks, переходим на поштучную вставку")
-                await self.vacancy_repo.rollback()
 
                 for vac in chunk:
                     try:
                         await self.vacancy_repo.bulk_save_with_links([vac], [], user_id)
                         saved_count += 1
-                    except IntegrityError:
+                    except UniqueConstraintViolationError:
                         # вакансию успела вставить параллельная задача — только связываем
-                        await self.vacancy_repo.rollback()
                         existing = await self.vacancy_repo.get_by_hh_id(vac.hh_id)
                         if existing is not None:
                             if not await self.vacancy_repo.has_user_link(user_id, existing.id):

@@ -13,6 +13,7 @@ from loguru import logger
 from app.application.exceptions.vacancy import InvalidVacancyCursorError
 from app.application.services.vacancy_import_service import create_vacancy_object
 from app.domain.enums.experience import Experience, OrderField
+from app.domain.exceptions import UniqueConstraintViolationError
 from app.domain.models.vacancy import Vacancy
 from app.domain.repositories.vacancies import IVacancyRepository
 from app.infrastructure.hh.headhunter_client import get_hh_client
@@ -109,7 +110,15 @@ class VacancyService:
             logger.info(f"Вакансия {hh_id} не найдена в БД, импорт с hh.ru")
             hh_client = await get_hh_client()
             vacancy_obj = await create_vacancy_object(hh_id=hh_id, query="Personal request", hh_client=hh_client)
-            await self.vacancy_repo.save_with_link(vacancy_obj, user_id)
+            try:
+                await self.vacancy_repo.save_with_link(vacancy_obj, user_id)
+            except UniqueConstraintViolationError:
+                existing = await self.vacancy_repo.get_by_hh_id(hh_id)
+                if existing is not None:
+                    if not await self.vacancy_repo.has_user_link(user_id, existing.id):
+                        await self.vacancy_repo.create_link(user_id, existing.id)
+                else:
+                    logger.error(f"Конфликт при сохранении вакансии {hh_id}, но в БД она не найдена")
             logger.info(f"Вакансия {hh_id} успешно импортирована")
         else:
             if not await self.vacancy_repo.has_user_link(user_id, vacancy.id):

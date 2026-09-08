@@ -3,10 +3,10 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from app.application.exceptions.auth import UserAlreadyExistsException
 from app.application.services.auth_service import AuthService
+from app.domain.exceptions import UniqueConstraintViolationError
 
 
 @pytest.mark.asyncio
@@ -15,7 +15,7 @@ async def test_register_race_username() -> None:
     user_repo = AsyncMock()
     user_repo.is_username_unique.return_value = True
     user_repo.is_email_unique.return_value = True
-    user_repo.create.side_effect = IntegrityError("stmt", {}, Exception("dup"))
+    user_repo.create.side_effect = UniqueConstraintViolationError("Создание пользователя")
 
     service = AuthService(user_repo, AsyncMock(), AsyncMock(), require_invite=False)
 
@@ -29,7 +29,7 @@ async def test_register_with_invite_race_rolls_back() -> None:
     user_repo = AsyncMock()
     user_repo.is_username_unique.return_value = True
     user_repo.is_email_unique.return_value = True
-    user_repo.create_without_commit.side_effect = IntegrityError("stmt", {}, Exception("dup"))
+    user_repo.create_without_commit.side_effect = UniqueConstraintViolationError("Создание пользователя")
 
     invite_repo = AsyncMock()
     invite_repo.get_available_invite.return_value = AsyncMock()

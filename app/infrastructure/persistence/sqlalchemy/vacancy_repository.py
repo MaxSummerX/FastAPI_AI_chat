@@ -3,10 +3,12 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import CursorResult, asc, case, desc, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.vacancy import VacancyPaginationResponse, VacancyResponse
 from app.domain.enums.experience import Experience, OrderField
+from app.domain.exceptions import UniqueConstraintViolationError
 from app.domain.models.user_vacancies import UserVacancies
 from app.domain.models.vacancy import Vacancy
 from app.domain.repositories.vacancies import IVacancyRepository
@@ -61,15 +63,19 @@ class VacancySQLAlchemyRepository(IVacancyRepository):
         links: list[UserVacancies],
         user_id: UUID,
     ) -> None:
-        self.db.add_all(vacancies)
-        await self.db.flush()
+        try:
+            self.db.add_all(vacancies)
+            await self.db.flush()
 
-        # Связи для новых вакансий — после flush у них есть ID
-        for vacancy in vacancies:
-            self.db.add(UserVacancies(user_id=user_id, vacancy_id=vacancy.id))
+            # Связи для новых вакансий — после flush у них есть ID
+            for vacancy in vacancies:
+                self.db.add(UserVacancies(user_id=user_id, vacancy_id=vacancy.id))
 
-        self.db.add_all(links)
-        await self.db.commit()
+            self.db.add_all(links)
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise UniqueConstraintViolationError("Массовое сохранение вакансий") from e
 
     async def update_archive_statuses(self, hh_ids: dict[str, bool]) -> int:
         result = await self.db.execute(
@@ -157,10 +163,14 @@ class VacancySQLAlchemyRepository(IVacancyRepository):
         return result is not None
 
     async def save_with_link(self, vacancy: Vacancy, user_id: UUID) -> None:
-        self.db.add(vacancy)
-        await self.db.flush()
-        self.db.add(UserVacancies(user_id=user_id, vacancy_id=vacancy.id, is_active=True))
-        await self.db.commit()
+        try:
+            self.db.add(vacancy)
+            await self.db.flush()
+            self.db.add(UserVacancies(user_id=user_id, vacancy_id=vacancy.id, is_active=True))
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise UniqueConstraintViolationError("Сохранение вакансии со связью") from e
 
     async def create_link(self, user_id: UUID, vacancy_id: UUID) -> None:
         self.db.add(UserVacancies(user_id=user_id, vacancy_id=vacancy_id, is_active=True))
