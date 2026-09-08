@@ -58,7 +58,6 @@ def get_user_vacancy_files(user_id: UUID) -> tuple[Path, Path]:
         tuple[Path, Path]: (путь к сырым вакансиям, путь к отфильтрованным)
     """
     user_temp_dir = TEMP_DIR / str(user_id)
-    user_temp_dir.mkdir(parents=True, exist_ok=True)
 
     return (
         user_temp_dir / "vacancies.json",
@@ -226,10 +225,10 @@ class VacancyImportService:
                 await polite_sleep()
 
             output_path_obj = Path(output_path)
-            output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(output_path_obj.parent.mkdir, parents=True, exist_ok=True)
 
             async with aiofiles.open(output_path, "w", encoding="utf-8") as file:
-                await file.write(json.dumps(vacancies_data, indent=2, ensure_ascii=False))
+                await file.write(await asyncio.to_thread(json.dumps, vacancies_data, indent=2, ensure_ascii=False))
 
             logger.info(f"✅ Сохранено {len(vacancies_data)} вакансий в {output_path}")
 
@@ -284,7 +283,7 @@ class VacancyImportService:
             temp_output_path = output_path_obj.with_suffix(f"{output_path_obj.suffix}.tmp")
 
             async with aiofiles.open(temp_output_path, mode="w", encoding="utf-8") as file:
-                await file.write(json.dumps(result, indent=2, ensure_ascii=False))
+                await file.write(await asyncio.to_thread(json.dumps, result, indent=2, ensure_ascii=False))
 
             await asyncio.to_thread(shutil.move, temp_output_path, output_path)
 
