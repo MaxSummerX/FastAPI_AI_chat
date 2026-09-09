@@ -134,7 +134,12 @@ class FactImportService:
                 ]
                 response = await self.llm_service.generate_response(message, response_format={"type": "json_object"})
                 response_str = str(response) if isinstance(response, dict) else response
-                category_data: dict[str, Any] = json.loads(response_str)
+                try:
+                    category_data: dict[str, Any] = json.loads(response_str)
+                except (json.JSONDecodeError, TypeError):
+                    skipped_facts += 1
+                    logger.warning(f"LLM вернул некорректный JSON, факт пропущен: {fact['memory'][:50]}...")
+                    continue
                 logger.info(f"Категория из LLM: {category_data}")
 
                 category_value = category_data.get("category")
