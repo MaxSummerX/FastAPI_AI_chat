@@ -43,6 +43,21 @@ def _handle_memory_result(ts: asyncio.Task) -> None:
         logger.debug("mem0ai успешно сохранил память")
 
 
+_memory_tasks: set[asyncio.Task] = set()
+
+
+async def wait_pending_memory_tasks(wait_timeout: float = 30.0) -> None:
+    """Дождаться фоновых задач mem0 при shutdown; зависшие — отменить."""
+    pending = [task for task in _memory_tasks if not task.done()]
+    if not pending:
+        return
+    logger.info("Ожидание фоновых задач mem0: {}", len(pending))
+    _, still_pending = await asyncio.wait(pending, timeout=wait_timeout)
+    for task in still_pending:
+        task.cancel()
+        logger.warning("Фоновая задача mem0 не успела завершиться при shutdown, отменена")
+
+
 class MessageService:
     """
     Сервис для обработки сообщений с поддержкой multi-round tool calls.
@@ -75,7 +90,6 @@ class MessageService:
         self.prompt_repo = prompt_repo
         self.llm_service = llm_service
         self.memory_service = memory_service
-        self._memory_tasks: set[asyncio.Task] = set()
 
     async def get_user_messages(
         self,
@@ -253,8 +267,8 @@ class MessageService:
                     metadata={"source_type": FactSource.EXTRACTED.value},
                 )
             )
-            self._memory_tasks.add(task)
-            task.add_done_callback(self._memory_tasks.discard)
+            _memory_tasks.add(task)
+            task.add_done_callback(_memory_tasks.discard)
             task.add_done_callback(_handle_memory_result)
 
         logger.info("Сообщение добавлено в беседу {}, стриминг запущен", conversation_id)

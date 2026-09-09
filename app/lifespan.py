@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
+from app.application.services.message_service import wait_pending_memory_tasks
 from app.infrastructure.cache.redis import ping_redis, redis_async
 from app.infrastructure.hh.headhunter_client import close_hh_client, get_hh_client
 from app.infrastructure.memory.dependencies import close_memory, init_memory
@@ -62,6 +63,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await redis_async.aclose()
     except Exception as e:
         logger.error("Ошибка при закрытии Redis: {}", e)
+
+    try:
+        logger.info("🛑 Ожидание фоновых задач mem0")
+        await wait_pending_memory_tasks()
+    except Exception as e:
+        logger.error("Ошибка при ожидании задач mem0: {}", e)
 
     try:
         logger.info("🛑 Закрытие AsyncMemory")
