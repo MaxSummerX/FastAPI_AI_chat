@@ -7,6 +7,8 @@ from app.infrastructure.llms.configs.openai import OpenAIConfig
 
 load_dotenv()
 
+FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "gpt-5-nano")
+
 base_config_for_llm = OpenAIConfig(
     model=os.getenv("MODEL"),
     temperature=0.6,

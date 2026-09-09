@@ -10,11 +10,11 @@ from loguru import logger
 from openai import AsyncOpenAI, Timeout
 
 from app.infrastructure.llms.base import LLMBase
+from app.infrastructure.llms.config import FALLBACK_MODEL
 from app.infrastructure.llms.configs.base import BaseLlmConfig
 from app.infrastructure.llms.configs.openai import OpenAIConfig
 
 
-FALLBACK_MODEL = "gpt-5-nano"  # модель, если в конфиге пусто
 CONNECT_TIMEOUT_SEC = 5  # установка соединения
 READ_TIMEOUT_SEC = 120  # ожидание данных из сокета (между чанками)
 WRITE_TIMEOUT_SEC = 10  # отправка запроса

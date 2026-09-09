@@ -105,42 +105,6 @@ def validate_pagination_limit(
     return min(max(1, limit), maximum)
 
 
-def validate_cursor_pagination_param(
-    limit: int | None,
-    before: str | None = None,
-    after: str | None = None,
-    default_limit: int = DEFAULT_PER_PAGE,
-    max_limit: int = MAXIMUM_PER_PAGE,
-) -> tuple[int, tuple[datetime, str] | None, bool]:
-    """
-    Валидирует параметры для двунаправленной курсорной пагинации.
-
-    Проверяет, что параметры корректны и возвращает декодированный курсор.
-    """
-    # Проверка на взаимоисключающие параметры
-    if before and after:
-        raise ValueError("'before' and 'after' parameters are mutually exclusive")
-
-    # Валидируем limit
-    limit = validate_pagination_limit(limit, default_limit, max_limit)
-
-    # Декодируем курсор если есть
-    decoded_cursor: tuple[datetime, str] | None = None
-    reverse_order = False
-
-    if before:
-        decoded_cursor = decode_cursor(before)
-        reverse_order = True
-    elif after:
-        decoded_cursor = decode_cursor(after)
-        reverse_order = True
-    else:
-        # Первая загрузка — берём последние элементы
-        reverse_order = True
-
-    return limit, decoded_cursor, reverse_order
-
-
 def calculate_has_more(items: list, limit: int) -> bool:
     """
     Определяет, есть ли ещё элементы после текущей страницы.
