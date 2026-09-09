@@ -156,7 +156,7 @@ async def web_fetch(
         if accept_markdown:
             headers["Accept"] = "text/markdown, text/html, */*"
 
-        def _reject_private_redirect(request: httpx.Request) -> None:
+        async def _reject_private_redirect(request: httpx.Request) -> None:
             """SSRF-защита: блокирует редиректы на внутренние хосты"""
             host = request.url.host or ""
             if _is_private_host(host):
