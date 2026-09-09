@@ -202,6 +202,7 @@ class MessageService:
             "create_file": make_create_file_tool(user_id),
             "search_documents": make_search_documents_tool(user_id),
         }
+        tool_schemas = [WEB_SEARCH_TOOL, WEB_FETCH_TOOL, CREATE_DOCUMENT_TOOL, FILE_SEARCH_TOOL]
 
         logger.info(
             "Запрос на добавление стримингового ответа v2 в беседу {} пользователем {}", conversation_id, user_id
@@ -250,7 +251,7 @@ class MessageService:
             stream, result_awaitable = await self.llm_service.generate_stream_response(
                 messages=history,
                 model=model,
-                tools=[WEB_SEARCH_TOOL, WEB_FETCH_TOOL, CREATE_DOCUMENT_TOOL, FILE_SEARCH_TOOL],
+                tools=tool_schemas,
                 tool_choice="auto",
             )
         except Exception as e:
@@ -281,6 +282,7 @@ class MessageService:
             model=model if model is not None else self.llm_service.default_model or "gpt-4o-mini",
             history=history,
             tools=tools,
+            tool_schemas=tool_schemas,
         )
 
     @staticmethod
@@ -324,6 +326,7 @@ class MessageService:
             model=stream_data.model,
             history=stream_data.history,
             tools=stream_data.tools,
+            tool_schemas=stream_data.tool_schemas,
         ):
             yield chunk
 
@@ -344,6 +347,7 @@ class MessageService:
         """
 
         messages = await self.message_repo.get_history(conversation_id=conversation_id, limit=limit)
+        messages = [m for m in messages if (m.metadata_ or {}).get("kind") not in ("tool_round", "tool_result")]
 
         # Нормализуем через Pydantic
         history = [HistoryMessage.model_validate(msg).model_dump(mode="json") for msg in reversed(messages)]
@@ -382,6 +386,7 @@ class MessageService:
         """
         start = time.time()
         messages = await self.message_repo.get_history(conversation_id=conversation_id, limit=limit)
+        messages = [m for m in messages if (m.metadata_ or {}).get("kind") not in ("tool_round", "tool_result")]
         db_time = time.time() - start
 
         mem_start = time.time()
@@ -410,6 +415,7 @@ class MessageService:
         model: str,
         history: list[dict] | None = None,
         tools: dict[str, Callable[..., Any]] | None = None,
+        tool_schemas: list[dict[str, Any]] | None = None,
         max_tool_rounds: int = 5,
     ) -> AsyncIterator[str]:
         """
@@ -479,7 +485,7 @@ class MessageService:
                         role="assistant",
                         content=content,
                         model=model,
-                        metadata_={"tool_calls": formatted_tool_calls},  # Сохраняем metadata
+                        metadata_={"tool_calls": formatted_tool_calls, "kind": "tool_round"},  # Сохраняем metadata
                     )
 
                 # Выполняем tools
@@ -507,7 +513,11 @@ class MessageService:
                             role="assistant",
                             content=result,
                             model=model,
-                            metadata_={"tool_calls": formatted_calls},  # Сохраняем metadata
+                            metadata_={
+                                "tool_calls": formatted_calls,
+                                "kind": "tool_result",
+                                "tool_name": func_name,
+                            },  # Сохраняем metadata
                         )
 
                     except Exception as er:
@@ -550,6 +560,8 @@ class MessageService:
                     stream, result_awaitable = await self.llm_service.generate_stream_response(
                         messages=history,
                         model=model,
+                        tools=tool_schemas,
+                        tool_choice="auto",
                     )
                 except Exception:
                     logger.exception("Ошибка LLM-запроса | conversation_id={}", conversation_id)

@@ -14,3 +14,4 @@ class StreamData:
     model: str
     history: list[dict]
     tools: dict[str, Callable[..., Any]]
+    tool_schemas: list[dict[str, Any]] | None = None
