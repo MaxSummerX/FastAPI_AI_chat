@@ -345,7 +345,6 @@ def get_message_service(
 
 def get_fact_service(
     fact_repo: IFactRepository = Depends(get_fact_repo),
-    message_repo: IMessageRepository = Depends(get_message_repo),
     memory_service: IMemoryService = Depends(get_memory_service),
 ) -> FactService:
     """
@@ -353,15 +352,13 @@ def get_fact_service(
 
     Args:
         fact_repo: Репозиторий фактов для доступа к данным
-        message_repo: Репозиторий сообщений для импорта фактов
         memory_service: Сервис памяти для интеграции с mem0ai
 
     Returns:
-        FactService: Сервис с бизнес-логикой фактов (CRUD, импорт из mem0ai)
+        FactService: Сервис с бизнес-логикой фактов (CRUD)
     """
     return FactService(
         fact_repo=fact_repo,
-        message_repo=message_repo,
         memory_service=memory_service,
     )
 

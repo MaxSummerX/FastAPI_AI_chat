@@ -61,16 +61,19 @@ async def bg_import_facts_from_mem0(user_id: UUID, memory_service: IMemoryServic
         user_id: ID пользователя
         memory_service: Сервис памяти (mem0)
     """
-    from app.application.services.fact_service import FactService
+    from app.application.services.fact_import_service import FactImportService
     from app.infrastructure.database.dependencies import async_session_maker
+    from app.infrastructure.llms.config import parse_llm_config
+    from app.infrastructure.llms.factory import create_llm_service
     from app.infrastructure.persistence.sqlalchemy import FactsSQLAlchemyRepository, MessageSQLAlchemyRepository
 
     try:
         async with async_session_maker() as session:
-            service = FactService(
+            service = FactImportService(
                 fact_repo=FactsSQLAlchemyRepository(session),
                 message_repo=MessageSQLAlchemyRepository(session),
                 memory_service=memory_service,
+                llm_service=create_llm_service(parse_llm_config),
             )
             await service.import_from_mem0ai_to_postgres_db(user_id=user_id)
 
